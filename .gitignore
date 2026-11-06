@@ -1,0 +1,42 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+
+# typescript
+*.tsbuildinfo
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+
+# generated Skyrim assets (rebuilt from the external pack)
+/public/assets/mo2/
+/public/assets/preset-pack/
+
+# local secrets; keep shareable templates
+.env*
+!.env.example
+!.env.*.example
+
+# logs and test output
+*.log
+coverage/
+playwright-report/
+test-results/
+
+# local agent settings
+.claude/settings.local.json
+
+# local scratch: ad-hoc inspection scripts and measurements
+/.scratch-weight/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

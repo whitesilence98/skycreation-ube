@@ -1,0 +1,37 @@
+{
+  "name": "cc-kit-react",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:sync": "npm run sync:assets && npm run sync:index && npm run dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "sync:assets": "python -I scripts/sync_mo2_assets.py",
+    "sync:index": "python -I scripts/index_mo2_assets.py",
+    "check:mo2": "python -I scripts/check_mo2_contract.py",
+    "check:pack": "python -I scripts/check_pack_contract.py && node scripts/check_pack_server.cjs",
+    "check:selection": "node scripts/check_asset_selection.cjs && node scripts/check_pack_selection.cjs"
+  },
+  "dependencies": {
+    "@react-three/drei": "10.7.9",
+    "@react-three/fiber": "9.8.2",
+    "@react-three/postprocessing": "3.2.2",
+    "next": "16.4.4",
+    "postprocessing": "6.39.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "three": "0.187.0",
+    "zustand": "5.0.16"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.4",
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@types/three": "0.187.0",
+    "tailwindcss": "4.3.4",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,271 @@
+@import 'tailwindcss';
+
+/* ────────────────────────────────────────────────────────────────
+   Design tokens — sampled from the reference screenshot
+   ──────────────────────────────────────────────────────────────── */
+@theme {
+  --color-gold: #d4b483;
+  --color-gold-bright: #eac87f;
+  --color-gold-dim: #8a7c63;
+  --color-champagne: #e8c691;
+  --color-cyan: #4fd1c5;
+  --color-cyan-bright: #93d5d7;
+  --color-ink: #07070a;
+  --color-ink-warm: #1d160e;
+
+  --font-display: 'Cinzel', 'Trajan Pro', 'Times New Roman', serif;
+  --font-ui: 'Inter', 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+}
+
+:root {
+  --hud-gold: #d4b483;
+  --hud-gold-bright: #eac87f;
+  --hud-cyan: #4fd1c5;
+  --hud-line: rgba(212, 180, 131, 0.25);
+  --hud-line-soft: rgba(212, 180, 131, 0.14);
+  --hud-panel: rgba(10, 9, 7, 0.42);
+  --hud-text: #cfc6b4;
+  --hud-text-dim: #8e8574;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #07070a;
+  color: var(--hud-text);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+body {
+  overscroll-behavior: none;
+}
+
+/* ── typography helpers ───────────────────────────────────────── */
+.tracking-hud {
+  letter-spacing: 0.16em;
+}
+.tracking-hud-tight {
+  letter-spacing: 0.1em;
+}
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ── HUD surfaces ─────────────────────────────────────────────── */
+.hud-panel {
+  background: rgba(8, 8, 8, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--hud-line);
+}
+
+.hud-btn {
+  border: 1px solid var(--hud-line);
+  background: rgba(12, 11, 9, 0.34);
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
+}
+.hud-btn:hover {
+  border-color: rgba(212, 180, 131, 0.55);
+  background: rgba(32, 27, 19, 0.5);
+  color: #f0e6d4;
+}
+
+.hud-active {
+  border-color: rgba(234, 200, 127, 0.85) !important;
+  background: rgba(44, 35, 22, 0.55) !important;
+  box-shadow:
+    0 0 0 1px rgba(234, 200, 127, 0.15),
+    0 0 18px rgba(234, 200, 127, 0.16),
+    inset 0 0 14px rgba(234, 200, 127, 0.07);
+  color: #f6ecd8 !important;
+}
+
+/* ── sliders ──────────────────────────────────────────────────── */
+.hud-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 14px;
+  background: transparent;
+  cursor: pointer;
+}
+.hud-range::-webkit-slider-runnable-track {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    rgba(212, 180, 131, 0.75) 0%,
+    rgba(212, 180, 131, 0.75) var(--pct, 50%),
+    rgba(212, 180, 131, 0.22) var(--pct, 50%),
+    rgba(212, 180, 131, 0.22) 100%
+  );
+}
+.hud-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 7px;
+  height: 7px;
+  margin-top: -3px;
+  border-radius: 999px;
+  background: #e2cba0;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 0 8px rgba(234, 200, 127, 0.55);
+}
+.hud-range::-moz-range-track {
+  height: 1px;
+  background: rgba(212, 180, 131, 0.22);
+}
+.hud-range::-moz-range-progress {
+  height: 1px;
+  background: rgba(212, 180, 131, 0.75);
+}
+.hud-range::-moz-range-thumb {
+  width: 7px;
+  height: 7px;
+  border: none;
+  border-radius: 999px;
+  background: #e2cba0;
+  box-shadow: 0 0 8px rgba(234, 200, 127, 0.55);
+}
+
+/* thin vertical scrollbar indicator on the controller panel.
+   No `position` here — unlayered CSS outranks Tailwind's utilities, and
+   setting `relative` silently defeated the `absolute` class on the element,
+   leaving a 268px hole at the top of the rail. */
+.hud-scrollbar {
+  width: 3px;
+  background: rgba(212, 180, 131, 0.12);
+  border-radius: 2px;
+}
+.hud-scrollbar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 34%;
+  border-radius: 2px;
+  background: linear-gradient(
+    to bottom,
+    rgba(212, 180, 131, 0.15),
+    rgba(212, 180, 131, 0.75),
+    rgba(212, 180, 131, 0.15)
+  );
+}
+
+/* ── vertical ruler range ──────────────────────────────────────
+   Native vertical range for the hair-length ruler. `writing-mode` is the
+   standard switch; the WebKit vendor property keeps older Chromium honest.
+   The track is drawn bottom-to-top from the value, so 0 cm sits at the base. */
+.hud-range-v {
+  -webkit-appearance: none;
+  appearance: none;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  background: transparent;
+  cursor: pointer;
+  accent-color: #d4b483;
+}
+.hud-range-v::-webkit-slider-runnable-track {
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(
+    to top,
+    rgba(212, 180, 131, 0.72) 0%,
+    rgba(212, 180, 131, 0.72) var(--pct, 50%),
+    rgba(212, 180, 131, 0.2) var(--pct, 50%),
+    rgba(212, 180, 131, 0.2) 100%
+  );
+}
+.hud-range-v::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-left: 0;
+  border-radius: 999px;
+  background: #e8d2a6;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 0 9px rgba(234, 200, 127, 0.65);
+}
+.hud-range-v:focus-visible {
+  outline: 1px solid rgba(234, 200, 127, 0.7);
+  outline-offset: 2px;
+}
+.hud-range-v::-moz-range-track {
+  width: 1px;
+  background: rgba(212, 180, 131, 0.22);
+}
+.hud-range-v::-moz-range-progress {
+  width: 1px;
+  background: rgba(212, 180, 131, 0.72);
+}
+.hud-range-v::-moz-range-thumb {
+  width: 9px;
+  height: 9px;
+  border: none;
+  border-radius: 999px;
+  background: #e8d2a6;
+  box-shadow: 0 0 9px rgba(234, 200, 127, 0.65);
+}
+
+/* ── misc ─────────────────────────────────────────────────────── */
+.hud-divider {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(212, 180, 131, 0.22) 12%,
+    rgba(212, 180, 131, 0.22) 88%,
+    transparent
+  );
+}
+
+.tooltip-dark {
+  background: rgba(10, 9, 7, 0.82);
+  border: 1px solid rgba(212, 180, 131, 0.3);
+  backdrop-filter: blur(6px);
+}
+
+@keyframes hudFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.hud-fade {
+  animation: hudFadeIn 520ms ease both;
+}
+
+/* scrollbar for panels */
+.thin-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: rgba(212, 180, 131, 0.3);
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-fade {
+    animation: none;
+  }
+}
