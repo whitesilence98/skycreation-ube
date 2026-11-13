@@ -97,5 +97,17 @@ function load(file) {
     assert.ok(body.vertexCount > 0);
     assert.equal(body.positions.length, body.vertexCount * 3);
   }
+  for (const kind of ['bodyMesh', 'handsMesh', 'feetMesh']) {
+    const entries = await server.readCatalogue(kind);
+    const part = entries.find((e) => e.authored && e.weightDefault === 1 && e.file.startsWith('female'));
+    assert.ok(part, `${kind}: canonical authored pair missing`);
+    const response = await route.GET(new Request(`http://localhost/api/mo2/convert?${new URLSearchParams({ kind, id: part.id, mode: 'mesh' })}`));
+    assert.equal(response.status, 200, `${kind}: conversion failed`);
+    const mesh = await response.json();
+    assert.ok(mesh.bones.length > 0);
+    assert.equal(mesh.skinIndex.length, mesh.vertexCount * 4);
+    assert.equal(mesh.skinWeight.length, mesh.vertexCount * 4);
+    assert.ok(mesh.materials.every((m) => m.role === 'skin' && m.texture?.includes('kind=body')));
+  }
   console.log('pack server: source, metadata, whitelist, containment and conversion ok');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

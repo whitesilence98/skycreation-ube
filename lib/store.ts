@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import {
   NAME_DEFAULT,
   PRESETS,
@@ -15,15 +16,33 @@ import {
   type TransformMode,
 } from '@/lib/regions';
 import {
+  OVERLAY_BLENDS,
   buildPresetFile,
   resolvePresetId,
   type PresetFile,
   type PresetPayload,
 } from '@/lib/presetIO';
+import {
+  SESSION_KEY,
+  SESSION_VERSION,
+  coerceSession,
+  enableSessionWrites,
+  persistStorage,
+  pickSession,
+  type PersistedSession,
+} from '@/lib/session';
 import type { AssetSelection, AssetKind, AssetCatalogues, UiCategory } from '@/lib/manifestSelect';
+import type { EquipSelection, EquipSlot } from '@/lib/equipment';
 import { DEFAULT_HAIR, coerceHair, applyHairStyle as hairStyle, type HairSettings, type HairTab } from '@/lib/hair/settings';
 import type { CatalogueEntry } from '@/lib/mo2/types';
-import type { EnvMode } from '@/components/scene/environments';
+import { type EnvMode } from '@/lib/envModes';
+import { type BackgroundMode } from '@/lib/backgrounds';
+import { type CameraFraming, type CameraPoseRequest, CAMERA_FOV_DEFAULT, CAMERA_FOV_MIN, CAMERA_FOV_MAX, CAMERA_ROTATE_SPEED_DEFAULT, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPEED_MAX } from '@/lib/camera';
+import { LIGHTING_DEFAULTS, coerceLighting, bounded, wrapDegrees, type LightingSettings } from '@/lib/lighting';
+
+/** How a tint layer combines with the atlas beneath it. `normal` is the
+ *  historical source-over draw and the value an absent `blend` means. */
+export type OverlayBlend = 'normal' | 'multiply' | 'screen' | 'overlay';
 
 /** One tinted layer composited onto the face bake, in atlas space. */
 export interface OverlayLayer {
@@ -33,12 +52,50 @@ export interface OverlayLayer {
   /** `#rrggbb` from the preset's `tintInfo`, or a neutral when absent. */
   color: string;
   opacity: number;
+  /** Blend mode; absent means `normal`. */
+  blend?: OverlayBlend;
+  /**
+   * Mask coverage, 0–1, applied as a threshold rather than a fade:
+   * `alpha' = alpha <= 1 - coverage ? 0 : (alpha - (1 - coverage)) / coverage`.
+   * Absent means 1 (keep the mask's own alpha untouched).
+   */
+  coverage?: number;
 }
 
 /** Which category the asset panel is listing. Mirrors the HUD's sub-tabs. */
 export type ActiveCategory = UiCategory;
 
-export type PostFxMode = 'all' | 'enb' | 'pure' | 'off';
+/** The three ENB/ReShade combinations the composer implements. The on/off
+ *  switch is separate, so a preset can be held while the stack is off and
+ *  re-enabled without losing the pick. */
+export type EnbPreset = 'all' | 'enb' | 'pure';
+
+/** Left workspace dock. The panels stay mounted; only the active one is
+ *  visible, so switching never drops filters, scroll position or local state. */
+export type Workspace = 'edit' | 'assets' | 'camera' | 'graphics' | 'poses';
+
+export type PoseCategory = 'IDLE' | 'ACTION' | 'EXPRESSIONS' | 'FAVORITES';
+
+/** Colour grade presets. Implemented in `GradeEffect`, not a LUT texture. */
+export type FilterPreset = 'vanilla' | 'dramatic' | 'cinematic' | 'fantasy';
+
+/** One tinted luminance band. `amount` is signed −100..100. */
+export interface ColorOverlay {
+  color: string;
+  amount: number;
+  enabled: boolean;
+}
+
+export interface GradeSettings {
+  /** −100..100, pivot at 0. */
+  contrast: number;
+  /** −100..100, pivot at 0. */
+  saturation: number;
+  /** −10..10 mockup points; scaled onto the ambient light's intensity. */
+  ambient: number;
+  filter: FilterPreset;
+  overlays: [ColorOverlay, ColorOverlay, ColorOverlay];
+}
 
 export interface UtilityToggles {
   camPreset: boolean;
@@ -63,6 +120,20 @@ const identityPose = (): GizmoPose => ({
   rotation: [0, 0, 0],
   scale: [0, 0, 0],
 });
+
+/** A blend mode the compositor implements, or undefined for an unknown one. */
+function coerceBlend(v: unknown): OverlayBlend | undefined {
+  return typeof v === 'string' && (OVERLAY_BLENDS as readonly string[]).includes(v)
+    ? (v as OverlayBlend)
+    : undefined;
+}
+
+/** A finite 0–1 coverage, or undefined when the value cannot be trusted. */
+function coerceCoverage(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v)
+    ? Math.min(1, Math.max(0, v))
+    : undefined;
+}
 
 /** Every region keeps its own slider bank so switching tabs is lossless. */
 const buildSliderBank = (): Record<RegionId, SliderValues> =>
@@ -101,6 +172,18 @@ export interface CharacterState {
    *  so the viewport is never stuck in a pose the user did not ask for. */
   bodyPoseId: string;
   setBodyPose: (id: string) => void;
+  /** Multiplier for pose rotations [0..1.5], where 0 = neutral rest and 1 = full pose. */
+  poseIntensity: number;
+  setPoseIntensity: (v: number) => void;
+  /** Speed multiplier for pose transitions and physical motions [0.2..2.0]. */
+  animationSpeed: number;
+  setAnimationSpeed: (v: number) => void;
+  /** Active category tab in the Poses panel. */
+  poseCategory: PoseCategory;
+  setPoseCategory: (cat: PoseCategory) => void;
+  /** IDs of favorited poses. */
+  favoritePoses: string[];
+  toggleFavoritePose: (id: string) => void;
   /**
    * Body weight, 0–1, live.
    *
@@ -111,17 +194,78 @@ export interface CharacterState {
    */
   weight: number;
   setWeight: (v: number) => void;
+  /** Whether facial fullness and neck perimeter morph dynamically with body weight (Creation Engine FaceGen parity). */
+  linkFaceToWeight: boolean;
+  setLinkFaceToWeight: (link: boolean) => void;
+  /** CBPC-style soft body spring physics enabled for breasts, butt, and belly. */
+  bodyPhysicsEnabled: boolean;
+  setBodyPhysicsEnabled: (v: boolean) => void;
+  /** Soft-body bounciness factor [0..1] where 0 = firm/tight, 1 = soft/bouncy. */
+  bodyPhysicsBounciness: number;
+  setBodyPhysicsBounciness: (v: number) => void;
+  /** CBPC analytical sphere-push collisions preventing hands/arms from clipping soft body. */
+  bodyCollisionsEnabled: boolean;
+  setBodyCollisionsEnabled: (v: boolean) => void;
+  /** Impulse nonce bumped by "Jiggle Test" button to trigger a dynamic bounce. */
+  physicsImpulseNonce: number;
+  triggerPhysicsImpulse: () => void;
   /** Active asset source identity, so a source switch can drop stale picks. */
   assetSourceId: string | null;
   setAssetSource: (id: string | null) => void;
-  /** Active ENB & ReShade post-processing mode */
-  postFxMode: PostFxMode;
+  /**
+   * Whether this document has been given a chance to restore a saved session.
+   *
+   * False until `rehydrate()` has settled (or immediately, when there is no
+   * stored session). The startup `Default.jslot` load waits on it: applying
+   * the default before the answer arrives would overwrite the restored face on
+   * every reload, which is the whole bug this feature exists to fix.
+   */
+  hydrated: boolean;
+  /** True when hydration actually found a saved session to restore. */
+  restored: boolean;
+  /** Per-load marker so the startup preset is applied at most once. */
+  defaultOpened: boolean;
+  markHydrated: (restored: boolean) => void;
+  markDefaultOpened: () => void;
+  /** The ENB/ReShade combination the panel remembers while the stack is off. */
+  enbPreset: EnbPreset;
+  /** Whether the ENB/ReShade pass draws at all. */
+  enbEnabled: boolean;
+  /** Per-effect switches for the composer's screen-space passes. */
+  fx: { smaa: boolean; bloom: boolean; dof: boolean; vignette: boolean; grain: boolean };
+  /** Contrast, saturation, ambient and the colour overlays. */
+  grade: GradeSettings;
   /** Active procedural HDR environment lighting preset */
   envMode: EnvMode;
   /** Environment rotation around Y axis in degrees [0, 360) */
   envRotation: number;
+  envIntensity: number;
+  /** Active 3D stage and background mode */
+  backgroundMode: BackgroundMode;
+  /** Custom GLB URL when backgroundMode is 'custom-3d' */
+  customBackgroundUrl: string | null;
+  setBackgroundMode: (mode: BackgroundMode) => void;
+  setCustomBackgroundUrl: (url: string | null) => void;
+  lighting: LightingSettings;
+  cameraRotateSpeed: number;
+  setLighting: (patch: Partial<LightingSettings>) => void;
+  setEnvIntensity: (value: number) => void;
+  setCameraRotateSpeed: (value: number) => void;
   /** Skin glossiness / specular sheen level [0.0 = matte, 1.0 = oiled/wet] */
   skinGloss: number;
+  /** SSS strength multiplier on top of the gloss-derived parameters [0..1].
+   *  1 reproduces the gloss-only mapping this app has always used. */
+  skinSss: number;
+  /** Skin tone color tint `#rrggbb`. '#ffffff' = untinted raw diffuse. */
+  skinColor: string;
+  /** Whether the graphics workspace is the active left dock panel. */
+  graphicsOpen: boolean;
+  /** Whether the camera workspace is the active left dock panel. */
+  cameraOpen: boolean;
+  /** Active left workspace. All four panels stay mounted behind it. */
+  workspace: Workspace;
+  /** HUD-hidden preview: every chrome panel disappears, the gutter stays. */
+  previewMode: boolean;
 
   sliders: Record<RegionId, SliderValues>;
   poses: Record<RegionId, GizmoPose>;
@@ -130,6 +274,20 @@ export interface CharacterState {
   /** Chosen MO2 asset per category. Missing = the manifest's own default. */
   assetSelection: AssetSelection;
   assetCatalogues: AssetCatalogues;
+  /**
+   * Worn garments, one `clothingMesh` id per equipment slot.
+   *
+   * Separate from `assetSelection` because that map holds one id per *kind*
+   * and the paper-doll wears several garments of the same kind at once. The
+   * whole-body outfit keeps using `assetSelection.clothingMesh` — it is the
+   * OUTFIT slot and predates this map.
+   */
+  equipment: EquipSelection;
+  /** Which slot the EQUIPMENT picker is filling. */
+  equipSlot: EquipSlot;
+  setEquipSlot: (slot: EquipSlot) => void;
+  /** `null` clears the slot; the store drops the key rather than storing null. */
+  setEquip: (patch: Partial<Record<EquipSlot, string | null>>) => void;
   panelMode: 'mesh' | 'texture';
   setPanelMode: (mode: 'mesh' | 'texture') => void;
   setAssets: (patch: Partial<Record<AssetKind, string | null>>) => void;
@@ -138,10 +296,21 @@ export interface CharacterState {
   activeCategory: ActiveCategory;
   /** Makeup / tattoo / wrinkle / brow layers, in draw order. */
   overlayLayers: OverlayLayer[];
+  /**
+   * `kind:id` of the overlay the makeup panel is editing, or null. UI-only —
+   * never written to a preset and never persisted with the session.
+   */
+  activeOverlay: string | null;
   /** Set while the user is dragging a slider so the gizmo yields to it. */
   activeSlider: SliderId | null;
   /** Bumped whenever a preset is applied, to retrigger camera framing. */
   presetNonce: number;
+  /** Camera vertical field-of-view in degrees [15..60]. Default 27. */
+  cameraFov: number;
+  /** Active camera framing: auto, or locked to face / bust / body. */
+  cameraFraming: CameraFraming;
+  /** Nonce request for programmatic camera angle / framing transitions. */
+  cameraPoseRequest: CameraPoseRequest | null;
 
   setActiveRegion: (id: RegionId) => void;
   setPrimaryTab: (t: string) => void;
@@ -150,10 +319,22 @@ export interface CharacterState {
   setBisymmetry: (v: boolean) => void;
   setAsymmetry: (v: boolean) => void;
   setShowMesh: (v: boolean) => void;
-  setPostFxMode: (mode: PostFxMode) => void;
+  setEnbPreset: (preset: EnbPreset) => void;
+  setEnbEnabled: (enabled: boolean) => void;
+  /** Flips one composer effect on or off. */
+  toggleFx: (key: keyof CharacterState['fx']) => void;
+  /** Patches the grade, leaving the overlay rows alone. */
+  setGrade: (patch: Partial<Omit<GradeSettings, 'overlays'>>) => void;
+  setOverlay: (index: 0 | 1 | 2, patch: Partial<ColorOverlay>) => void;
   setEnvMode: (mode: EnvMode) => void;
   setEnvRotation: (rotation: number) => void;
   setSkinGloss: (v: number) => void;
+  setSkinSss: (v: number) => void;
+  setSkinColor: (v: string) => void;
+  setGraphicsOpen: (open: boolean) => void;
+  setCameraOpen: (open: boolean) => void;
+  setWorkspace: (workspace: Workspace) => void;
+  setPreviewMode: (preview: boolean) => void;
   setSlider: (id: SliderId, value: number) => void;
   setActiveSlider: (id: SliderId | null) => void;
   setPose: (patch: Partial<GizmoPose>) => void;
@@ -166,6 +347,11 @@ export interface CharacterState {
   toggleOverlay: (layer: OverlayLayer) => void;
   setOverlayOpacity: (kind: AssetKind, id: string, opacity: number) => void;
   setOverlayColor: (kind: AssetKind, id: string, color: string) => void;
+  /** Sets how the layer combines with the atlas; unknown modes are ignored. */
+  setOverlayBlend: (kind: AssetKind, id: string, blend: OverlayBlend) => void;
+  /** Sets mask coverage 0–1 (clamped; non-finite input is ignored). */
+  setOverlayCoverage: (kind: AssetKind, id: string, coverage: number) => void;
+  setActiveOverlay: (key: string | null) => void;
   clearOverlays: (kind?: AssetKind) => void;
   setOverlayLayers: (layers: OverlayLayer[]) => void;
   setName: (n: string) => void;
@@ -174,11 +360,29 @@ export interface CharacterState {
   loadPreset: (payload: PresetPayload, sculptHeadId?: string) => void;
   /** Everything the exporter needs to write a preset file. */
   snapshotPreset: () => PresetFile;
+  setCameraFov: (fov: number) => void;
+  setCameraFraming: (framing: CameraFraming) => void;
+  triggerCameraPose: (pose: Omit<CameraPoseRequest, 'nonce'>) => void;
+  resetCameraView: () => void;
 }
 
-export const useCharacter = create<CharacterState>((set, get) => ({
-  hair: { ...DEFAULT_HAIR },
-  hairTab: 'STYLE',
+/**
+ * The live character, persisted across reloads.
+ *
+ * `persist` writes a *slice* (`lib/session.ts` → `pickSession`) to
+ * `localStorage` after every `set`, so an F5 lands back on the face the user
+ * was building instead of the startup default. Two details are load-bearing:
+ *
+ * - `skipHydration: true`. The store module is imported while rendering on the
+ *   server, where there is no `localStorage`; hydrating in the initializer
+ *   would either mismatch the server HTML or, worse, make the first client
+ *   render disagree with it. `CharacterCreation` calls `rehydrate()` from an
+ *   effect instead — after mount, once, with a real storage.
+ * - `merge` coerces instead of spreading. What comes back from storage is
+ *   arbitrary JSON; see `coerceSession`.
+ */
+export const useCharacter = create<CharacterState>()(persist((set, get) => ({
+  hair: { ...DEFAULT_HAIR },  hairTab: 'STYLE',
   setHairTab: (hairTab) => set({ hairTab }),
   setHair: (patch) => set((s) => {
     const shapeKeys = ['lengthCm', 'bangs', 'side', 'back', 'volume', 'curl', 'wave', 'wispiness', 'asymmetry'];
@@ -205,30 +409,102 @@ export const useCharacter = create<CharacterState>((set, get) => ({
   setGarmentVisible: (garmentVisible) => set({ garmentVisible }),
   bodyPoseId: 'rest',
   setBodyPose: (bodyPoseId) => set({ bodyPoseId }),
+  poseIntensity: 1.0,
+  setPoseIntensity: (poseIntensity) => set({ poseIntensity: Math.min(1.5, Math.max(0, poseIntensity)) }),
+  animationSpeed: 1.0,
+  setAnimationSpeed: (animationSpeed) => set({ animationSpeed: Math.min(2.0, Math.max(0.2, animationSpeed)) }),
+  poseCategory: 'IDLE',
+  setPoseCategory: (poseCategory) => set({ poseCategory }),
+  favoritePoses: ['rest', 'relaxed', 'hands-on-hips', 'greeting-wave', 'victory'],
+  toggleFavoritePose: (id) =>
+    set((s) => ({
+      favoritePoses: s.favoritePoses.includes(id)
+        ? s.favoritePoses.filter((p) => p !== id)
+        : [...s.favoritePoses, id],
+    })),
   /* Skyrim's own default weight is 1.0, and `femalebody_1.nif` is the mesh the
      game shows at it. */
   weight: 1,
   setWeight: (weight) => set({ weight: Math.min(1, Math.max(0, weight)) }),
+  linkFaceToWeight: true,
+  setLinkFaceToWeight: (linkFaceToWeight) => set({ linkFaceToWeight }),
+  bodyPhysicsEnabled: true,
+  bodyPhysicsBounciness: 0.5,
+  bodyCollisionsEnabled: true,
+  physicsImpulseNonce: 0,
+  setBodyPhysicsEnabled: (bodyPhysicsEnabled) => set({ bodyPhysicsEnabled }),
+  setBodyPhysicsBounciness: (bodyPhysicsBounciness) => set({ bodyPhysicsBounciness }),
+  setBodyCollisionsEnabled: (bodyCollisionsEnabled) => set({ bodyCollisionsEnabled }),
+  triggerPhysicsImpulse: () => set((s) => ({ physicsImpulseNonce: s.physicsImpulseNonce + 1 })),
   assetSourceId: null,
   /* A different source has different catalogue ids: every pick, cached list
      and overlay tintmask from the previous one is unresolvable and must not
-     leak into the new session. */
+     leak into the new session.
+
+     Two cases must NOT wipe, both of them created by restoring a session:
+     `null` means this load could not read the manifest, which says nothing
+     about the pack; and an identical id is the ordinary reload. The second
+     already returned early; the first is new here — without it a transient
+     fetch failure would delete the face the user just restored. */
   setAssetSource: (id) =>
-    set((s) =>
-      s.assetSourceId === id
-        ? s
-        : {
-            assetSourceId: id,
-            assetSelection: {},
-            assetCatalogues: {},
-            overlayLayers: [],
-            activeCategory: 'skin',
-          },
-    ),
-  postFxMode: 'off',
+    set((s) => {
+      /* `null` is "this load could not read the manifest", not "a different
+         pack". Treating it as a switch would delete a restored face whenever
+         the fetch blipped, and storing the null would make the next healthy
+         load look like a switch. So it carries no information at all. */
+      if (id === null || s.assetSourceId === id) return s;
+      return {
+        assetSourceId: id,
+        assetSelection: {},
+        assetCatalogues: {},
+        equipment: {},
+        overlayLayers: [],
+        /* The stack is gone, so the panel's selection cannot name a layer. */
+        activeOverlay: null,
+        activeCategory: 'skin',
+      };
+    }),
+  hydrated: false,
+  restored: false,
+  defaultOpened: false,
+  /* Transient by construction: `partialize` writes only the fields named in
+     `PersistedSession`, so a stored `hydrated: true` can never tell the next
+     load its session had already been restored. */
+  markHydrated: (restored) => set({ hydrated: true, restored }),
+  markDefaultOpened: () => set({ defaultOpened: true }),
+  /* The stack starts off so the first frame is exactly the face this app has
+     always drawn; the preset is remembered for when the user turns it on. */
+  enbPreset: 'enb',
+  enbEnabled: false,
+  fx: { smaa: true, bloom: true, dof: true, vignette: true, grain: true },
+  grade: {
+    contrast: 0,
+    saturation: 0,
+    ambient: 0,
+    filter: 'vanilla',
+    overlays: [
+      { color: '#e8a33d', amount: 0, enabled: false },
+      { color: '#b8b8b8', amount: 0, enabled: false },
+      { color: '#d8c39c', amount: 0, enabled: false },
+    ],
+  },
   envMode: 'off',
   envRotation: 0,
+  envIntensity: 1,
+  backgroundMode: 'void',
+  customBackgroundUrl: null,
+  lighting: { ...LIGHTING_DEFAULTS },
+  cameraRotateSpeed: CAMERA_ROTATE_SPEED_DEFAULT,
   skinGloss: 0.52,
+  skinSss: 1,
+  skinColor: '#ffffff',
+  graphicsOpen: false,
+  cameraOpen: false,
+  workspace: 'edit',
+  previewMode: false,
+  cameraFov: CAMERA_FOV_DEFAULT,
+  cameraFraming: 'auto',
+  cameraPoseRequest: null,
 
   sliders: buildSliderBank(),
   poses: buildPoseBank(),
@@ -243,6 +519,17 @@ export const useCharacter = create<CharacterState>((set, get) => ({
   },
   assetSelection: {},
   assetCatalogues: {},
+  equipment: {},
+  equipSlot: 'top',
+  setEquipSlot: (equipSlot) => set({ equipSlot }),
+  setEquip: (patch) => set((s) => {
+    const next = { ...s.equipment };
+    for (const [slot, id] of Object.entries(patch) as Array<[EquipSlot, string | null]>) {
+      if (id) next[slot] = id;
+      else delete next[slot];
+    }
+    return { equipment: next };
+  }),
   panelMode: 'texture',
   setPanelMode: (panelMode) => set({ panelMode }),
   setAssetCatalogue: (kind, entries) => set((s) => ({
@@ -258,6 +545,7 @@ export const useCharacter = create<CharacterState>((set, get) => ({
   }),
   activeCategory: 'skin',
   overlayLayers: [],
+  activeOverlay: null,
   activeSlider: null,
   presetNonce: 0,
 
@@ -270,10 +558,63 @@ export const useCharacter = create<CharacterState>((set, get) => ({
   setAsymmetry: (asymmetry) =>
     set((s) => ({ asymmetry, bisymmetry: asymmetry ? false : s.bisymmetry })),
   setShowMesh: (showMesh) => set({ showMesh }),
-  setPostFxMode: (postFxMode) => set({ postFxMode }),
+  setEnbPreset: (enbPreset) => set({ enbPreset }),
+  setEnbEnabled: (enbEnabled) => set({ enbEnabled }),
+  toggleFx: (key) => set((s) => ({ fx: { ...s.fx, [key]: !s.fx[key] } })),
+  setGrade: (patch) => set((s) => ({ grade: { ...s.grade, ...patch } })),
+  setOverlay: (index, patch) =>
+    set((s) => {
+      const overlays = s.grade.overlays.map((o, i) =>
+        i === index ? { ...o, ...patch } : o,
+      ) as GradeSettings['overlays'];
+      return { grade: { ...s.grade, overlays } };
+    }),
   setEnvMode: (envMode) => set({ envMode }),
-  setEnvRotation: (envRotation) => set({ envRotation }),
+  setEnvRotation: (value) => { if (Number.isFinite(value)) set({ envRotation: wrapDegrees(value) }); },
+  setBackgroundMode: (backgroundMode) => set({ backgroundMode }),
+  setCustomBackgroundUrl: (customBackgroundUrl) => set({ customBackgroundUrl }),
+  setLighting: (patch) => set((s) => ({ lighting: coerceLighting(patch, s.lighting) })),
+  setEnvIntensity: (value) => set((s) => ({ envIntensity: bounded(value, s.envIntensity, 0, 2) })),
+  setCameraRotateSpeed: (value) => set((s) => ({ cameraRotateSpeed: bounded(value, s.cameraRotateSpeed, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPEED_MAX) })),
   setSkinGloss: (skinGloss) => set({ skinGloss }),
+  setSkinSss: (v) => set({ skinSss: Math.min(1, Math.max(0, v)) }),
+  setSkinColor: (skinColor) => set({ skinColor }),
+  setWorkspace: (workspace) => set({
+    workspace,
+    graphicsOpen: workspace === 'graphics',
+    cameraOpen: workspace === 'camera',
+    previewMode: false,
+  }),
+  /* The old gutter buttons drove two mutually exclusive booleans. They still
+     do, but each now names the integrated workspace so opening one never
+     evicts the other panel's local state — only its visibility changes. */
+  setGraphicsOpen: (open) => set(open
+    ? { graphicsOpen: true, cameraOpen: false, workspace: 'graphics', previewMode: false }
+    : { graphicsOpen: false, workspace: 'edit' }),
+  setCameraOpen: (open) => set(open
+    ? { cameraOpen: true, graphicsOpen: false, workspace: 'camera', previewMode: false }
+    : { cameraOpen: false, workspace: 'edit' }),
+  setPreviewMode: (preview) => set({ previewMode: preview }),
+  setCameraFov: (cameraFov) => set({ cameraFov: Math.min(CAMERA_FOV_MAX, Math.max(CAMERA_FOV_MIN, cameraFov)) }),
+  setCameraFraming: (cameraFraming) => set({ cameraFraming }),
+  triggerCameraPose: (pose) =>
+    set((s) => ({
+      cameraPoseRequest: {
+        ...pose,
+        nonce: (s.cameraPoseRequest?.nonce ?? 0) + 1,
+      },
+    })),
+  resetCameraView: () =>
+    set((s) => ({
+      cameraFov: CAMERA_FOV_DEFAULT,
+      cameraFraming: 'auto',
+      cameraPoseRequest: {
+        yaw: 0,
+        pitch: 0,
+        reset: true,
+        nonce: (s.cameraPoseRequest?.nonce ?? 0) + 1,
+      },
+    })),
 
   setSlider: (id, value) =>
     set((s) => {
@@ -346,6 +687,33 @@ export const useCharacter = create<CharacterState>((set, get) => ({
       ),
     })),
 
+  /* A blend the compositor does not implement is not written at all, which
+     leaves `normal` (the absent-key default) in force rather than persisting a
+     string that every later validation would reject. */
+  setOverlayBlend: (kind, id, blend) => {
+    const valid = coerceBlend(blend);
+    if (!valid) return;
+    set((s) => ({
+      overlayLayers: s.overlayLayers.map((l) =>
+        l.kind === kind && l.id === id ? { ...l, blend: valid } : l,
+      ),
+    }));
+  },
+
+  /* Coverage is clamped to 0–1; a non-finite value is ignored rather than
+     coerced to 0, so a NaN from a slider cannot silently erase every layer. */
+  setOverlayCoverage: (kind, id, coverage) => {
+    const valid = coerceCoverage(coverage);
+    if (valid === undefined) return;
+    set((s) => ({
+      overlayLayers: s.overlayLayers.map((l) =>
+        l.kind === kind && l.id === id ? { ...l, coverage: valid } : l,
+      ),
+    }));
+  },
+
+  setActiveOverlay: (activeOverlay) => set({ activeOverlay }),
+
   clearOverlays: (kind) =>
     set((s) => ({
       overlayLayers: kind ? s.overlayLayers.filter((l) => l.kind !== kind) : [],
@@ -396,12 +764,19 @@ export const useCharacter = create<CharacterState>((set, get) => ({
         preset: resolvePresetId(payload.preset ?? s.preset),
         name: payload.name ?? s.name,
         assetSelection,
+        /* A preset that names no gear keeps what is worn, exactly like the
+           view fields above — a `.jslot` has no notion of the paper-doll. */
+        equipment: payload.equipment ?? s.equipment,
         /* A `.jslot` records `actor.weight` as 0–100; `parsePreset` divides it.
            A LYRA export writes the same 0–1 value back. A file that carries
            neither keeps the current weight, like the view fields above. */
         weight: payload.weight ?? s.weight,
+        linkFaceToWeight: (payload as { linkFaceToWeight?: boolean }).linkFaceToWeight ?? s.linkFaceToWeight,
         hair: payload.hair ? coerceHair(payload.hair) : s.hair,
         overlayLayers: payload.overlays ?? s.overlayLayers,
+        /* A replacement stack invalidates the panel's `kind:id` selection; a
+           file that carries no overlays keeps both. */
+        activeOverlay: payload.overlays ? null : s.activeOverlay,
         presetNonce: s.presetNonce + 1,
       };
     }),
@@ -421,12 +796,41 @@ export const useCharacter = create<CharacterState>((set, get) => ({
         ]),
       ) as Record<RegionId, { sliders: SliderValues; pose: GizmoPose }>,
       assets: s.assetSelection,
+      equipment: s.equipment,
       weight: s.weight,
       hair: { ...s.hair },
       overlays: s.overlayLayers,
     });
   },
+}), {
+  name: SESSION_KEY,
+  version: SESSION_VERSION,
+  storage: persistStorage,
+  skipHydration: true,
+  /* The stored fields are exactly the character; transient view state never
+     leaves the tab. `pickSession` copies rather than returning references, so
+     a later mutation of the live bank cannot silently rewrite the last save. */
+  partialize: (s) => pickSession(s as PersistedSession),
+  /* Runs only when storage actually returned a session. Returning `null` from
+     the coercer (a payload that is not even an object) leaves the defaults in
+     place, which is the honest response to garbage. */
+  merge: (persisted, current) => {
+    const restored = coerceSession(persisted, pickSession(current as PersistedSession));
+    return restored ? { ...current, ...restored, restored: true } : current;
+  },
 }));
+
+/** Rehydration is explicit (see `skipHydration` above); this is the one place
+ *  that asks for it, marks the answer as in, and only then lets writes resume.
+ *  The order matters: `markHydrated` must not persist, or a first visit would
+ *  store slider defaults before the startup preset has been applied. */
+export function restoreSession(): Promise<void> {
+  return Promise.resolve(useCharacter.persist.rehydrate()).then(() => {
+    const s = useCharacter.getState();
+    s.markHydrated(s.restored);
+    enableSessionWrites();
+  });
+}
 
 /** Selector helpers — keep component subscriptions narrow. */
 export const selectRegion = (s: CharacterState): RegionDef =>

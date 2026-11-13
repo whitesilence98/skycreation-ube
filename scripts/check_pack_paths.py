@@ -53,6 +53,16 @@ def main() -> int:
         touch(root, r"presets\SKSE\Plugins\CharGen\Frau.nif")
         touch(root, r"overlays\textures\!UBE\Custom_Scars\1.dds")
         touch(root, r"skeleton\meshes\actors\character\skeleton_female.nif")
+        # COR's facial maps and Zhizhen's actor-tree eye atlas, both imported
+        # by `import_facial_assets.py` under the category that owns them.
+        touch(root, r"eyes\textures\!COR\Eyes_ILV\eye01.dds")
+        touch(root, r"lashes\textures\!COR\Lashes\EyeLashesDeliah.dds")
+        touch(root, r"brows\textures\!COR\Brows\FemaleBrow_01.dds")
+        touch(root, r"mouth\textures\!COR\Mouth\MouthMap_d.dds")
+        touch(root, r"eyes\textures\actors\character\ddseyes\eye01.dds")
+        # An unlisted COR family is an overlay, not a facial part: it must not
+        # resolve into the eyes/brows trees by category fallback.
+        touch(root, r"overlays\textures\!COR\MakeupOverlays\m.dds")
         # The pre-category layout must keep resolving as written.
         touch(root, r"meshes\!UBE\Legacy\keep.tri")
         touch(root, r"textures\!UBE\Legacy\keep.dds")
@@ -85,6 +95,20 @@ def main() -> int:
              r"overlays\textures\!UBE\Custom_Scars\1.dds"),
             (r"meshes\actors\character\skeleton_female.nif",
              r"skeleton\meshes\actors\character\skeleton_female.nif"),
+            # COR facial maps: the folder name is the category.
+            (r"textures\!COR\Eyes_ILV\eye01.dds",
+             r"eyes\textures\!COR\Eyes_ILV\eye01.dds"),
+            (r"textures\!COR\Lashes\EyeLashesDeliah.dds",
+             r"lashes\textures\!COR\Lashes\EyeLashesDeliah.dds"),
+            (r"textures\!COR\Brows\FemaleBrow_01.dds",
+             r"brows\textures\!COR\Brows\FemaleBrow_01.dds"),
+            (r"textures\!COR\Mouth\MouthMap_d.dds",
+             r"mouth\textures\!COR\Mouth\MouthMap_d.dds"),
+            (r"textures\!COR\MakeupOverlays\m.dds",
+             r"overlays\textures\!COR\MakeupOverlays\m.dds"),
+            # Zhizhen's eye maps live in the actors tree, under `eyes`.
+            (r"textures\actors\character\ddseyes\eye01.dds",
+             r"eyes\textures\actors\character\ddseyes\eye01.dds"),
             # An ungrouped pre-category pack still resolves its own paths.
             (r"meshes\!UBE\Legacy\keep.tri", r"meshes\!UBE\Legacy\keep.tri"),
             (r"textures\!UBE\Legacy\keep.dds", r"textures\!UBE\Legacy\keep.dds"),

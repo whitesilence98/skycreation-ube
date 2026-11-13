@@ -1,7 +1,7 @@
 'use client';
 
-import { useCharacter, type PostFxMode } from '@/lib/store';
-import { ENV_CONFIG } from '@/components/scene/environments';
+import { useEffect } from 'react';
+import { useCharacter } from '@/lib/store';
 import { HAIR_TABS } from '@/lib/hair/settings';
 import { cn } from '@/lib/cn';
 import type { UiCategory } from '@/lib/manifestSelect';
@@ -15,7 +15,7 @@ import type { Mo2Manifest } from '@/lib/head/faceTexture';
  * that skin it. Sharing one tab meant clicking SKIN silently replaced the
  * shape controls the user was mid-way through adjusting.
  */
-const PRIMARY = ['PRESET', 'HAIR', 'FACE SHAPE', 'FACE', 'BODY', 'VOICE', 'ZODIAC'] as const;
+const PRIMARY = ['PRESET', 'HAIR', 'FACE', 'BODY', 'EQUIPMENT', 'VOICE', 'ZODIAC'] as const;
 /** Sub-tabs only exist under FACE; they switch which part the panel lists. */
 const SECONDARY = ['SKIN', 'EYES', 'LASHES', 'BROWS', 'MOUTH', 'MAKEUP', 'TATTOO', 'WRINKLE'] as const;
 
@@ -23,15 +23,15 @@ const SECONDARY = ['SKIN', 'EYES', 'LASHES', 'BROWS', 'MOUTH', 'MAKEUP', 'TATTOO
  * Which asset category each tab opens in the panel.
  *
  * The sub-tabs were a highlight and nothing else: MAKEUP lit up and the asset
- * panel went on listing skins. BODY, VOICE and ZODIAC have no MO2 category, so
+ * panel went on listing skins. BODY and EQUIPMENT have their own flows, so
  * they leave the current one alone rather than emptying the panel.
  */
 const PRIMARY_CATEGORY: Partial<Record<(typeof PRIMARY)[number], UiCategory>> = {
   PRESET: 'preset',
   HAIR: 'hair',
-  'FACE SHAPE': 'headMesh',
   FACE: 'skin',
   BODY: 'body',
+  EQUIPMENT: 'equipment',
 };
 
 const SECONDARY_CATEGORY: Record<(typeof SECONDARY)[number], UiCategory> = {
@@ -45,29 +45,9 @@ const SECONDARY_CATEGORY: Record<(typeof SECONDARY)[number], UiCategory> = {
   WRINKLE: 'wrinkle',
 };
 
-/** BODY keeps one optional sub-tab: the supplied outfit. */
-const BODY_TABS = ['BODY', 'CLOTHING'] as const;
-const BODY_CATEGORY: Record<(typeof BODY_TABS)[number], UiCategory> = {
-  BODY: 'body',
-  CLOTHING: 'clothing',
-};
 
-const FX_CONFIG: Record<PostFxMode, { label: string; dot: string; next: PostFxMode }> = {
-  all: { label: 'ENB + PURE', dot: 'bg-[#5cd4b4] shadow-[0_0_6px_#5cd4b4]', next: 'enb' },
-  enb: { label: 'ENB PALETTE', dot: 'bg-[#d4b483] shadow-[0_0_6px_#d4b483]', next: 'pure' },
-  pure: { label: 'PURE RESHADE', dot: 'bg-[#b69bf8] shadow-[0_0_6px_#b69bf8]', next: 'off' },
-  off: { label: 'POST-FX: OFF', dot: 'bg-[#8c8477]/40 shadow-none', next: 'all' },
-};
 
-export function TopBar({ manifest }: { manifest: Mo2Manifest | null }) {
-  /* Whether a `_0`/`_1` pair exists is a property of the pack, not of anything
-     the user has selected, so it comes from the manifest — reading the
-     catalogue here would leave the control dead until the asset panel had
-     been opened on BODY at least once. */
-  const hasBodyPair = Boolean(
-    (manifest?.assets?.bodyMesh as Array<{ weightVariants?: unknown }> | undefined)
-      ?.some((row) => row.weightVariants),
-  );
+export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }) {
   const name = useCharacter((s) => s.name);
   const setName = useCharacter((s) => s.setName);
   const primaryTab = useCharacter((s) => s.primaryTab);
@@ -82,26 +62,21 @@ export function TopBar({ manifest }: { manifest: Mo2Manifest | null }) {
   const hairTab = useCharacter((s) => s.hairTab);
   const setHairTab = useCharacter((s) => s.setHairTab);
   const stats = useCharacter((s) => s.stats);
-  const postFxMode = useCharacter((s) => s.postFxMode);
-  const setPostFxMode = useCharacter((s) => s.setPostFxMode);
-  const envMode = useCharacter((s) => s.envMode);
-  const setEnvMode = useCharacter((s) => s.setEnvMode);
-  const envRotation = useCharacter((s) => s.envRotation);
-  const setEnvRotation = useCharacter((s) => s.setEnvRotation);
-  const garmentVisible = useCharacter((s) => s.garmentVisible);
-  const setGarmentVisible = useCharacter((s) => s.setGarmentVisible);
-  const weight = useCharacter((s) => s.weight);
-  const setWeight = useCharacter((s) => s.setWeight);
-  const skinGloss = useCharacter((s) => s.skinGloss);
-  const setSkinGloss = useCharacter((s) => s.setSkinGloss);
+
+  useEffect(() => {
+    if (primaryTab === 'FACE SHAPE' || primaryTab === 'VOICE' || primaryTab === 'ZODIAC') {
+      setPrimaryTab('FACE');
+      setActiveCategory('skin');
+    }
+  }, [primaryTab, setPrimaryTab, setActiveCategory]);
 
   return (
-    <header className="pointer-events-auto absolute inset-x-0 top-0 z-30">
+    <header className="pointer-events-none absolute inset-x-0 top-0 z-30">
       {/* soft top scrim so the title stays legible over the render */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[86px] bg-gradient-to-b from-black/72 via-black/28 to-transparent" />
 
       {/* Reference: title baseline at y ≈ 39, x 35–190; nav starts x 312. */}
-      <div className="relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-6 px-[35px] pt-[22px] pb-2">
+      <div className="relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-2 px-4 pt-3 pb-2 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
         {/* ── left: wordmark ─────────────────────────────────────── */}
         <div className="flex h-[18px] items-center">
           <h1 className="whitespace-nowrap text-[11px] font-normal tracking-[0.075em] text-[#efece6]/92">
@@ -111,29 +86,37 @@ export function TopBar({ manifest }: { manifest: Mo2Manifest | null }) {
         </div>
 
         {/* ── centre: nav stacks ─────────────────────────────────── */}
-        <div className="flex flex-col items-center">
-          <nav className="flex items-center gap-[7px]" aria-label="Primary">
+        <div className="pointer-events-auto col-span-2 row-start-2 flex min-w-0 flex-col items-start xl:col-span-1 xl:col-start-2 xl:row-start-1 xl:items-center">
+          <nav className="flex max-w-full shrink-0 items-center gap-[7px] overflow-x-auto overflow-y-hidden py-[6px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>div]:shrink-0" aria-label="Primary">
             {PRIMARY.map((item, i) => {
               const active = primaryTab === item;
+              const disabled = item === 'VOICE' || item === 'ZODIAC';
+              const displayLabel = `${item}${active && !disabled ? ' [ACTIVE]' : ''}`;
               return (
                 <div key={item} className="flex items-center gap-[7px]">
                   <button
                     type="button"
+                    disabled={disabled}
+                    aria-disabled={disabled}
                     onClick={() => {
+                      if (disabled) return;
                       setPrimaryTab(item);
                       const kind = PRIMARY_CATEGORY[item];
                       if (kind) setActiveCategory(kind);
                     }}
                     className={cn(
-                      'group relative whitespace-nowrap text-[9.5px] tracking-[0.1em] transition-colors duration-200',
-                      active
-                        ? 'font-medium text-[#e8c691]'
-                        : 'font-light text-[#bdb7ab]/70 hover:text-[#e6ddcc]',
+                      'group relative whitespace-nowrap text-[10px] tracking-[0.1em] transition-colors duration-200',
+                      disabled
+                        ? 'cursor-not-allowed text-[#7a7266]/35 select-none'
+                        : active
+                          ? 'font-medium text-[#e8c691]'
+                          : 'font-light text-[#bdb7ab]/70 hover:text-[#e6ddcc]',
                     )}
+                    title={disabled ? 'Disabled' : undefined}
                   >
-                    {item}
-                    {active && (
-                      <span className="absolute -bottom-[9px] left-1/2 h-[1px] w-[26px] -translate-x-1/2 bg-gradient-to-r from-transparent via-[#d4b483]/85 to-transparent" />
+                    {displayLabel}
+                    {active && !disabled && (
+                      <span className="absolute -bottom-[5px] left-1/2 h-[1px] w-[26px] -translate-x-1/2 bg-gradient-to-r from-transparent via-[#d4b483]/85 to-transparent" />
                     )}
                   </button>
                   {i < PRIMARY.length - 1 && (
@@ -147,19 +130,37 @@ export function TopBar({ manifest }: { manifest: Mo2Manifest | null }) {
           {/* Only FACE has texture sub-tabs; FACE SHAPE owns its own rail, so
               the row collapses everywhere else instead of showing a stale
               highlight for a category that tab does not list. */}
+          {primaryTab === 'PRESET' && (
+            <div className="mt-[2px] flex max-w-full items-center gap-[6px] overflow-x-auto overflow-y-hidden py-[2px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
+              <div className="flex items-center gap-[6px]">
+                <span className="mr-[1px] inline-block h-[3px] w-[3px] rounded-full bg-[#d4b483]" />
+                <span className="whitespace-nowrap text-[10px] font-medium tracking-[0.11em] text-[#d8c39c]">
+                  PRESET SELECTION [ACTIVE]
+                </span>
+                <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
+              </div>
+              <div className="flex items-center gap-[6px]">
+                <span className="cursor-not-allowed whitespace-nowrap text-[10px] font-light tracking-[0.11em] text-[#7a7266]/35 select-none">
+                  SAVED PRESETS
+                </span>
+                <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
+              </div>
+              <div className="flex items-center gap-[6px]">
+                <span className="cursor-not-allowed whitespace-nowrap text-[10px] font-light tracking-[0.11em] text-[#7a7266]/35 select-none">
+                  USER PRESETS
+                </span>
+              </div>
+            </div>
+          )}
+
           {primaryTab === 'FACE' && (
-          <div className="mt-[11px] flex -translate-x-[32px] items-center gap-[6px]">
+          <div className="mt-[2px] flex max-w-full items-center gap-[6px] overflow-x-auto overflow-y-hidden py-[2px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>div]:shrink-0">
             {SECONDARY.map((item, i) => {
               const active = subTab === item;
               return (
                 <div key={item} className="flex items-center gap-[6px]">
-                  {i === 0 && (
-                    <span
-                      className={cn(
-                        'mr-[1px] inline-block h-[3px] w-[3px] rounded-full transition-colors',
-                        active ? 'bg-[#d4b483]' : 'bg-[#8c8477]/50',
-                      )}
-                    />
+                  {active && (
+                    <span className="mr-[1px] inline-block h-[3px] w-[3px] rounded-full bg-[#d4b483]" />
                   )}
                   <button
                     type="button"
@@ -168,13 +169,13 @@ export function TopBar({ manifest }: { manifest: Mo2Manifest | null }) {
                       setActiveCategory(SECONDARY_CATEGORY[item]);
                     }}
                     className={cn(
-                      'whitespace-nowrap text-[9px] tracking-[0.11em] transition-colors duration-200',
+                      'whitespace-nowrap text-[10px] tracking-[0.11em] transition-colors duration-200',
                       active
                         ? 'font-medium text-[#d8c39c]'
                         : 'font-light text-[#a8a294]/52 hover:text-[#d5cdbd]',
                     )}
                   >
-                    {item}
+                    {item}{active ? ' [ACTIVE]' : ''}
                   </button>
                   {i < SECONDARY.length - 1 && (
                     <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
@@ -188,114 +189,88 @@ export function TopBar({ manifest }: { manifest: Mo2Manifest | null }) {
           {/* HAIR's own secondary row. It highlights a scroll target in the
               hair controller rather than picking an asset category, so it is
               deliberately separate from FACE's `subTab`. */}
-          {primaryTab === 'BODY' && (
-            <div className="mt-[11px] flex items-center gap-[6px]">
-              {BODY_TABS.map((item, i) => {
-                const active = activeCategory === BODY_CATEGORY[item];
-                return (
-                  <div key={item} className="flex items-center gap-[6px]">
-                    {i === 0 && (
-                      <span
-                        className={cn(
-                          'mr-[1px] inline-block h-[3px] w-[3px] rounded-full transition-colors',
-                          active ? 'bg-[#d4b483]' : 'bg-[#8c8477]/50',
-                        )}
-                      />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setActiveCategory(BODY_CATEGORY[item])}
-                      aria-pressed={active}
-                      className={cn(
-                        'whitespace-nowrap text-[9px] tracking-[0.11em] transition-colors duration-200',
-                        active
-                          ? 'font-medium text-[#d8c39c]'
-                          : 'font-light text-[#a8a294]/52 hover:text-[#d5cdbd]',
-                      )}
-                    >
-                      {item}
-                    </button>
-                    {i < BODY_TABS.length - 1 && (
-                      <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
-                    )}
-                  </div>
-                );
-              })}
-              <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
-              {/* Garment and body are separate authored shapes: the toggle
-                  hides only the garment, never the embedded body. */}
-              <button
-                type="button"
-                onClick={() => setGarmentVisible(!garmentVisible)}
-                aria-pressed={garmentVisible}
-                title="Show the outfit's garment shapes"
-                className={cn(
-                  'whitespace-nowrap border px-[4px] py-[1px] text-[8px] tracking-[0.11em] transition-colors',
-                  garmentVisible
-                    ? 'border-[#d4b483]/45 bg-[#d4b483]/[0.08] text-[#e8c691]'
-                    : 'border-[#8c8477]/30 text-[#a8a294]/52 hover:text-[#d5cdbd]',
+          {(primaryTab === 'EQUIPMENT' || primaryTab === 'BODY') && (
+            <div className="mt-[2px] flex max-w-full items-center gap-[6px] overflow-x-auto overflow-y-hidden py-[2px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
+              {/* GEAR SLOTS */}
+              <div className="flex items-center gap-[6px]">
+                {primaryTab === 'EQUIPMENT' && (
+                  <span className="mr-[1px] inline-block h-[3px] w-[3px] rounded-full bg-[#d4b483]" />
                 )}
-              >
-                {garmentVisible ? 'GARMENT ON' : 'GARMENT OFF'}
-              </button>
-              {/* Body weight, 0–1 — Skyrim's own slider. It only does anything
-                  when the pack supplied a `_0`/`_1` pair, so it is shown dimmed
-                  and disabled rather than hidden: an absent control reads as a
-                  missing feature, a disabled one reads as "this body has no
-                  pair", which is the truth. */}
-              <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
-              <label
-                title={
-                  hasBodyPair
-                    ? 'Body weight — blends femalebody_0 → femalebody_1'
-                    : 'This body ships no _0/_1 pair, so weight cannot be changed'
-                }
-                className={cn('flex items-center gap-[5px]', !hasBodyPair && 'opacity-40')}
-              >
-                <span className="shrink-0 text-[8px] tracking-[0.11em] text-[#a8a294]/72">WEIGHT</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={weight}
-                  disabled={!hasBodyPair}
-                  onChange={(e) => setWeight(Number(e.target.value))}
-                  aria-label="Body weight"
-                  className="hud-range h-[9px] w-[76px]"
-                  style={{ ['--pct' as string]: `${Math.round(weight * 100)}%` }}
-                />
-                <span className="num w-[20px] text-[8px] tabular-nums text-[#d8c9ad]/88">
-                  {weight.toFixed(2)}
-                </span>
-              </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrimaryTab('EQUIPMENT');
+                    setActiveCategory('equipment');
+                  }}
+                  className={cn(
+                    'whitespace-nowrap text-[10px] tracking-[0.11em] transition-colors duration-200',
+                    primaryTab === 'EQUIPMENT'
+                      ? 'font-medium text-[#d8c39c]'
+                      : 'font-light text-[#a8a294]/52 hover:text-[#d5cdbd]',
+                  )}
+                >
+                  GEAR SLOTS{primaryTab === 'EQUIPMENT' ? ' [ACTIVE]' : ''}
+                </button>
+              </div>
+
+              {/* BODY SKIN */}
+              <div className="flex items-center gap-[6px]">
+                {primaryTab === 'BODY' && (
+                  <span className="mr-[1px] inline-block h-[3px] w-[3px] rounded-full bg-[#d4b483]" />
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrimaryTab('BODY');
+                    setActiveCategory('body');
+                  }}
+                  className={cn(
+                    'whitespace-nowrap text-[10px] tracking-[0.11em] transition-colors duration-200',
+                    primaryTab === 'BODY'
+                      ? 'font-medium text-[#d8c39c]'
+                      : 'font-light text-[#a8a294]/52 hover:text-[#d5cdbd]',
+                  )}
+                >
+                  BODY SKIN{primaryTab === 'BODY' ? ' [ACTIVE]' : ''}
+                </button>
+                <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
+              </div>
+
+              {/* Disabled reference slots: INVENTORY / WEAPONS / ACCESSORIES / STATS */}
+              {(['INVENTORY', 'WEAPONS', 'ACCESSORIES', 'STATS'] as const).map((slot, idx, arr) => (
+                <div key={slot} className="flex items-center gap-[6px]">
+                  <span className="cursor-not-allowed whitespace-nowrap text-[10px] font-light tracking-[0.11em] text-[#7a7266]/35 select-none">
+                    {slot}
+                  </span>
+                  {idx < arr.length - 1 && (
+                    <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 
           {primaryTab === 'HAIR' && (
-          <div className="mt-[11px] flex items-center gap-[6px]">
-            <span
-              className={cn(
-                'mr-[1px] inline-block h-[3px] w-[3px] rounded-full',
-                hairTab === 'STYLE' ? 'bg-[#d4b483]' : 'bg-[#8c8477]/50',
-              )}
-            />
+          <div className="mt-[2px] flex max-w-full items-center gap-[6px] overflow-x-auto overflow-y-hidden py-[2px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
             {HAIR_TABS.map((item, i) => {
               const active = hairTab === item;
               return (
                 <div key={item} className="flex items-center gap-[6px]">
+                  {active && (
+                    <span className="mr-[1px] inline-block h-[3px] w-[3px] rounded-full bg-[#d4b483]" />
+                  )}
                   <button
                     type="button"
                     onClick={() => setHairTab(item)}
                     aria-pressed={active}
                     className={cn(
-                      'whitespace-nowrap text-[9px] tracking-[0.11em] transition-colors duration-200',
+                      'whitespace-nowrap text-[10px] tracking-[0.11em] transition-colors duration-200',
                       active
                         ? 'font-medium text-[#d8c39c]'
                         : 'font-light text-[#a8a294]/52 hover:text-[#d5cdbd]',
                     )}
                   >
-                    {item}
+                    {item}{active ? ' [ACTIVE]' : ''}
                   </button>
                   {i < HAIR_TABS.length - 1 && (
                     <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
@@ -308,8 +283,8 @@ export function TopBar({ manifest }: { manifest: Mo2Manifest | null }) {
         </div>
 
         {/* ── right: stats + name ─────────────────────────────────── */}
-        <div className="flex items-start justify-end gap-[11px]">
-          <dl className="num mt-[2px] flex flex-col items-end gap-[1px] text-[6.5px] leading-[1.3] tracking-[0.04em] text-[#a49c8d]/72">
+        <div className="pointer-events-auto col-start-2 row-start-1 flex items-start justify-end gap-[11px] xl:col-start-3">
+          <dl className="num pointer-events-none absolute right-4 top-[112px] flex flex-col items-end gap-[1px] text-[10px] leading-[1.3] tracking-[0.04em] text-[#a49c8d]/72 lg:static lg:mt-[2px]">
             <div className="flex items-baseline gap-[5px]">
               <dt className="text-[#8d8577]/62">Faces:</dt>
               <dd>{stats.faces.toLocaleString('en-US')}</dd>
@@ -324,76 +299,17 @@ export function TopBar({ manifest }: { manifest: Mo2Manifest | null }) {
             </div>
           </dl>
 
-          {/* Post-FX Toggle (ENB & Pure ReShade) */}
-          <button
-            type="button"
-            onClick={() => setPostFxMode(FX_CONFIG[postFxMode].next)}
-            title="Cycle Post-FX preset: ENB + Pure ReShade / ENB Palette / Pure ReShade / Off"
-            className="group flex h-[23px] items-center gap-[6px] border border-[#d4b483]/32 bg-black/34 px-[8px] backdrop-blur-[6px] transition-all hover:border-[#d4b483]/62"
-          >
-            <span className={cn('h-[5px] w-[5px] rounded-full transition-all', FX_CONFIG[postFxMode].dot)} />
-            <span className="text-[7.5px] font-medium tracking-[0.14em] text-[#e0d6c4]">
-              {FX_CONFIG[postFxMode].label}
-            </span>
-          </button>
+          {/* POST-FX / ENV / ROT / GLOSS live in the graphics panel on the
+              left gutter now; the header carries only the readout and the
+              name field. */}
 
-          {/* HDR Environment Lighting Switcher */}
-          <button
-            type="button"
-            onClick={() => setEnvMode(ENV_CONFIG[envMode].next)}
-            title={`Cycle Environment: ${ENV_CONFIG[envMode].description}`}
-            className="group flex h-[23px] items-center gap-[6px] border border-[#d4b483]/32 bg-black/34 px-[8px] backdrop-blur-[6px] transition-all hover:border-[#d4b483]/62"
-          >
-            <span className={cn('h-[5px] w-[5px] rounded-full transition-all', ENV_CONFIG[envMode].dot)} />
-            <span className="text-[7.5px] font-medium tracking-[0.14em] text-[#e0d6c4]">
-              {ENV_CONFIG[envMode].label}
-            </span>
-          </button>
-
-          {/* Environment Rotation Button (visible when an environment preset is active) */}
-          {envMode !== 'off' && (
-            <button
-              type="button"
-              onClick={() => setEnvRotation((envRotation + 45) % 360)}
-              title="Rotate HDR environment lighting 45° around character"
-              className="flex h-[23px] items-center gap-[4px] border border-[#d4b483]/32 bg-black/34 px-[6px] backdrop-blur-[6px] transition-all hover:border-[#d4b483]/62"
-            >
-              <span className="text-[7px] text-[#b0a795]/78">ROT:</span>
-              <span className="font-mono text-[7.5px] font-medium tracking-[0.08em] text-[#e0d6c4]">
-                {envRotation}°
-              </span>
-            </button>
-          )}
-
-          {/* Skin Glossiness Slider */}
-          <div
-            title="Adjust character skin glossiness & specular shine"
-            className="flex h-[23px] items-center gap-[5px] border border-[#d4b483]/32 bg-black/34 px-[7px] backdrop-blur-[6px]"
-          >
-            <span className="text-[7px] tracking-[0.11em] text-[#b0a795]/78">GLOSS:</span>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={skinGloss}
-              onChange={(e) => setSkinGloss(Number(e.target.value))}
-              aria-label="Skin glossiness"
-              className="hud-range h-[8px] w-[46px]"
-              style={{ ['--pct' as string]: `${Math.round(skinGloss * 100)}%` }}
-            />
-            <span className="font-mono text-[7.5px] font-medium tabular-nums text-[#e0d6c4]">
-              {Math.round(skinGloss * 100)}%
-            </span>
-          </div>
-
-          <label className="group flex h-[23px] w-[80px] items-center gap-[5px] border border-[#d4b483]/32 bg-black/34 px-[6px] backdrop-blur-[6px] transition-colors focus-within:border-[#d4b483]/62">
-            <span className="shrink-0 text-[7px] tracking-[0.12em] text-[#b0a795]/78">NAME:</span>
+          <label className="group flex h-[28px] w-[128px] items-center gap-[5px] border border-[#d4b483]/32 bg-black/34 px-[6px] backdrop-blur-[6px] transition-colors focus-within:border-[#d4b483]/62">
+            <span className="shrink-0 text-[10px] tracking-[0.12em] text-[#b0a795]/78">NAME:</span>
             <input
               value={name}
               onChange={(e) => setName(e.target.value.toUpperCase().slice(0, 14))}
               spellCheck={false}
-              className="w-full min-w-0 bg-transparent text-[8px] tracking-[0.14em] text-[#f1ece0] outline-none placeholder:text-[#8c8477]/40"
+              className="w-full min-w-0 bg-transparent text-[10px] tracking-[0.14em] text-[#f1ece0] outline-none placeholder:text-[#8c8477]/40"
               placeholder="LYRA"
               aria-label="Character name"
             />

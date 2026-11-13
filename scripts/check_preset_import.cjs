@@ -31,7 +31,18 @@ function load(name) {
       console,
       process,
       URLSearchParams,
-      require: (id) => (id.startsWith('@/') ? load(id.slice(2)) : require(id)),
+      require: (id) => {
+        /* Both alias forms have to resolve through this loader: `@/x` is the
+           repo alias, and a relative `./x` names a sibling TypeScript module
+           that Node's own resolver cannot see. Bare packages still defer to
+           Node. */
+        if (id.startsWith('@/')) return load(id.slice(2));
+        if (id.startsWith('.')) {
+          const rel = path.relative(root, path.resolve(path.dirname(file), id)).split(path.sep).join('/');
+          return load(rel);
+        }
+        return require(id);
+      },
     },
     { filename: file },
   );
@@ -227,4 +238,41 @@ if (packManifest.assets.preset.some((p) => p.file)) {
   }
   console.log('pack preset selection and missing atlas: ok');
 }
+// ── 6. the paper-doll survives a save/load round trip ───────────────
+// Six worn slots live beside `assets`, not inside it: `assets.clothingMesh`
+// can only name one whole outfit. A preset that dropped them would come back
+// bare, and a preset that let a hand-edited file name an unknown slot would
+// put a string in the store no component can interpret.
+const equipmentFile = io.buildPresetFile({
+  name: 'GEAR',
+  preset: regions.PRESETS[0].id,
+  activeRegion: 'nose',
+  transformMode: 'translate',
+  bisymmetry: true,
+  regions: Object.fromEntries(regions.REGIONS.map((r) => [r.id, {
+    sliders: r.defaults, pose: { offset: [0, 0, 0], rotation: [0, 0, 0], scale: [0, 0, 0] },
+  }])),
+  equipment: { chest: 'top', hands: 'arms', legs: 'legs' },
+});
+/* Every value above comes out of the vm realm, so compare plain copies. */
+const plain = (v) => JSON.parse(JSON.stringify(v ?? null));
+assert.equal(JSON.stringify(plain(equipmentFile.equipment)), JSON.stringify({ chest: 'top', hands: 'arms', legs: 'legs' }), 'export writes the slot map');
+const equipmentBack = io.parsePreset(JSON.stringify(equipmentFile));
+assert.equal(JSON.stringify(plain(equipmentBack.equipment)), JSON.stringify({ chest: 'top', hands: 'arms', legs: 'legs' }), 'import returns the slot map');
+
+const dirtyGear = io.parsePreset(JSON.stringify({
+  ...equipmentFile,
+  equipment: { chest: 'top', elbows: 'x', feet: 7 },
+}));
+assert.equal(dirtyGear.equipment, undefined, 'a payload with an unknown slot or a non-string id is refused whole');
+assert.equal(io.parsePreset(JSON.stringify({ ...equipmentFile, equipment: undefined })).equipment, undefined,
+  'a file with no gear records nothing');
+
+store().setEquip({ chest: 'top', feet: 'boots' });
+assert.equal(JSON.stringify(plain(store().equipment)), JSON.stringify({ chest: 'top', feet: 'boots' }), 'setEquip fills slots');
+store().setEquip({ chest: null });
+assert.equal(JSON.stringify(plain(store().equipment)), JSON.stringify({ feet: 'boots' }), 'a null clears exactly one slot');
+assert.equal(JSON.stringify(plain(store().snapshotPreset().equipment)), JSON.stringify({ feet: 'boots' }), 'the snapshot carries the worn gear');
+console.log('equipment round trip: ok');
+
 console.log('preset import: ok');

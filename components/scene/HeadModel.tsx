@@ -6,9 +6,11 @@ import {
   buildHeadGeometry,
   buildNeckGeometry,
   buildTorsoGeometry,
+  applyNeckDelta,
   type HeadBuild,
 } from '@/lib/head/geometry';
-import { createRig, poseRegionBone, verifyRigWiring, type Rig } from '@/lib/head/rig';
+import { detectHeadBaseWeight } from '@/lib/head/neckDeltas';
+import { createRig, poseRegionBone, applyCreationEngineWeight, verifyRigWiring, type Rig } from '@/lib/head/rig';
 import {
   buildDetailTexture,
   buildFaceTexture,
@@ -17,17 +19,30 @@ import {
   type Mo2Manifest,
 } from '@/lib/head/faceTexture';
 import { convertUrl } from '@/lib/mo2/client';
-import { loadMask, type OverlayInput } from '@/lib/head/overlayLayers';
+import { loadMask, compositeHeadAtlas, type OverlayInput } from '@/lib/head/overlayLayers';
 import { SLIDER_DEFS, REGIONS_BY_ID } from '@/lib/regions';
 import { useCharacter } from '@/lib/store';
 import { MeshOverlay } from '@/components/scene/MeshOverlay';
 import { FaceGizmo } from '@/components/scene/FaceGizmo';
 import { AuthoredPart } from '@/components/scene/AuthoredPart';
 import { SkinnedPart } from '@/components/scene/SkinnedPart';
+import { EquippedGarment } from '@/components/scene/EquippedGarment';
 import { SkeletonRegistry } from '@/lib/character/skeleton';
-import { applyBodyPose, bodyPose } from '@/lib/character/poses';
-import { lerpPositions, useMaterialTexture, useMeshGeometry, useMeshResource, type MaterialRole, type TextureState } from '@/components/scene/useMeshGeometry';
-import { applySkinShader, updateSkinUniforms, skinParamsFromGloss } from '@/components/scene/SkinShader';
+import { BodyPhysics } from '@/components/scene/BodyPhysics';
+import { applyBodyPose, bodyPose, applyPoseById, BODY_POSES } from '@/lib/character/poses';
+import {
+  useMaterialTexture,
+  useMeshGeometry,
+  useMeshResource,
+  useWeightedMeshResource,
+  type MaterialRole,
+  type TextureState,
+} from '@/components/scene/useMeshGeometry';
+import {
+  applySkinGloss,
+  skinRoughnessFromGloss,
+  updateSkinGloss,
+} from '@/components/scene/SkinShader';
 
 export interface SceneHandles {
   rig: Rig;
@@ -57,16 +72,51 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
      rendering an old mesh. */
   const packMode = manifest?.sourceLayout === 'pack';
 
+  const weight = useCharacter((s) => s.weight);
+  const linkFaceToWeight = useCharacter((s) => s.linkFaceToWeight);
+
   const headMeshUrl = manifest?.headMesh?.meshUrl;
-  const headResource = useMeshResource(headMeshUrl, 'head mesh');
+  const headWeightVariants = (manifest?.headMesh as { weightVariants?: { w0: string; w1: string } })?.weightVariants;
+  const headResource = useWeightedMeshResource(
+    headWeightVariants,
+    headMeshUrl,
+    'head mesh',
+    weight,
+  );
   const realMesh = headResource.mesh;
 
   const fallbackHeadBuild = useMemo(() => buildHeadGeometry(), []);
   const headBuild = useMemo<HeadBuild>(() => {
     if (realMesh) {
+      const basePositions = new Float32Array(realMesh.positions);
+      const baseWeight = detectHeadBaseWeight(basePositions);
+
+      const normAttr = realMesh.geometry.getAttribute('normal') as THREE.BufferAttribute | undefined;
+      const baseNormals = normAttr ? new Float32Array(normAttr.array) : undefined;
+
+      const posAttr = realMesh.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+      if (posAttr) {
+        if (posAttr.array === realMesh.positions) {
+          posAttr.array = new Float32Array(basePositions);
+        } else {
+          posAttr.array.set(basePositions);
+          posAttr.needsUpdate = true;
+        }
+      }
+      if (normAttr && baseNormals) {
+        if (normAttr.array === baseNormals) {
+          normAttr.array = new Float32Array(baseNormals);
+        } else {
+          normAttr.array.set(baseNormals);
+          normAttr.needsUpdate = true;
+        }
+      }
+
       return {
         geometry: realMesh.geometry,
-        basePositions: realMesh.positions,
+        basePositions,
+        baseNormals,
+        baseWeight,
         ringCount: 64,
         segmentCount: 64,
       };
@@ -76,10 +126,18 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     return fallbackHeadBuild;
   }, [realMesh, fallbackHeadBuild]);
 
+
+
   // ── real eye and eyelash meshes from MO2 ──────────────────────────
-  const eyeMeshUrl = manifest?.eye?.meshUrl ?? (packMode ? undefined : '/assets/mo2/eyes/ube-eyesfemale.json');
+  const eyeMeshUrl =
+    manifest?.eye?.meshUrl ??
+    (manifest?.assets?.eyeMesh?.[0] as { meshUrl?: string })?.meshUrl ??
+    '/assets/preset-pack/meshes/eyeMesh-3ae8c50ea0f8caad.json';
   const lashesMeshUrl =
-    parts?.lashes?.meshUrl ?? manifest?.eye?.lashesMeshUrl ?? (packMode ? undefined : '/assets/mo2/eyes/ube-lashes.json');
+    parts?.lashes?.meshUrl ??
+    manifest?.eye?.lashesMeshUrl ??
+    (manifest?.assets?.lashesMesh?.[0] as { meshUrl?: string })?.meshUrl ??
+    (packMode ? '/assets/preset-pack/meshes/lashesMesh-1cb18e62265020cc.json' : '/assets/mo2/eyes/ube-lashes.json');
   const eyeGeo = useMeshGeometry(eyeMeshUrl, 'eye')?.geometry ?? null;
   const lashesGeo = useMeshGeometry(lashesMeshUrl, 'lashes')?.geometry ?? null;
 
@@ -93,36 +151,44 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
 
   /* ── body weight ──────────────────────────────────────────────────
      A `_0`/`_1` pair is two meshes over one atlas, exactly as in Skyrim. When
-     the producer measured a pair the resolved body carries both URLs; both are
+     the producer measured a pair the resolved part carries both URLs; both are
      fetched and the rendered position attribute is lerped as the slider moves.
-     A body with no pair keeps the single mesh and no slider.
+     A part with no pair keeps the single mesh and the slider does nothing.
 
-     When a pair exists, `_1` (the manifest's `meshUrl`) *is* the body: the pair
-     fetch below already holds it, so the single-body fetch is skipped rather
-     than downloading and decoding the same 20k-vertex mesh twice. */
-  const weightVariants = parts?.body?.weightVariants;
-  const weight0 = useMeshResource(weightVariants?.w0, 'body weight 0');
-  const weight1 = useMeshResource(weightVariants?.w1, 'body weight 1');
-  const bodyResource = useMeshResource(weightVariants ? undefined : bodyMeshUrl, 'body');
-  const bodyMesh = weightVariants ? weight1.mesh : bodyResource.mesh;
+     The torso, hands and feet are three parts over the *same* body atlas and
+     the *same* weight; they share one hook so they can never disagree about
+     the current slider value. `useWeightedMeshResource` also holds a pair
+     invisible until both halves arrive, and skips the redundant single fetch
+     when a pair exists (`_1` is the part). */
+
+  const bodyResource = useWeightedMeshResource(
+    parts?.body?.weightVariants,
+    bodyMeshUrl,
+    'body',
+    weight,
+  );
+  const bodyMesh = bodyResource.mesh;
   const bodyGeo = bodyMesh?.geometry ?? null;
-  const weight = useCharacter((s) => s.weight);
-  useEffect(() => {
-    if (!bodyGeo || !weight0.mesh || !weight1.mesh) return;
-    const attr = bodyGeo.getAttribute('position') as THREE.BufferAttribute | undefined;
-    if (!attr) return;
-    const blended = lerpPositions(
-      weight0.mesh.positions,
-      weight1.mesh.positions,
-      weight,
-      attr.array as Float32Array,
-    );
-    if (blended !== attr.array) attr.array = blended;
-    attr.needsUpdate = true;
-    // Endpoints and every intermediate point move, so the bounds must follow.
-    bodyGeo.computeBoundingSphere();
-    bodyGeo.computeBoundingBox();
-  }, [bodyGeo, weight0.mesh, weight1.mesh, weight]);
+
+  /* Hands and feet are authored as their own static prebaked pair assets over
+     the same body atlas. Unlike the torso they have **no synthetic fallback**:
+     a pack that does not supply them simply draws nothing there, and a pair
+     that half-loads is not drawn at all. Their textures fall back to the body
+     atlas so a limb never paints an unrelated shader's map. */
+  const handsResource = useWeightedMeshResource(
+    parts?.hands?.weightVariants,
+    parts?.hands?.meshUrl,
+    'hands',
+    weight,
+  );
+  const feetResource = useWeightedMeshResource(
+    parts?.feet?.weightVariants,
+    parts?.feet?.meshUrl,
+    'feet',
+    weight,
+  );
+  const handsMesh = handsResource.mesh;
+  const feetMesh = feetResource.mesh;
 
   // Authored hair/outfit: their own shapes and material arrays.
   const hairMeshUrl = parts?.hair?.meshUrl;
@@ -130,6 +196,13 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const hairAuthored = hairResource.mesh;
   const clothingMeshUrl = parts?.clothing?.meshUrl;
   const clothingResource = useMeshResource(clothingMeshUrl, 'clothing mesh');
+  /* Worn garments from the paper-doll. Each is its own NIF over its own
+     authored atlases, so unlike the whole outfit they have no shared texture
+     override — only the embedded-body fallback below applies. */
+  const equipped = useMemo(
+    () => (parts?.equipment ?? []).filter((p) => Boolean(p.meshUrl)),
+    [parts?.equipment],
+  );
   /* Stable identities: `AuthoredPart` keys its texture effect on these, and an
      inline object would reload every map on every parent render.
 
@@ -172,6 +245,12 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     if (bodyGeo && clothingHasEmbeddedBody) hidden.push('skin');
     return hidden;
   }, [garmentVisible, bodyGeo, clothingHasEmbeddedBody]);
+  /* One array for every worn garment: the slot set cannot change without the
+     store changing, and a fresh array per render would re-key every part. */
+  const equipmentHiddenRoles = useMemo<MaterialRole[]>(
+    () => (garmentVisible === false ? ['clothing', 'accessory'] : []),
+    [garmentVisible],
+  );
   const neckGeo = useMemo(() => buildNeckGeometry(), []);
   const torsoGeo = useMemo(() => buildTorsoGeometry(), []);
 
@@ -184,6 +263,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
      move them together, and separate bone sets would drift apart. */
   const skeletonRegistry = useMemo(() => new SkeletonRegistry('head'), []);
   const bodyPoseId = useCharacter((s) => s.bodyPoseId);
+  const poseIntensity = useCharacter((s) => s.poseIntensity);
 
   /* Applied over the rest pose on every change: presets are absolute, so
      switching from one to another must not inherit the previous rotations.
@@ -205,28 +285,75 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
      delivered the mesh and never recompute. Effects run after children, which
      is exactly when the registry is complete. */
   useEffect(() => {
-    if (skeletonRegistry.byName.size === 0) return;
-    applyBodyPose(skeletonRegistry, bodyPose(bodyPoseId));
+    const applyWithTransform = (relTransform: THREE.Matrix4 | null) => {
+      applyNeckDelta(
+        headBuild.geometry,
+        headBuild.basePositions,
+        weight,
+        relTransform,
+        headBuild.baseNormals,
+        true,
+        headBuild.baseWeight ?? 1.0,
+      );
+      onDirty();
+    };
 
-    const rest = skeletonRegistry.restWorld('NPC Head [Head]');
-    const bone = skeletonRegistry.byName.get('NPC Head [Head]');
-    if (rest && bone) {
-      /* `bone.matrixWorld` is in scene space; the rig hangs off the character
-         group, so the skeleton group's own world matrix is removed first. Both
-         are identity in practice, but doing it properly keeps the rig correct
-         if the character is ever placed under a transformed node. */
-      const follow = skeletonRegistry.group.matrixWorld.clone().invert();
-      follow.multiply(bone.matrixWorld).multiply(rest.invert());
-      rig.root.matrixAutoUpdate = false;
-      rig.root.matrix.copy(follow);
-      rig.root.updateMatrixWorld(true);
-    } else {
-      rig.root.matrixAutoUpdate = true;
-      rig.root.matrix.identity();
-      rig.root.updateMatrixWorld(true);
+    const computeTransforms = (): THREE.Matrix4 | null => {
+      const restHead = skeletonRegistry.restWorld('NPC Head [Head]');
+      const boneHead = skeletonRegistry.byName.get('NPC Head [Head]');
+      const restSpine2 = skeletonRegistry.restWorld('NPC Spine2 [Spn2]');
+      const boneSpine2 = skeletonRegistry.byName.get('NPC Spine2 [Spn2]');
+
+      if (restHead && boneHead) {
+        /* boneHead.matrixWorld is in scene space; the rig hangs off the character
+           group, so the skeleton group's own world matrix is removed first. Both
+           are identity in practice, but doing it properly keeps the rig correct
+           if the character is ever placed under a transformed node. */
+        const followHead = skeletonRegistry.group.matrixWorld.clone().invert();
+        followHead.multiply(boneHead.matrixWorld).multiply(restHead.clone().invert());
+        rig.root.matrixAutoUpdate = false;
+        rig.root.matrix.copy(followHead);
+        rig.root.updateMatrixWorld(true);
+
+        if (restSpine2 && boneSpine2) {
+          const followSpine2 = skeletonRegistry.group.matrixWorld.clone().invert();
+          followSpine2.multiply(boneSpine2.matrixWorld).multiply(restSpine2.clone().invert());
+          return followHead.clone().invert().multiply(followSpine2);
+        }
+      } else {
+        rig.root.matrixAutoUpdate = true;
+        rig.root.matrix.identity();
+        rig.root.updateMatrixWorld(true);
+      }
+      return null;
+    };
+
+    if (skeletonRegistry.byName.size === 0) {
+      applyWithTransform(null);
+      return;
     }
-    onDirty();
-  }, [skeletonRegistry, bodyPoseId, rig, bodyMesh, clothingResource.mesh, hairResource.mesh, onDirty]);
+
+    // Built-in poses apply synchronously: no microtask delay, no unblended intermediate frames
+    const builtin = BODY_POSES.find((p) => p.id === bodyPoseId);
+    if (builtin) {
+      applyBodyPose(skeletonRegistry, builtin, poseIntensity);
+      const relTransform = computeTransforms();
+      applyWithTransform(relTransform);
+      return;
+    }
+
+    // External Skyrim HKX pose tracks load asynchronously
+    let cancelled = false;
+    void applyPoseById(skeletonRegistry, bodyPoseId, poseIntensity).then(() => {
+      if (cancelled) return;
+      const relTransform = computeTransforms();
+      applyWithTransform(relTransform);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [skeletonRegistry, bodyPoseId, poseIntensity, rig, weight, headBuild, bodyMesh, handsMesh, feetMesh, clothingResource.mesh, hairResource.mesh, onDirty]);
 
   /* Dev-only: the paired-bone naming bug left every eyebrow and cheek bone
      unresolvable for the entire life of this app and nothing logged. Cheap
@@ -248,9 +375,18 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
 
   /* Each tintmask is a catalogue id; the route serves it as a greyscale mask.
      Loading them here rather than inside the bake keeps `buildFaceTexture`
-     a pure decode → composite → project step with no network in the middle. */
+     a pure decode → composite → project step with no network in the middle.
+     Every property the compositor reads is in the key, not just the ones that
+     change the mask URL: a blend or coverage edit has no new image to fetch,
+     but it must still rebuild `overlayImages` so the bake re-runs. */
   const overlayKey = useMemo(
-    () => overlayLayers.map((l) => `${l.kind}:${l.id}:${l.color}:${l.opacity}`).join('|'),
+    () =>
+      overlayLayers
+        .map(
+          (l) =>
+            `${l.kind}:${l.id}:${l.color}:${l.opacity}:${l.blend ?? 'normal'}:${l.coverage ?? 1}`,
+        )
+        .join('|'),
     [overlayLayers],
   );
   const [overlayImages, setOverlayImages] = useState<OverlayInput[]>([]);
@@ -277,7 +413,15 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
 
   const skinSrc = manifest?.textures?.skin;
   const skinNormalSrc = manifest?.textures?.normal;
-  const eyeSrc = manifest?.textures?.eye;
+  /* Skyrim's `_n.dds` alpha as a roughness map. The pack ships this for its
+     own head; a catalogue skin pick converts on demand and has none, in which
+     case the material keeps its scalar roughness. */
+  const skinRoughnessSrc = manifest?.textures?.skinRoughness;
+  const eyeSrc =
+    manifest?.eye?.texture ??
+    manifest?.textures?.eye ??
+    (manifest?.assets?.eyes?.[0] as { texture?: string })?.texture ??
+    '/assets/preset-pack/textures/eyes/eyes.webp';
   const atlasCx = manifest?.eye?.atlas?.cx;
   const atlasCy = manifest?.eye?.atlas?.cy;
   const atlasR = manifest?.eye?.atlas?.r;
@@ -327,7 +471,9 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   );
   const hairSettings = useCharacter((s) => s.hair);
   const skinGloss = useCharacter((s) => s.skinGloss);
-  const skinRoughness = Math.max(0.14, 0.65 - skinGloss * 0.46);
+  const skinSss = useCharacter((s) => s.skinSss);
+  const skinColor = useCharacter((s) => s.skinColor);
+  const skinRoughness = skinRoughnessFromGloss(skinGloss);
 
   /* Authored hair and outfit are rendered by `AuthoredPart`, which keeps each
      shape's own material. `alphaTest` cuts hair strands without blending them
@@ -350,11 +496,18 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     [rig],
   );
 
+  const neckMaterial = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: skinColor, roughness: skinRoughness, metalness: 0 }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   // Apply ENB-calibrated skin shader once per material instance
   useEffect(() => {
-    applySkinShader(headMaterial, skinParamsFromGloss(skinGloss));
-    applySkinShader(neckMaterial, skinParamsFromGloss(skinGloss));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    applySkinGloss(headMaterial, skinGloss, skinSss);
+    applySkinGloss(neckMaterial, skinGloss, skinSss);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- creation-time
+    // only: the live effect further down pushes GLOSS/SSS without recompiling.
   }, [headMaterial, neckMaterial]);
   const headMapState = useMaterialTexture(
     headMaterial,
@@ -363,10 +516,62 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     { colorSpace: THREE.SRGBColorSpace },
   );
   useMaterialTexture(headMaterial, 'normalMap', isReal ? skinNormalSrc : undefined, {});
+  /* The gloss mask is the reason a whole face no longer shares one scalar
+     roughness. The neck borrows the head's atlas and therefore its UVs, so it
+     takes the same map in the effect below. */
+  useMaterialTexture(headMaterial, 'roughnessMap', isReal ? skinRoughnessSrc : undefined, {});
+
+  // Remember base atlas texture so clearing overlays reverts cleanly
+  const baseAtlasRef = useMemo(() => ({ current: null as THREE.Texture | null }), []);
+  useEffect(() => {
+    if (headMapState === 'loaded' && headMaterial.map && !headMaterial.map.userData?.__isCompositedOverlay) {
+      baseAtlasRef.current = headMaterial.map;
+    }
+  }, [headMapState, headMaterial.map, baseAtlasRef]);
+
+  /* In real mesh mode, tintmasks / makeup are composited directly onto the
+     underlying head diffuse in atlas space, giving live RaceMenu parity.
+     When no overlays are present, the raw atlas from useMaterialTexture is used. */
+  const [realOverlayTex, setRealOverlayTex] = useState<THREE.CanvasTexture | null>(null);
+
+  useEffect(() => {
+    if (!isReal || !skinSrc || overlayImages.length === 0) {
+      setRealOverlayTex((prev) => {
+        prev?.dispose();
+        return null;
+      });
+      return;
+    }
+    let cancelled = false;
+    const baseImg = new Image();
+    baseImg.crossOrigin = 'anonymous';
+    baseImg.onload = () => {
+      if (cancelled) return;
+      const canvas = compositeHeadAtlas(baseImg, overlayImages);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.flipY = true;
+      tex.userData = { __isCompositedOverlay: true };
+      tex.needsUpdate = true;
+      setRealOverlayTex((prev) => {
+        prev?.dispose();
+        return tex;
+      });
+    };
+    baseImg.src = skinSrc;
+    return () => {
+      cancelled = true;
+    };
+  }, [isReal, skinSrc, overlayImages]);
 
   useEffect(() => {
     if (isReal) {
-      headMaterial.color.set('#ffffff');
+      if (realOverlayTex) {
+        headMaterial.map = realOverlayTex;
+      } else if (baseAtlasRef.current) {
+        headMaterial.map = baseAtlasRef.current;
+      }
+      headMaterial.color.set(skinColor);
       headMaterial.roughness = skinRoughness;
       headMaterial.metalness = 0.0;
       headMaterial.normalScale.set(1.0, 1.0);
@@ -375,7 +580,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     }
     if (!faceTex) return;
     headMaterial.map = faceTex.texture;
-    headMaterial.color.set('#ffffff');
+    headMaterial.color.set(skinColor);
     headMaterial.roughness = skinRoughness;
     headMaterial.metalness = 0.0;
     const normal = skinNormal ?? detailTex;
@@ -383,39 +588,37 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     const ns = skinNormal ? 1.0 : 0.34;
     headMaterial.normalScale.set(ns, ns);
     headMaterial.needsUpdate = true;
-  }, [faceTex, detailTex, skinNormal, headMaterial, isReal, skinRoughness]);
+  }, [faceTex, detailTex, skinNormal, headMaterial, isReal, skinRoughness, realOverlayTex, baseAtlasRef, skinColor]);
 
-  const neckMaterial = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: '#cbb19d', roughness: skinRoughness, metalness: 0 }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
   useEffect(() => {
     neckMaterial.roughness = skinRoughness;
     if (isReal) {
       /* The neck borrows the head atlas the hook loaded; it is the same skin
-         and the same draw, so it must never keep a stale legacy face bake. */
+         and the same draw, so it must never keep a stale legacy face bake.
+         It also borrows the gloss mask, which is authored for the same UVs. */
       neckMaterial.map = headMapState === 'loaded' ? headMaterial.map : null;
-      neckMaterial.color.set('#ffffff');
+      neckMaterial.roughnessMap = skinRoughnessSrc ? headMaterial.roughnessMap : null;
+      neckMaterial.color.set(skinColor);
       neckMaterial.needsUpdate = true;
       return;
     }
     if (!faceTex) return;
     neckMaterial.map = faceTex.texture;
-    neckMaterial.color.set('#cfc6bf');
+    neckMaterial.roughnessMap = null;
+    neckMaterial.color.set(skinColor);
     neckMaterial.needsUpdate = true;
-  }, [faceTex, neckMaterial, isReal, headMapState, headMaterial, skinRoughness]);
+  }, [faceTex, neckMaterial, isReal, headMapState, headMaterial, skinRoughness, skinRoughnessSrc, skinColor]);
 
-  // Live-update SSS uniforms when GLOSS slider changes (no recompile needed)
+  // Live-update SSS uniforms when GLOSS or SSS changes (no recompile needed)
   useEffect(() => {
-    updateSkinUniforms(headMaterial, skinParamsFromGloss(skinGloss));
-    updateSkinUniforms(neckMaterial, skinParamsFromGloss(skinGloss));
-  }, [skinGloss, headMaterial, neckMaterial]);
+    updateSkinGloss(headMaterial, skinGloss, skinSss);
+    updateSkinGloss(neckMaterial, skinGloss, skinSss);
+  }, [skinGloss, skinSss, headMaterial, neckMaterial]);
 
   const torsoMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#2c3329',
+        color: '#3f473c',
         roughness: 0.94,
         metalness: 0.02,
       }),
@@ -426,8 +629,21 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     () =>
       new THREE.MeshStandardMaterial({
         color: '#ffffff',
-        roughness: 0.12,
+        roughness: 0.1,
         metalness: 0.0,
+        /* Koralina's atlases leave transparent-white texels around the sclera
+           (COR's are alpha-255 everywhere, so this is a no-op for them).
+           Without the cut they render as white patches on the eyeball. */
+        alphaTest: 0.5,
+      }),
+    [],
+  );
+
+  const eyeFallbackMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: '#f0ece1',
+        roughness: 0.25,
       }),
     [],
   );
@@ -440,6 +656,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         metalness: 0.0,
         transparent: true,
         alphaTest: 0.2,
+        alphaToCoverage: true,
         depthWrite: true,
         side: THREE.DoubleSide,
       }),
@@ -450,23 +667,44 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     colorSpace: THREE.SRGBColorSpace,
     wrap: true,
   });
+  /* The pack bakes a tangent-space normal beside every facial albedo; without
+     it the iris flattens into a decal on the eyeball. The eye's route is the
+     `eyes` texture row (`manifest.eye`), not a `parts` entry. */
+  useMaterialTexture(eyeMaterial, 'normalMap', manifest?.eye?.normalTexture, {});
 
   const lashesTexSrc =
-    parts?.lashes?.texture ?? manifest?.eye?.lashesTexture ?? (packMode ? undefined : '/assets/mo2/eyes/eyelashes.webp');
+    parts?.lashes?.texture ??
+    manifest?.eye?.lashesTexture ??
+    (packMode ? '/assets/preset-pack/textures/lashes/lashes.webp' : '/assets/mo2/eyes/eyelashes.webp');
   const lashesTexState = useMaterialTexture(lashesMaterial, 'map', lashesTexSrc, {
     colorSpace: THREE.SRGBColorSpace,
     wrap: true,
   });
+  useMaterialTexture(lashesMaterial, 'normalMap', parts?.lashes?.normalTexture, {});
 
+  /* The mouth is skin, not a decal: it is the same surface as the face around
+     it and moves with the same jaw. Without the patch the lips stay matte
+     while the cheek beside them scatters, and the seam reads as a mask edge. */
   const mouthMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#ffffff',
-        roughness: 0.35,
+        color: skinColor,
+        roughness: skinRoughness,
         metalness: 0.0,
       }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  useEffect(() => {
+    applySkinGloss(mouthMaterial, skinGloss, skinSss);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- creation-time
+    // only: the live effect below keeps the uniforms current.
+  }, [mouthMaterial]);
+
+  useEffect(() => {
+    updateSkinGloss(mouthMaterial, skinGloss, skinSss);
+  }, [mouthMaterial, skinGloss, skinSss]);
 
   /* UBE's mouth UVs run u ≈ 4.0–5.0 and the brows span u ≈ −0.1–1.07, so both
      tile — with a clamp every out-of-range sample collapses to the atlas edge
@@ -477,6 +715,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     parts?.mouth?.texture ?? (packMode ? undefined : '/assets/mo2/mouth/mouthmap.webp'),
     { colorSpace: THREE.SRGBColorSpace, wrap: true },
   );
+  useMaterialTexture(mouthMaterial, 'normalMap', parts?.mouth?.normalTexture, { wrap: true });
 
   const browsMaterial = useMemo(
     () =>
@@ -486,6 +725,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         metalness: 0.0,
         transparent: true,
         alphaTest: 0.15,
+        alphaToCoverage: true,
         depthWrite: true,
         side: THREE.DoubleSide,
       }),
@@ -499,10 +739,20 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     { colorSpace: THREE.SRGBColorSpace, wrap: true },
   );
 
+  /* The atlas already carries the brow colour; the material tint is only the
+     stand-in for the frame before it arrives. Multiplying a brown atlas by
+     `#1a1412` crushed it to near-black, which read as a painted-on stripe
+     rather than hair. */
+  useEffect(() => {
+    browsMaterial.color.set(browsTexState === 'loaded' ? '#ffffff' : '#1a1412');
+    browsMaterial.needsUpdate = true;
+  }, [browsMaterial, browsTexState]);
+  useMaterialTexture(browsMaterial, 'normalMap', parts?.brows?.normalTexture, { wrap: true });
+
   const bodyMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#ffffff',
+        color: skinColor,
         roughness: skinRoughness,
         metalness: 0.0,
       }),
@@ -510,10 +760,30 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     [],
   );
 
+  /* The unskinned fallback body is the same skin as the face above it, so it
+     takes the same patch. Created here and kept current alongside the head and
+     neck in the live effect below — patching it here but updating it nowhere
+     else would leave the chest on the first frame's gloss. */
   useEffect(() => {
-    bodyMaterial.roughness = skinRoughness;
+    applySkinGloss(bodyMaterial, skinGloss, skinSss);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- creation-time
+    // only: the live effect below keeps the uniforms current.
+  }, [bodyMaterial]);
+
+  useEffect(() => {
+    updateSkinGloss(bodyMaterial, skinGloss, skinSss);
+  }, [bodyMaterial, skinGloss, skinSss]);
+
+  useEffect(() => {
+    headMaterial.color.set(skinColor);
+    neckMaterial.color.set(skinColor);
+    bodyMaterial.color.set(skinColor);
+    mouthMaterial.color.set(skinColor);
+    headMaterial.needsUpdate = true;
+    neckMaterial.needsUpdate = true;
     bodyMaterial.needsUpdate = true;
-  }, [bodyMaterial, skinRoughness]);
+    mouthMaterial.needsUpdate = true;
+  }, [skinColor, headMaterial, neckMaterial, bodyMaterial, mouthMaterial]);
 
   const bodyTexUrl =
     parts?.body?.texture ?? manifest?.body?.texture ?? (packMode ? undefined : '/assets/mo2/body/femalebody.webp');
@@ -521,11 +791,29 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     parts?.body?.normalTexture ??
     manifest?.body?.normalTexture ??
     (packMode ? undefined : '/assets/mo2/body/femalebody_n.webp');
+  const bodyRoughUrl =
+    parts?.body?.roughnessTexture ?? manifest?.body?.roughnessTexture;
   const bodyTexState = useMaterialTexture(bodyMaterial, 'map', bodyTexUrl, {
     colorSpace: THREE.SRGBColorSpace,
     wrap: true,
   });
   useMaterialTexture(bodyMaterial, 'normalMap', bodyNormalUrl, { wrap: true });
+  useMaterialTexture(bodyMaterial, 'roughnessMap', bodyRoughUrl, { wrap: true });
+  /* The body, hands and feet are one character over one selected atlas. This
+     override is why a prebaked limb cannot paint its own baked-in material:
+     every `skin` slot on the three takes the body selection, and a missing
+     normal map falls back to the same stable, already-validated body normal
+     rather than to nothing. The gloss mask rides the same override so a limb
+     cannot end up with the torso's roughness. */
+  const bodySkinOverride = useMemo(
+    () => ({ texture: bodyTexUrl, normalTexture: bodyNormalUrl, roughnessTexture: bodyRoughUrl }),
+    [bodyTexUrl, bodyNormalUrl, bodyRoughUrl],
+  );
+  /* Stable identity for the same reason as `clothingFallback`: `SkinnedPart`
+     keys its texture/material effect on these objects, and an inline literal
+     would reload every map on every parent render. */
+  const bodyNormalFallback = useMemo(() => ({ skin: bodyNormalUrl }), [bodyNormalUrl]);
+  const bodyRoughnessFallback = useMemo(() => ({ skin: bodyRoughUrl }), [bodyRoughUrl]);
 
   /* One shared flat-grey material for every part whose atlas the pack did not
      supply: unlit, so a texture-less shape reads as a deliberate placeholder
@@ -595,9 +883,17 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   }, [headPainted, isReal, skinSrc, headMapState]);
 
   /* A failed mesh fetch settles too: otherwise the veil would wait for the
-     failsafe on a resource that will never arrive. */
+     failsafe on a resource that will never arrive.
+
+     The limbs take part in the same wait: a pair that has only half arrived is
+     not drawable, so revealing before it settles would show a body with its
+     hands and feet missing. A pack that does not author them reports settled
+     immediately (there is no URL to wait for). */
   const geometryReady =
-    !manifest?.headMesh?.meshUrl || Boolean(realMesh) || headResource.settled;
+    (!manifest?.headMesh?.meshUrl || Boolean(realMesh) || headResource.settled) &&
+    bodyResource.settled &&
+    handsResource.settled &&
+    feetResource.settled;
   /* Deliberately not gated on `Boolean(manifest)`: with no archive the head is
      procedural and the bake is too, and both settle through the same two
      waits above. Requiring the manifest would make an unavailable install
@@ -613,8 +909,9 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
      has no atlas on it, the whole head mesh draws with the opaque stand-in.
      Restoring the original material on cleanup means a later texture load
      simply swaps back without leaving the rig's mesh pointing at a disposed
-     stand-in. */
-  const headUntextured = packMode && isReal && headMapState !== 'loaded';
+     stand-in. Only switch to stand-in if there is genuinely no skin or it failed,
+     never while a newly picked skin texture is loading in the background. */
+  const headUntextured = packMode && isReal && (!skinSrc || headMapState === 'failed');
   useEffect(() => {
     if (!headUntextured) return;
     const original = rig.mesh.material;
@@ -626,7 +923,12 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
 
   /* Surface why the pack cannot draw a head, so the parent can say so rather
      than leave a silent empty viewport. A missing atlas is not an issue any
-     more — it renders grey — so only geometry failures are reported. */
+     more — it renders grey — so only geometry failures are reported.
+
+     A limb whose pair failed earns the same treatment: the renderer draws
+     nothing for it, and the user needs to know that is a pack problem rather
+     than their eyes. An absent limb (no URL at all) is not an issue. */
+  const limbIssue = handsResource.error ?? feetResource.error;
   const packIssue =
     !packMode
       ? null
@@ -634,7 +936,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         ? headResource.error
         : headResource.settled && !realMesh
           ? 'head mesh is missing from the preset pack'
-          : null;
+          : limbIssue;
   useEffect(() => {
     onIssue?.(packIssue);
   }, [packIssue, onIssue]);
@@ -656,9 +958,11 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
       }
     }
 
+    applyCreationEngineWeight(rig, weight, linkFaceToWeight);
     rig.root.updateMatrixWorld(true);
     onDirty();
-  }, [rig, sliders, poses, onDirty]);
+
+  }, [rig, sliders, poses, weight, linkFaceToWeight, onDirty]);
 
   /* A part with geometry is never withheld: pack mode draws its own material
      once its atlas is on the GPU, and the flat grey stand-in until then (or
@@ -678,24 +982,43 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           frame as the head, so they have to ride the same head transform. At
           rest that transform is the identity, so nesting changes nothing. */}
       <primitive object={skeletonRegistry.group} />
+      <BodyPhysics registry={skeletonRegistry} />
       <primitive object={rig.root}>
         {mouthGeo && (
-          <mesh geometry={mouthGeo} material={partMaterial(mouthTexState, mouthMaterial)} renderOrder={1} />
+          <mesh name="Mouth" geometry={mouthGeo} material={partMaterial(mouthTexState, mouthMaterial)} renderOrder={1} />
         )}
         {eyeGeo && (
-          <mesh geometry={eyeGeo} material={partMaterial(eyeTexState, eyeMaterial)} renderOrder={2} />
+          <mesh
+            name="Eyes"
+            geometry={eyeGeo}
+            material={eyeTexState === 'loaded' ? eyeMaterial : eyeFallbackMaterial}
+            renderOrder={2}
+          />
         )}
         {lashesGeo && (
-          <mesh geometry={lashesGeo} material={partMaterial(lashesTexState, lashesMaterial)} renderOrder={3} />
+          <mesh name="Lashes" geometry={lashesGeo} material={partMaterial(lashesTexState, lashesMaterial)} renderOrder={3} />
         )}
         {browsGeo && (
-          <mesh geometry={browsGeo} material={partMaterial(browsTexState, browsMaterial)} renderOrder={4} />
+          <mesh name="Brows" geometry={browsGeo} material={partMaterial(browsTexState, browsMaterial)} renderOrder={4} />
+        )}
+        {hairAuthored && !hairAuthored.bones?.length && (
+          <AuthoredPart
+            key="hair"
+            name="Hair"
+            mesh={hairAuthored}
+            defaultRole="hair"
+            fallbackTexture={hairSrc}
+            fallbackNormalByRole={hairNormalFallback}
+            hair={hairSettings}
+            renderOrder={6}
+          />
         )}
       </primitive>
       {bodyGeo && bodyMesh ? (
         bodyMesh.bones?.length ? (
           <SkinnedPart
             key="body"
+            name="Body"
             mesh={bodyMesh}
             registry={skeletonRegistry}
             /* The baked body JSON carries no material groups — it is one skin
@@ -704,17 +1027,61 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
                0.35 alpha test. */
             defaultRole="skin"
             fallbackTexture={bodyTexUrl}
-            fallbackNormalByRole={{ skin: bodyNormalUrl }}
+            fallbackNormalByRole={bodyNormalFallback}
+            fallbackRoughnessByRole={bodyRoughnessFallback}
+            skinOverride={bodySkinOverride}
+            skinColor={skinColor}
             renderOrder={0}
           />
         ) : (
-          <mesh geometry={bodyGeo} material={partMaterial(bodyTexState, bodyMaterial)} renderOrder={0} />
+          <mesh name="Body" geometry={bodyGeo} material={partMaterial(bodyTexState, bodyMaterial)} renderOrder={0} />
         )
       ) : packMode ? null : (
         <>
+          {/* Procedural fallback only. This branch never draws alongside a body
+              mesh — the arms above are exclusive — so the neck cannot double up
+              with `bodyGeo`. It does sit inside the collar here (the collar
+              tops out at y = −0.205, the neck bottoms at −0.5), which is
+              intended: the collar is a garment the neck belongs inside, and the
+              neck's lower half is hidden by it rather than poking through. */}
           <mesh geometry={neckGeo} material={neckMaterial} />
           <mesh geometry={torsoGeo} material={torsoMaterial} />
         </>
+      )}
+      {/* Hands and feet: their own static prebaked `_0`/`_1` pairs over the same
+          body atlas, skinned to the same shared skeleton as the torso. They
+          have no synthetic stand-in — an un-authored or half-loaded pair draws
+          nothing rather than a proxy shape — and their `skin` slots take the
+          body selection even if the baked asset named its own material. */}
+      {handsMesh && (
+        <SkinnedPart
+          key="hands"
+          name="Hands"
+          mesh={handsMesh}
+          registry={skeletonRegistry}
+          defaultRole="skin"
+          fallbackTexture={bodyTexUrl}
+          fallbackNormalByRole={bodyNormalFallback}
+          fallbackRoughnessByRole={bodyRoughnessFallback}
+          skinOverride={bodySkinOverride}
+          skinColor={skinColor}
+          renderOrder={0}
+        />
+      )}
+      {feetMesh && (
+        <SkinnedPart
+          key="feet"
+          name="Feet"
+          mesh={feetMesh}
+          registry={skeletonRegistry}
+          defaultRole="skin"
+          fallbackTexture={bodyTexUrl}
+          fallbackNormalByRole={bodyNormalFallback}
+          fallbackRoughnessByRole={bodyRoughnessFallback}
+          skinOverride={bodySkinOverride}
+          skinColor={skinColor}
+          renderOrder={0}
+        />
       )}
       {/* The outfit's embedded body is always drawn; only the garment shapes
           follow the toggle. Missing garment atlases hide just those shapes. */}
@@ -722,50 +1089,63 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         clothingResource.mesh.bones?.length ? (
           <SkinnedPart
             key="clothing"
+            name="Clothing"
             mesh={clothingResource.mesh}
             registry={skeletonRegistry}
             defaultRole="clothing"
             fallbackByRole={clothingFallback}
             fallbackNormalByRole={clothingNormalFallback}
             hiddenRoles={clothingHiddenRoles}
+            skinColor={skinColor}
             renderOrder={0}
           />
         ) : (
           <AuthoredPart
             key="clothing"
+            name="Clothing"
             mesh={clothingResource.mesh}
             defaultRole="clothing"
             fallbackByRole={clothingFallback}
             fallbackNormalByRole={clothingNormalFallback}
+            skinColor={skinColor}
             hiddenRoles={clothingHiddenRoles}
             renderOrder={0}
           />
         )
       )}
-      {hairAuthored && (
-        hairAuthored.bones?.length ? (
-          <SkinnedPart
-            key="hair"
-            mesh={hairAuthored}
-            registry={skeletonRegistry}
-            defaultRole="hair"
-            fallbackTexture={hairSrc}
-            fallbackNormalByRole={hairNormalFallback}
-            hair={hairSettings}
-            renderOrder={6}
-          />
-        ) : (
-          <AuthoredPart
-            key="hair"
-            mesh={hairAuthored}
-            defaultRole="hair"
-            fallbackTexture={hairSrc}
-            fallbackNormalByRole={hairNormalFallback}
-            hair={hairSettings}
-            renderOrder={6}
-          />
-        )
-      )}
+      {/* One garment per worn equipment slot. Each piece is its own NIF over
+          its own atlases and its own `_0`/`_1` pair, so it blends with the
+          body weight exactly like the torso and limbs. Its embedded body shape
+          is hidden whenever the standalone body is drawn: several armour sets
+          repeat that shape in every piece, and drawing them all would stack
+          three bodies inside one another. */}
+      {equipped.map((garment) => (
+        <EquippedGarment
+          key={`equip:${garment.slot || garment.label || garment.rel}`}
+          part={garment}
+          registry={skeletonRegistry}
+          weight={weight}
+          hiddenRoles={equipmentHiddenRoles}
+          hideEmbeddedBody={Boolean(bodyGeo)}
+          fallbackByRole={clothingFallback}
+          fallbackNormalByRole={clothingNormalFallback}
+          skinColor={skinColor}
+          renderOrder={0}
+        />
+      ))}
+      {hairAuthored && hairAuthored.bones?.length ? (
+        <SkinnedPart
+          key="hair"
+          name="Hair"
+          mesh={hairAuthored}
+          registry={skeletonRegistry}
+          defaultRole="hair"
+          fallbackTexture={hairSrc}
+          fallbackNormalByRole={hairNormalFallback}
+          hair={hairSettings}
+          renderOrder={6}
+        />
+      ) : null}
       <MeshOverlay rig={rig} headBuild={headBuild} />
       <FaceGizmo rig={rig} />
     </group>

@@ -1,4 +1,4 @@
-import type { OverlayLayer } from '@/lib/store';
+import type { OverlayBlend, OverlayLayer } from '@/lib/store';
 
 /**
  * Composites makeup / tattoo / wrinkle tintmasks onto a head atlas.
@@ -11,11 +11,9 @@ import type { OverlayLayer } from '@/lib/store';
  * face space would need a second registration, and getting that wrong is what
  * makes painted makeup sit under the eyes.
  *
- * The layer colour is not multiplied over the texture's own RGB. Skyrim stores
- * tintmasks as alpha coverage and supplies the colour separately in
- * `tintInfo`, so a `source-in` fill followed by a `destination-over` at the
- * layer's alpha reproduces the game's own maths: the mask shapes the colour,
- * the colour does not shape the mask.
+ * Tintmasks carry coverage separately from colour. A `source-in` fill colours
+ * that coverage; the selected blend mode then combines it with the skin atlas.
+ * Normal mode uses source-over, preserving the historical tint behaviour.
  */
 
 export interface OverlayInput {
@@ -35,15 +33,51 @@ export function loadMask(src: string): Promise<HTMLImageElement | null> {
   });
 }
 
+/** The canvas operation each layer blend maps onto. */
+const BLEND_OP: Record<OverlayBlend, GlobalCompositeOperation> = {
+  normal: 'source-over',
+  multiply: 'multiply',
+  screen: 'screen',
+  overlay: 'overlay',
+};
+
+/** A layer's coverage, 0–1. An absent or unusable value means "keep the mask". */
+export function overlayCoverage(layer: OverlayLayer): number {
+  const c = layer.coverage;
+  if (typeof c !== 'number' || !Number.isFinite(c)) return 1;
+  return Math.min(1, Math.max(0, c));
+}
+
+/**
+ * Coverage as a threshold on the mask, not a fade.
+ *
+ * The mask's painted core should stay fully painted while coverage rises; what
+ * coverage removes is its faint edge. So the bottom `1 - coverage` of the
+ * alpha range is cut to zero and the remainder is stretched back over 0–255:
+ *
+ *     t = 1 - coverage
+ *     a' = a <= t ? 0 : (a - t) / (1 - t)
+ *
+ * `coverage = 0` therefore zeroes every pixel and `coverage = 1` is identity.
+ */
+export function coverageAlpha(alpha: number, coverage: number): number {
+  if (coverage <= 0) return 0;
+  if (coverage >= 1) return alpha;
+  const t = 1 - coverage;
+  const norm = Math.min(1, Math.max(0, alpha / 255));
+  if (norm <= t) return 0;
+  return Math.round(((norm - t) / (1 - t)) * 255);
+}
+
 /**
  * Draws `layers` over `ctx`, which must already hold the head diffuse at
  * `size × size`.
  *
  * Each layer goes through a scratch canvas the size of the atlas: fill it with
  * the layer colour, keep only where the mask is opaque (`destination-in`),
- * then draw the result at the layer's opacity. Doing it in one scratch canvas
- * per layer rather than per-pixel keeps this off the JS heap — 2048² × 4 bytes
- * per layer is a lot of `getImageData` otherwise.
+ * then draw the result at the layer's opacity and blend mode. Doing it in one
+ * scratch canvas per layer rather than per-pixel keeps this off the JS heap —
+ * 2048² × 4 bytes per layer is a lot of `getImageData` otherwise.
  */
 export function compositeOverlays(
   ctx: CanvasRenderingContext2D,
@@ -57,37 +91,55 @@ export function compositeOverlays(
     const a = Math.min(1, Math.max(0, layer.opacity));
     if (a <= 0) continue;
 
+    const coverage = overlayCoverage(layer);
+    /* Coverage 0 removes the mask entirely; creating a scratch canvas only to
+       draw nothing is wasted work. */
+    if (coverage <= 0) continue;
+
+    const blend: OverlayBlend =
+      layer.blend && BLEND_OP[layer.blend] ? layer.blend : 'normal';
+
     const scratch = document.createElement('canvas');
     scratch.width = size;
     scratch.height = size;
     const sctx = scratch.getContext('2d');
     if (!sctx) continue;
 
-    /* The mask is drawn first, then the colour is flooded over it and clipped
-       to the mask's own coverage. `destination-in` keeps the flood only where
-       the mask has alpha, so soft mask edges stay soft instead of turning into
-       a hard silhouette. */
+    // Draw mask to scratch canvas
     sctx.drawImage(mask, 0, 0, size, size);
+
+    /* Verify alpha coverage: if mask has no transparent pixels (loaded as opaque greyscale),
+       convert luminance to true alpha and clean background noise (< 10 -> 0).
+       A mask that already carries alpha needs no pixel work at full coverage;
+       below full coverage the coverage threshold is applied in the same pass. */
+    const hasAlpha = maskHasAlpha(mask);
+    if (!hasAlpha || coverage < 1) {
+      const imgData = sctx.getImageData(0, 0, size, size);
+      const d = imgData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        let alpha = d[i + 3];
+        if (!hasAlpha) {
+          const lum = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+          alpha = lum < 10 ? 0 : lum;
+          d[i] = 255;
+          d[i + 1] = 255;
+          d[i + 2] = 255;
+        }
+        d[i + 3] = coverage < 1 ? coverageAlpha(alpha, coverage) : alpha;
+      }
+      sctx.putImageData(imgData, 0, 0);
+    }
+
+    /* Flood color into coverage: `source-in` keeps color only where alpha > 0.
+       Areas with alpha = 0 remain 100% transparent. */
     sctx.globalCompositeOperation = 'source-in';
     sctx.fillStyle = layer.color;
     sctx.fillRect(0, 0, size, size);
 
-    /* A tintmask's own alpha is the coverage, but some packs ship a white-on-
-       black greyscale with a fully-opaque alpha channel. In that case the PNG
-       we converted carries the coverage in *luminance* — so weight the colour
-       by the mask again, with `multiply`, which darkens toward the mask's own
-       greys without touching transparent pixels. */
-    const hasRealAlpha = maskHasAlpha(mask);
-    if (!hasRealAlpha) {
-      sctx.globalCompositeOperation = 'multiply';
-      sctx.drawImage(mask, 0, 0, size, size);
-      sctx.globalCompositeOperation = 'destination-in';
-      sctx.drawImage(mask, 0, 0, size, size);
-    }
-
+    /* Blend onto base atlas at layer opacity. */
     ctx.save();
     ctx.globalAlpha = a;
-    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalCompositeOperation = BLEND_OP[blend];
     ctx.drawImage(scratch, 0, 0);
     ctx.restore();
 
@@ -98,14 +150,9 @@ export function compositeOverlays(
 }
 
 /**
- * True when the converted mask actually carries transparency.
- *
- * The worker writes a greyscale PNG whose alpha is the source alpha, or the
- * luminance when the source had none — but a luminance fallback is stored in
- * the *alpha* channel too, so a converted mask always has alpha. What varies
- * is whether the browser's `<img>` will report it, which depends on the PNG
- * having an alpha channel at all. Sampling a cheap downscaled copy answers
- * that without reading 16 megapixels per layer.
+ * True when the converted mask actually carries transparent pixels.
+ * If all sampled pixels are opaque (alpha >= 200), the mask is treated as
+ * an opaque greyscale image that needs luminance-to-alpha conversion.
  */
 function maskHasAlpha(mask: HTMLImageElement): boolean {
   try {
@@ -116,12 +163,15 @@ function maskHasAlpha(mask: HTMLImageElement): boolean {
     if (!pctx) return true;
     pctx.drawImage(mask, 0, 0, 32, 32);
     const d = pctx.getImageData(0, 0, 32, 32).data;
-    let minA = 255;
-    for (let i = 3; i < d.length; i += 4) minA = Math.min(minA, d[i]);
-    return minA < 250;
+    let hasTransparent = false;
+    for (let i = 3; i < d.length; i += 4) {
+      if (d[i] < 200) {
+        hasTransparent = true;
+        break;
+      }
+    }
+    return hasTransparent;
   } catch {
-    /* A cross-origin image taints the canvas; assume the mask is usable and
-       let the composite decide. Everything here is same-origin in practice. */
     return true;
   }
 }
@@ -191,3 +241,27 @@ export function tintLips(
   ctx.drawImage(scratch, 0, 0);
   ctx.restore();
 }
+
+/**
+ * Composites `overlayImages` directly onto a base head diffuse image.
+ * Returns a new HTMLCanvasElement holding the final textured atlas, ready for
+ * Three.js CanvasTexture on real head meshes.
+ */
+export function compositeHeadAtlas(
+  baseImage: HTMLImageElement | HTMLCanvasElement,
+  overlayImages: OverlayInput[],
+): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  const size = Math.min(2048, Math.max(1024, baseImage.width || 1024));
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+
+  ctx.drawImage(baseImage, 0, 0, size, size);
+  if (overlayImages.length > 0) {
+    compositeOverlays(ctx, overlayImages, size);
+  }
+  return canvas;
+}
+

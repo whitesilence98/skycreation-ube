@@ -13,6 +13,7 @@ stderr.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -28,16 +29,23 @@ ROOT = SCRIPTS.parent
 PUBLIC = ROOT / "public"
 PACK_MESH_KINDS = [
     "headMesh", "eyeMesh", "lashesMesh", "browsMesh", "mouthMesh", "bodyMesh",
-    "hairMesh", "clothingMesh",
+    "handsMesh", "feetMesh", "hairMesh", "clothingMesh",
 ]
 TEXTURE_KINDS = ["skin", "eyes", "lashes", "brows", "mouth", "body", "hair", "clothing"]
 PAIR = {
     "headMesh": "skin", "eyeMesh": "eyes", "lashesMesh": "lashes",
     "browsMesh": "brows", "mouthMesh": "mouth", "bodyMesh": "body",
+    "handsMesh": "body", "feetMesh": "body",
     "hairMesh": "hair", "clothingMesh": "clothing",
 }
 # Kinds the pack genuinely cannot supply; a ready-looking row would be a lie.
-EXPECTED_UNAVAILABLE = ["eyes", "lashes", "brows", "mouth"]
+# Eyes, lashes, brows and mouth left this list when `import_facial_assets.py`
+# brought COR's facial maps into the pack — they now resolve like any other
+# atlas, so the check below only polices rows that *do* claim unavailability.
+EXPECTED_UNAVAILABLE: list[str] = []
+# Kinds whose atlas the pack must now supply: the four facial parts are drawn
+# by `HeadModel` from these rows, and a row that lost its maps draws grey.
+FACIAL_TEXTURE_KINDS = ["eyes", "lashes", "brows", "mouth"]
 LEGACY_BASE = "/assets/mo2"
 
 failures: list[str] = []
@@ -261,6 +269,8 @@ def main() -> int:
                 section = parts[0]
             elif parts[0] in ("hair", "clothing") and len(parts) > 1 and parts[1] == "meshes":
                 section = parts[0]
+            elif parts[0] == "clothing" and len(parts) > 2 and parts[1] in pack_paths.CLOTHING_SLOTS and parts[2] == "meshes":
+                section = parts[0]
             elif parts[0] == "meshes" and len(parts) > 1:
                 section = parts[1]
             else:
@@ -301,9 +311,20 @@ def main() -> int:
         for e in rows:
             if e.get("available") is False:
                 check(bool(e.get("reason")), f"manifest {kind}: unavailable row without reason")
+    # The facial atlases are in the pack now, so the default row of each must
+    # actually name both maps. A row that silently regressed to "no texture"
+    # would still pass every generic URL check below (a missing key is skipped)
+    # and draw the part in flat grey, which is the bug this guards.
+    for kind in FACIAL_TEXTURE_KINDS:
+        row = next((e for e in (assets.get(kind) or []) if e.get("available") is not False), None)
+        check(row is not None, f"manifest.assets.{kind}: no available row")
+        if row is None:
+            continue
+        check(bool(row.get("texture")), f"manifest {kind}: available row names no albedo")
+        check(bool(row.get("normalTexture")), f"manifest {kind}: available row names no normal map")
     for kind, rows in assets.items():
         for e in rows:
-            for key in ("meshUrl", "texture", "normalTexture", "discTexture"):
+            for key in ("meshUrl", "texture", "normalTexture", "discTexture", "roughnessTexture"):
                 check_url(e.get(key), PUBLIC, public_base, f"manifest {kind}[{e.get('id')}].{key}")
 
     for key, url in (manifest.get("textures") or {}).items():
@@ -388,8 +409,89 @@ def main() -> int:
     check(any(h.get("origin") == "sculpt-replay" for h in assets.get("headMesh", [])),
           "no sculpt replay baked")
 
+    # Presets that carry the same `morphs` are the same face under different
+    # names, so they must resolve to the same kind of geometry. They diverged
+    # once: only `Iced Coffee.jslot` matched the pack's export and its byte-
+    # identical `Default.jslot` fell back to a sculpt replay that moved the
+    # mesh by 0.12 mm — the base head, not the export it copies.
+    faces: dict[str, set[str]] = {}
+    for e in preset_rows:
+        if e.get("available") is False:
+            continue
+        source = pack_paths.pack_rel(Path(cfg["root"]), e["rel"])
+        if source is None:
+            continue
+        morphs = (json.loads(source.read_text(encoding="utf-8-sig")) or {}).get("morphs")
+        if not isinstance(morphs, dict):
+            continue
+        canon = json.dumps(morphs, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        faces.setdefault(hashlib.sha1(canon.encode("utf-8")).hexdigest(), set()).add(
+            str(e.get("geometrySource")))
+    for digest, origins in faces.items():
+        check(len(origins) == 1,
+              f"presets sharing face {digest[:12]} resolve differently: {sorted(origins)}")
+
+    # Every canonical body part is weighted in the same head-centred frame.
+    for kind in ("bodyMesh", "handsMesh", "feetMesh"):
+        row = (assets.get(kind) or [{}])[0]
+        variants = row.get("weightVariants") or {}
+        check(set(variants) == {"w0", "w1"}, f"{kind}: missing weight pair")
+        docs = []
+        for half, url in variants.items():
+            check_url(url, PUBLIC, public_base, f"{kind}.{half}")
+            doc = load(PUBLIC / url.lstrip("/"))
+            if not isinstance(doc, dict):
+                continue
+            docs.append(doc)
+            v = doc["vertexCount"]
+            check(bool(doc.get("bones")), f"{kind}.{half}: missing skeleton")
+            check(len(doc.get("skinIndex", [])) == v * 4, f"{kind}.{half}: skinIndex length")
+            check(len(doc.get("skinWeight", [])) == v * 4, f"{kind}.{half}: skinWeight length")
+            check(row.get("meshFrame") == "head", f"{kind}: wrong frame")
+        if len(docs) == 2:
+            for key in ("indices", "skinIndex", "skinWeight", "bones") + (() if kind == "bodyMesh" else ("uvs",)):
+                check(docs[0].get(key) == docs[1].get(key), f"{kind}: pair {key} differs")
+
+    # ── garments pair, classify, and list one row per garment ────────────────
+    # Clothing ships the same `_0`/`_1` halves as the body, so the pair must be
+    # joined (or the WEIGHT slider would move the body out from under the
+    # garment) and the manifest must list the `_1` half only (or the picker
+    # would offer every garment twice). The classifier is what filters the
+    # picker by slot; a garment without one would vanish from EQUIPMENT.
+    EQUIP_SLOTS = set(pack_paths.CLOTHING_SLOTS) | {"full"}
+    for e in kinds.get("clothingMesh", []):
+        if e.get("decodable") is False:
+            continue
+        check(e.get("equipSlot") in EQUIP_SLOTS,
+              f"clothingMesh {e.get('id')} ({e.get('file')}): equipSlot {e.get('equipSlot')!r}")
+        half = re.search(r"_([01])\.nif$", str(e.get("file", "")), re.I)
+        if not half:
+            continue
+        check(bool(e.get("weightKey")), f"clothingMesh {e.get('id')}: _0/_1 stem without weightKey")
+        variants = e.get("weightVariants") or {}
+        check(set(variants) == {"w0", "w1"},
+              f"clothingMesh {e.get('id')}: {e.get('file')} has no joined weight pair")
+        check(e.get("weightDefault") == (1 if half.group(1) == "1" else None),
+              f"clothingMesh {e.get('id')}: only the _1 half may be the default half")
+        for side, other in (("w0", "0"), ("w1", "1")):
+            twin = next((o for o in kinds.get("clothingMesh", []) if o["id"] == variants.get(side)), None)
+            if twin is None:
+                check(False, f"clothingMesh {e.get('id')}: {side} is not a catalogue id")
+                continue
+            check(bool(re.search(rf"_{other}\.nif$", str(twin.get("file")), re.I)),
+                  f"clothingMesh {e.get('id')}: {side} names {twin.get('file')}")
+            check(twin.get("equipSlot") == e.get("equipSlot"),
+                  f"clothingMesh {e.get('id')}: pair halves disagree on equipSlot")
+    for e in assets.get("clothingMesh") or []:
+        if e.get("weightKey") and not e.get("weightDefault"):
+            check(False, f"manifest clothingMesh {e.get('id')}: {e.get('file')} is a non-default pair half")
+        if e.get("equipSlot") is not None:
+            check(e.get("equipSlot") in EQUIP_SLOTS,
+                  f"manifest clothingMesh {e.get('id')}: equipSlot {e.get('equipSlot')!r}")
+
     # ── every prebaked mesh JSON is valid ────────────────────────────────────
     for path in sorted((out / "meshes").glob("*.json")):
+
         doc = load(path)
         if isinstance(doc, dict):
             check_mesh_geometry(doc, f"mesh {path.name}")

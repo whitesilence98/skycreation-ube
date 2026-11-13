@@ -216,9 +216,17 @@ async function cachedIsFresh(cacheFile: string, sourceFile: string): Promise<boo
   }
 }
 
-async function mapAuthoredTextures(file: string, skinOnly = false): Promise<void> {
+async function mapAuthoredTextures(file: string, skinOnly = false, untextured = false): Promise<void> {
   const mesh = JSON.parse(await fs.readFile(file, 'utf8'));
   if (mesh.authored !== true || !Array.isArray(mesh.materials)) throw new Error('Invalid authored mesh');
+  if (untextured) {
+    for (const material of mesh.materials) {
+      delete material.texture;
+      delete material.normalTexture;
+    }
+    await fs.writeFile(file, JSON.stringify(mesh));
+    return;
+  }
   if (skinOnly) {
     const skinIndices = mesh.materials.flatMap((material: { role?: string }, i: number) => material.role === 'skin' ? [i] : []);
     if (skinIndices.length !== 1) throw new Error('Outfit body shape is ambiguous');
@@ -310,11 +318,8 @@ async function runWorker(
         '--out', tmp,
         // The frame is an authored fact from the catalogue, never inferred.
         ...(mode === 'mesh' ? ['--frame', entry.meshFrame ?? 'head'] : []),
-        // `--authored` is for the NIFs the pack producer validated with its
-        // own decoder — authored hair and the outfit. The canonical Skyrim
-        // parts (`femalebody_0/1.nif`, the faceparts) decode with the FLAT
-        // decoder and fail under `--authored`, so the producer's flag is the
-        // only safe signal. Guessing by extension served 500s.
+        // Only the producer's validated flag enables authored decoding;
+        // an extension alone cannot promise a supported NIF layout.
         ...(wantsAuthored(entry, mode) ? ['--authored'] : []),
       ],
       { timeout: 30_000, maxBuffer: 16 * 1024 * 1024, windowsHide: true },
@@ -346,7 +351,7 @@ async function runWorker(
   // request either hits the finished cache or waits on the inflight map.
   try {
     if (wantsAuthored(entry, mode)) {
-      await mapAuthoredTextures(tmp, entry.geometryRole === 'skin');
+      await mapAuthoredTextures(tmp, entry.geometryRole === 'skin', Boolean(entry.untextured));
     }
     await fs.rename(tmp, dst);
   } catch (error) {

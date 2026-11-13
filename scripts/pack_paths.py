@@ -36,6 +36,9 @@ CATEGORIES = (
     "body", "brows", "clothing", "eyes", "hair", "head", "lashes",
     "mouth", "overlays", "presets", "shared", "skeleton",
 )
+CLOTHING_SLOTS = (
+    "outfit", "top", "bottom", "bra", "panties", "stockings", "hands", "feet", "accessories",
+)
 _DATA_SECTIONS = frozenset({"meshes", "textures", "skse"})
 
 # Old `meshes\!UBE\<part>` folders and the category each became.
@@ -52,6 +55,19 @@ _UBE_TEXTURE_CATEGORY = {
 }
 _HAIR_TEXTURE_SECTIONS = frozenset({"armor", "xiaoyu hair"})
 _SHARED_TEXTURE_SECTIONS = frozenset({"cubemaps", "chaosblade"})
+# `textures\!COR\<folder>` — COR's facial maps. Unlike `!UBE`, whose folders
+# are spread over head/body/overlays, every listed folder belongs to the part
+# it is named for, so the mapping is the folder name itself. `!COR\MakeupOverlays`,
+# `TintMasks` and `Warpaints` are overlay families and stay unlisted.
+_COR_TEXTURE_CATEGORY = {
+    "eyes": "eyes", "eyes_ilv": "eyes",
+    "lashes": "lashes",
+    "brows": "brows", "brows_ilv": "brows",
+    "mouth": "mouth",
+}
+# `textures\actors\character\<folder>` trees that name a facial part. The rest
+# of the actor tree is body/skin.
+_ACTOR_FACIAL_CATEGORY = {"ddseyes": "eyes"}
 
 
 def normalize_rel(rel: object) -> str | None:
@@ -72,13 +88,13 @@ def normalize_rel(rel: object) -> str | None:
 
 
 def is_physical(rel: str) -> bool:
-    """True for `category/meshes|textures|SKSE/...`, the grouped layout."""
+    """True for `category/meshes|textures|SKSE/...` or `clothing/<slot>/meshes|textures/...`."""
     parts = rel.replace("/", "\\").split("\\")
-    return (
-        len(parts) > 1
-        and parts[0].lower() in CATEGORIES
-        and parts[1].lower() in _DATA_SECTIONS
-    )
+    if len(parts) > 1 and parts[0].lower() in CATEGORIES and parts[1].lower() in _DATA_SECTIONS:
+        return True
+    if len(parts) > 2 and parts[0].lower() == "clothing" and parts[1].lower() in CLOTHING_SLOTS and parts[2].lower() in _DATA_SECTIONS:
+        return True
+    return False
 
 
 def virtual_rel(rel: object) -> str:
@@ -88,7 +104,10 @@ def virtual_rel(rel: object) -> str:
         return str(rel).replace("/", "\\")
     parts = norm.split("\\")
     if is_physical(norm):
-        parts = parts[1:]
+        if parts[0].lower() == "clothing" and len(parts) > 2 and parts[1].lower() in CLOTHING_SLOTS:
+            parts = parts[2:]
+        else:
+            parts = parts[1:]
     return "\\".join(parts)
 
 
@@ -99,6 +118,8 @@ def pack_mod(rel: object) -> str:
         return "pack"
     parts = norm.split("\\")
     if is_physical(norm):
+        if parts[0].lower() == "clothing" and len(parts) > 2 and parts[1].lower() in CLOTHING_SLOTS:
+            return parts[2]
         return parts[1]
     return parts[0] if parts else "pack"
 
@@ -121,6 +142,14 @@ def _legacy_candidates(rel: str) -> list[str]:
         if len(parts) > 2 and low[1] == "!ube":
             category = _UBE_TEXTURE_CATEGORY.get(low[2], "overlays")
             out.append("\\".join([category, *parts]))
+        elif len(parts) > 2 and low[1] == "!cor":
+            category = _COR_TEXTURE_CATEGORY.get(low[2])
+            if category is not None:
+                out.append("\\".join([category, *parts]))
+        elif len(parts) > 3 and low[1] == "actors" and low[2] == "character":
+            category = _ACTOR_FACIAL_CATEGORY.get(low[3])
+            if category is not None:
+                out.append("\\".join([category, *parts]))
         elif len(parts) > 1 and low[1] in _HAIR_TEXTURE_SECTIONS:
             out.append("\\".join(["hair", *parts]))
         elif len(parts) > 2 and low[1] == "caenarvon":
@@ -165,7 +194,12 @@ def pack_rel(root: Path, rel: str) -> Path | None:
 
     hits: dict[str, Path] = {}
     candidates = _legacy_candidates(norm)
-    candidates += [f"{category}\\{norm}" for category in CATEGORIES]
+    for category in CATEGORIES:
+        if category == "clothing":
+            for slot in CLOTHING_SLOTS:
+                candidates.append(f"clothing\\{slot}\\{norm}")
+        else:
+            candidates.append(f"{category}\\{norm}")
     for candidate in candidates:
         path = asset_source.resolve_rel(root_real, candidate)
         if path is None:
@@ -173,7 +207,15 @@ def pack_rel(root: Path, rel: str) -> Path | None:
         actual = _actual_rel(root_real, path)
         if actual is not None:
             hits[actual.casefold()] = path
-    return next(iter(hits.values())) if len(hits) == 1 else None
+    if len(hits) == 1:
+        return next(iter(hits.values()))
+    if len(hits) > 1:
+        for k, v in hits.items():
+            if k.startswith("shared\\"):
+                return v
+        if all(k.startswith("clothing\\") for k in hits):
+            return next(iter(hits.values()))
+    return None
 
 
 def physical_rel(root: Path, rel: str) -> str | None:

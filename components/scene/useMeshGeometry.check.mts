@@ -5,7 +5,8 @@
  * helpers, not the React hooks, so it needs no DOM or test framework.
  */
 import assert from 'node:assert/strict';
-import { disposeMesh, meshDataToGeometry } from './useMeshGeometry.ts';
+import * as THREE from 'three';
+import { applyWeightedPositions, disposeMesh, meshDataToGeometry } from './useMeshGeometry.ts';
 
 const data = {
   positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
@@ -104,5 +105,31 @@ const authored = meshDataToGeometry({
 });
 assert.equal(authored.materials?.[0].alphaTest, 0.5);
 assert.equal(authored.materials?.[0].doubleSided, false);
+
+// ── body weight blend ─────────────────────────────────────────────────
+// The rendered `_1` geometry is blended in place; the two source variants must
+// never be written to, or the next slider move interpolates from stale input.
+const lowPositions = new Float32Array([0, 0, 0, 10, 0, 0, 0, 10, 0]);
+const highPositions = new Float32Array([2, 4, 6, 14, 4, 6, 4, 14, 6]);
+const highGeometry = new THREE.BufferGeometry();
+highGeometry.setAttribute('position', new THREE.Float32BufferAttribute(highPositions, 3));
+
+assert.equal(applyWeightedPositions(highGeometry, lowPositions, highPositions, 0.5), true);
+const blended = highGeometry.getAttribute('position').array as Float32Array;
+assert.deepEqual(Array.from(blended), [1, 2, 3, 12, 2, 3, 2, 12, 3]);
+// The source arrays are untouched, so a second move is correct.
+assert.deepEqual(Array.from(highPositions), [2, 4, 6, 14, 4, 6, 4, 14, 6]);
+assert.deepEqual(Array.from(lowPositions), [0, 0, 0, 10, 0, 0, 0, 10, 0]);
+applyWeightedPositions(highGeometry, lowPositions, highPositions, 0);
+assert.deepEqual(Array.from(highGeometry.getAttribute('position').array), [0, 0, 0, 10, 0, 0, 0, 10, 0]);
+applyWeightedPositions(highGeometry, lowPositions, highPositions, 1);
+assert.deepEqual(Array.from(highGeometry.getAttribute('position').array), [2, 4, 6, 14, 4, 6, 4, 14, 6]);
+// Out-of-range weights clamp like the slider store does.
+applyWeightedPositions(highGeometry, lowPositions, highPositions, 5);
+assert.deepEqual(Array.from(highGeometry.getAttribute('position').array), [2, 4, 6, 14, 4, 6, 4, 14, 6]);
+
+/* A geometry with no position attribute is refused rather than throwing; the
+   caller keeps whatever it had. */
+assert.equal(applyWeightedPositions(new THREE.BufferGeometry(), lowPositions, highPositions, 0.5), false);
 
 console.log('useMeshGeometry lifecycle: ok');

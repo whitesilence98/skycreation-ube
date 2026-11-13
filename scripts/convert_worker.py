@@ -99,43 +99,62 @@ def save_png(im: Image.Image, dst: Path) -> None:
 
 
 def measure_iris(im: Image.Image) -> dict[str, float]:
-    """Coarse iris box on an eye atlas — the same idea as the sync script's.
+    """Iris centre and radius on a full eye atlas.
 
-    Only the alpha or luminance envelope is used, so this is cheap and does not
-    need the full per-pixel analysis the sync script runs for its curated eyes.
+    Mirrors `sync_mo2_assets.measure_eye_atlas` (the worker cannot import that
+    module — it runs a whole sync on import). The iris island is the alpha mask
+    when the atlas has real alpha, else bright pixels; the top 42 % is dropped
+    so a brow/sclera highlight cannot drag the centroid up. The radius is the
+    first ring that is >= 70 % darker than the sclera along 180 rays.
+
     Returns normalised centre and radius; the consumer falls back to the
-    canonical atlas fit when `measured` is false.
+    canonical atlas fit when `measured` is false. Pale/unnatural eyes can
+    measure a tighter radius than the visual iris, but the crop is still
+    centred and never the black plate the old bounding-box scan produced.
     """
-    rgb = im.convert("RGB").resize((256, 256), Image.BILINEAR)
-    px = rgb.load()
-    # The iris is the darkest broad region; find the column and row of minimum
-    # mean luminance over a smoothed grid.
-    best = (0.5, 0.5)
-    best_v = 1e9
-    for gy in range(8, 248, 4):
-        acc = 0
-        for gx in range(8, 248, 4):
-            r, g, b = px[gx, gy]
-            acc += r + g + b
-        if acc < best_v:
-            best_v = acc
-            best = (0.5, gy / 256)
-    cx = best[0]
-    cy = best[1]
-    # Radius: the extent of pixels notably darker than the atlas mean.
-    mean = sum(px[x, y][0] for y in range(0, 256, 8) for x in range(0, 256, 8)) / 1024
-    dark = [
-        (x, y)
-        for y in range(0, 256, 2)
-        for x in range(0, 256, 2)
-        if px[x, y][0] < mean * 0.72
-    ]
-    if len(dark) < 16:
-        return {"cx": 0.5, "cy": cy, "r": 0.18, "measured": False}
-    xs = [p[0] / 256 for p in dark]
-    ys = [p[1] / 256 for p in dark]
-    r = max(0.06, min(0.32, 0.5 * (max(xs) - min(xs) + max(ys) - min(ys))))
-    return {"cx": (max(xs) + min(xs)) * 0.5, "cy": (max(ys) + min(ys)) * 0.5, "r": r, "measured": True}
+    import numpy as np
+
+    rgb = to_srgb_rgb(im)
+    a = np.asarray(rgb).astype(np.float32)
+    h, w = a.shape[:2]
+    lum = a.mean(axis=2)
+    arr = np.asarray(im)
+    if arr.ndim == 3 and arr.shape[2] == 4 and arr[:, :, 3].min() < 200:
+        mask = arr[:, :, 3] > 110
+    else:
+        mask = lum > 22
+    mask = mask.copy()
+    mask[: int(h * 0.42), :] = False
+    ys, xs = np.nonzero(mask)
+    if xs.size < 1000:
+        return {"cx": 0.497, "cy": 0.754, "r": 0.126, "measured": False}
+    cx, cy = float(xs.mean()) / w, float(ys.mean()) / h
+    sclera = float(np.percentile(lum[mask], 78))
+    px, py = cx * w, cy * h
+    theta = np.linspace(0, 2 * np.pi, 180, endpoint=False)
+    radius = 0.0
+    for step in range(20, 220):
+        rr = step / 1000.0 * w
+        sx = (px + rr * np.cos(theta)).astype(int)
+        sy = (py + rr * np.sin(theta)).astype(int)
+        ok = (sx >= 0) & (sx < w) & (sy >= 0) & (sy < h)
+        if ok.sum() < 90:
+            break
+        if float((lum[sy[ok], sx[ok]] < 0.72 * sclera).mean()) >= 0.70:
+            radius = step / 1000.0
+    plausible = (
+        0.06 <= radius <= 0.20
+        and 0.3 <= cx <= 0.7
+        and 0.5 <= cy <= 0.9
+    )
+    if not plausible:
+        return {"cx": 0.497, "cy": 0.754, "r": 0.126, "measured": False}
+    return {
+        "cx": round(cx, 4),
+        "cy": round(cy, 4),
+        "r": round(radius, 4),
+        "measured": True,
+    }
 
 
 def tri_geometry(path: Path, frame: str = "head") -> dict[str, object]:
@@ -461,12 +480,12 @@ def _nif_transform(nif: dict, block: int) -> tuple[tuple[float, ...], float]:
 
 def _nif_is_identity(nif: dict, block: int) -> bool:
     tr, s = _nif_transform(nif, block)
-    if abs(s - 1.0) > 1e-6:
+    if abs(s - 1.0) > 1e-4:
         return False
-    if any(abs(v) > 1e-6 for v in tr[:3]):
+    if any(abs(v) > 1e-4 for v in tr[:3]):
         return False
     ident = (1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
-    return all(abs(tr[3 + i] - ident[i]) <= 1e-6 for i in range(9))
+    return all(abs(tr[3 + i] - ident[i]) <= 1e-4 for i in range(9))
 
 
 def _nif_parents(nif: dict) -> dict[int, int]:
@@ -1149,90 +1168,68 @@ def _nif_authored_geometry(path: Path, frame: str = "head") -> dict[str, object]
         shape_bones = [bone_index.get(name, -1) for name in item["boneNames"]]
         if -1 in shape_bones:
             raise ValueError(f"shape {item['name']} names a bone that is not in the shape's skeleton")
-        if not item["dynamic"]:
-            # Static shapes keep the sequential order this decoder has always
-            # emitted; the renderer indexes weights by the appended vertex.
-            for p_nv, weights, bone_bytes, bone_list, _vmap in item["partSkin"]:
-                if weights is None or bone_bytes is None:
-                    raise ValueError(f"shape {item['name']} has an unweighted partition")
-                if len(weights) != p_nv * 4 or len(bone_bytes) != p_nv * 4:
-                    raise ValueError(f"shape {item['name']} partition weights are truncated")
-                for vi in range(p_nv):
-                    w = weights[vi * 4 : vi * 4 + 4]
-                    total = sum(w)
-                    if total <= 0.0:
-                        unskinned.append(1)
-                        skin_index_out.extend((0, 0, 0, 0))
-                        skin_weight_out.extend((1.0, 0.0, 0.0, 0.0))
-                        continue
-                    # Normalise: SSE streams are 8-bit-quantised and drift a little.
-                    for k in range(4):
-                        local = bone_bytes[vi * 4 + k]
-                        gi = shape_bones[bone_list[local]] if 0 <= local < len(bone_list) else -1
-                        if w[k] > 0.0 and gi < 0:
-                            raise ValueError(f"shape {item['name']} names bone {local} outside its bone list")
-                        skin_index_out.append(gi if gi >= 0 else 0)
-                        skin_weight_out.append(round(w[k] / total, 5))
-        else:
-            # A dynamic shape's partitions store weights in *partition* order
-            # while its geometry is in shared/shape order, so `vmap` is what
-            # aligns the two. Some FaceGen wigs ship partitions with no weight
-            # block at all; the instance's `NiSkinData` carries the same weights
-            # already in shared vertex order, so it is the fallback.
-            shape_weights: list[tuple[int, int, int, int, float, float, float, float] | None] = [None] * n
-            skin_data_weights = None
-            for p_nv, weights, bone_bytes, bone_list, vmap in item["partSkin"]:
-                if weights is None or bone_bytes is None:
-                    if skin_data_weights is None:
-                        skin_data_weights = _nif_skin_data_weights(nif, int(item["dataRef"]))
-                    for vi in range(p_nv):
-                        target = vmap[vi] if vmap is not None else vi
-                        if not (0 <= target < n):
-                            raise ValueError(f"shape {item['name']} partition maps outside its vertices")
-                        w = [d.get(target, 0.0) for d in skin_data_weights]
-                        total = sum(w)
-                        if total <= 0.0:
-                            shape_weights[target] = (0, 0, 0, 0, 1.0, 0.0, 0.0, 0.0)
-                            unskinned.append(1)
-                            continue
-                        order = sorted(range(len(w)), key=lambda k: (-w[k], k))[:4]
-                        bones4 = [shape_bones[k] for k in order]
-                        if -1 in bones4:
-                            raise ValueError(f"shape {item['name']} names a bone that is not in the shape's skeleton")
-                        # The output contract is always four influences per
-                        # vertex; this block can name fewer bones than that.
-                        while len(bones4) < 4:
-                            bones4.append(0)
-                            w.append(0.0)
-                        shape_weights[target] = (*bones4, *(round(w[k] / total, 5) for k in range(4)))
-                    continue
-                if len(weights) != p_nv * 4 or len(bone_bytes) != p_nv * 4:
-                    raise ValueError(f"shape {item['name']} partition weights are truncated")
+        # Both static and dynamic shapes use shared vertex order. Partition
+        # boundaries duplicate vertices; vmap prevents extra/misaligned weights.
+        # Last partition wins on shared vertices, matching the FaceGen path.
+        # A dynamic shape's partitions store weights in *partition* order
+        # while its geometry is in shared/shape order, so `vmap` is what
+        # aligns the two. Some FaceGen wigs ship partitions with no weight
+        # block at all; the instance's `NiSkinData` carries the same weights
+        # already in shared vertex order, so it is the fallback.
+        shape_weights: list[tuple[int, int, int, int, float, float, float, float] | None] = [None] * n
+        skin_data_weights = None
+        for p_nv, weights, bone_bytes, bone_list, vmap in item["partSkin"]:
+            if weights is None or bone_bytes is None:
+                if skin_data_weights is None:
+                    skin_data_weights = _nif_skin_data_weights(nif, int(item["dataRef"]))
                 for vi in range(p_nv):
                     target = vmap[vi] if vmap is not None else vi
                     if not (0 <= target < n):
                         raise ValueError(f"shape {item['name']} partition maps outside its vertices")
-                    w = weights[vi * 4 : vi * 4 + 4]
+                    w = [d.get(target, 0.0) for d in skin_data_weights]
                     total = sum(w)
                     if total <= 0.0:
                         shape_weights[target] = (0, 0, 0, 0, 1.0, 0.0, 0.0, 0.0)
                         unskinned.append(1)
                         continue
-                    bones4 = []
-                    for k in range(4):
-                        local = bone_bytes[vi * 4 + k]
-                        gi = shape_bones[bone_list[local]] if 0 <= local < len(bone_list) else -1
-                        if w[k] > 0.0 and gi < 0:
-                            raise ValueError(f"shape {item['name']} names bone {local} outside its bone list")
-                        bones4.append(gi if gi >= 0 else 0)
+                    order = sorted(range(len(w)), key=lambda k: (-w[k], k))[:4]
+                    bones4 = [shape_bones[k] for k in order]
+                    if -1 in bones4:
+                        raise ValueError(f"shape {item['name']} names a bone that is not in the shape's skeleton")
+                    # The output contract is always four influences per
+                    # vertex; this block can name fewer bones than that.
+                    while len(bones4) < 4:
+                        bones4.append(0)
+                        w.append(0.0)
                     shape_weights[target] = (*bones4, *(round(w[k] / total, 5) for k in range(4)))
-            for entry in shape_weights:
-                if entry is None:
-                    # FaceGen partitions cover every vertex they render; a gap
-                    # means the partition set is not what this decoder thinks.
-                    raise ValueError(f"shape {item['name']} has vertices with no partition weights")
-                skin_index_out.extend(entry[:4])
-                skin_weight_out.extend(entry[4:])
+                continue
+            if len(weights) != p_nv * 4 or len(bone_bytes) != p_nv * 4:
+                raise ValueError(f"shape {item['name']} partition weights are truncated")
+            for vi in range(p_nv):
+                target = vmap[vi] if vmap is not None else vi
+                if not (0 <= target < n):
+                    raise ValueError(f"shape {item['name']} partition maps outside its vertices")
+                w = weights[vi * 4 : vi * 4 + 4]
+                total = sum(w)
+                if total <= 0.0:
+                    shape_weights[target] = (0, 0, 0, 0, 1.0, 0.0, 0.0, 0.0)
+                    unskinned.append(1)
+                    continue
+                bones4 = []
+                for k in range(4):
+                    local = bone_bytes[vi * 4 + k]
+                    gi = shape_bones[bone_list[local]] if 0 <= local < len(bone_list) else -1
+                    if w[k] > 0.0 and gi < 0:
+                        raise ValueError(f"shape {item['name']} names bone {local} outside its bone list")
+                    bones4.append(gi if gi >= 0 else 0)
+                shape_weights[target] = (*bones4, *(round(w[k] / total, 5) for k in range(4)))
+        for entry in shape_weights:
+            if entry is None:
+                # FaceGen partitions cover every vertex they render; a gap
+                # means the partition set is not what this decoder thinks.
+                raise ValueError(f"shape {item['name']} has vertices with no partition weights")
+            skin_index_out.extend(entry[:4])
+            skin_weight_out.extend(entry[4:])
 
         material: dict[str, object] = {
             "name": item["name"] or f"shape{shape_index}",
@@ -1553,14 +1550,40 @@ def main() -> int:
 
         if args.mode == "alpha":
             rgba = to_rgba(im)
-            mask = rgba.getchannel("A")
-            if mask.getextrema() == (255, 255):
-                # No alpha in the file: the tintmask is the colour itself, so
-                # luminance stands in for coverage.
-                mask = rgba.convert("L")
-            mask = downscale(mask, ALBEDO_MAX)
-            save_png(mask, dst)
-            result.update(ok=True, size=list(mask.size), format="png")
+            import numpy as np
+
+            arr_rgba = np.array(rgba)
+            arr_a = arr_rgba[:, :, 3]
+            a_min, a_max, a_mean = int(arr_a.min()), int(arr_a.max()), float(arr_a.mean())
+            # Genuine alpha channel has both transparent (near 0) and opaque (high) regions
+            has_genuine_alpha = (a_min < 25 and a_max > 120 and 5 < a_mean < 245)
+
+            if has_genuine_alpha:
+                raw_cov = arr_a
+            else:
+                # Tintmask stored in RGB luminance
+                lum = rgba.convert("L")
+                raw_cov = np.array(lum)
+
+            # Eliminate DDS block compression noise on black backgrounds (values 1..15)
+            floor = float(np.percentile(raw_cov, 5))
+            if floor > 0:
+                cleaned = np.maximum(0, raw_cov.astype(np.float32) - floor)
+                max_val = float(cleaned.max())
+                if max_val > 0:
+                    cleaned = (cleaned / max_val * 255.0).astype(np.uint8)
+                else:
+                    cleaned = cleaned.astype(np.uint8)
+            else:
+                cleaned = np.where(raw_cov < 8, 0, raw_cov).astype(np.uint8)
+
+            # Build true RGBA PNG: white RGB, coverage in Alpha
+            # This ensures canvas 2D treats untouched areas as 100% transparent
+            out_mask = Image.new("RGBA", rgba.size, (255, 255, 255, 0))
+            out_mask.putalpha(Image.fromarray(cleaned))
+            out_mask = downscale(out_mask, ALBEDO_MAX)
+            save_png(out_mask, dst)
+            result.update(ok=True, size=list(out_mask.size), format="png")
             print(json.dumps(result))
             return 0
 

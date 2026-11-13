@@ -162,7 +162,7 @@ export function FaceGizmo({ rig }: FaceGizmoProps) {
   if (!showGizmo) return null;
 
   return (
-    <>
+    <group name="face-gizmo">
       <primitive object={proxy} />
       {bone && (
         <TransformControls
@@ -193,6 +193,6 @@ export function FaceGizmo({ rig }: FaceGizmoProps) {
       {/* Above and to the right of the bone, clear of the gizmo's own arms —
           at +0.032/+0.006 the label's rule crossed the X and Y handles. */}
       <group ref={tipRef} position={[tip[0] + 0.056, tip[1] + 0.030, tip[2] + 0.012]} />
-    </>
+    </group>
   );
 }

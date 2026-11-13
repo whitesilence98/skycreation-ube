@@ -128,6 +128,24 @@ export function IconCheck({ className }: IconProps) {
   );
 }
 
+export function IconGear({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base} aria-hidden>
+      <circle cx="12" cy="12" r="3.1" />
+      <path d="M12 3.4v2.1M12 18.5v2.1M3.4 12h2.1M18.5 12h2.1M5.9 5.9l1.5 1.5M16.6 16.6l1.5 1.5M18.1 5.9l-1.5 1.5M7.4 16.6l-1.5 1.5" />
+    </svg>
+  );
+}
+
+export function IconEye({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base} aria-hidden>
+      <path d="M2.6 12s3.6-6.1 9.4-6.1S21.4 12 21.4 12s-3.6 6.1-9.4 6.1S2.6 12 2.6 12z" />
+      <circle cx="12" cy="12" r="2.9" />
+    </svg>
+  );
+}
+
 export function IconMove({ className }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" className={className} {...base} strokeWidth={1.1} aria-hidden>

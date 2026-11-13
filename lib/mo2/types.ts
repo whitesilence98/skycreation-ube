@@ -9,7 +9,9 @@
  * Geometry kinds — every selectable part of the character.
  *
  * Exported as a typed constant so the route, the indexer parity check and any
- * UI can agree on the same seven names without restating them.
+ * UI can agree on the same names without restating them. `handsMesh` and
+ * `feetMesh` are separate geometry slots that share the BODY texture kind:
+ * they are not new texture categories, only new meshes.
  */
 export const MESH_KINDS = [
   'headMesh',
@@ -18,6 +20,8 @@ export const MESH_KINDS = [
   'browsMesh',
   'mouthMesh',
   'bodyMesh',
+  'handsMesh',
+  'feetMesh',
   'hairMesh',
   'clothingMesh',
 ] as const;
@@ -102,6 +106,12 @@ export interface CatalogueEntry {
   weightKey?: string;
   /** Body meshes: the half Skyrim itself defaults to (`1`). */
   weightDefault?: 0 | 1;
+  /**
+   * Clothing meshes: the equipment slot this garment occupies, written by the
+   * pack producer from the NIF's own name. `full` marks a whole-body outfit
+   * that carries its own embedded body; the rest are worn slots.
+   */
+  equipSlot?: string;
 }
 
 export interface CatalogueIndex {
@@ -140,6 +150,8 @@ export const PICKER_KINDS = [
   'browsMesh',
   'mouthMesh',
   'bodyMesh',
+  'handsMesh',
+  'feetMesh',
   'hairMesh',
   'clothingMesh',
   'skeleton',
@@ -166,6 +178,8 @@ export const KIND_LABEL: Record<string, string> = {
   browsMesh: 'BROW MESH',
   mouthMesh: 'MOUTH MESH',
   bodyMesh: 'BODY MESH',
+  handsMesh: 'HANDS MESH',
+  feetMesh: 'FEET MESH',
   hairMesh: 'HAIR MESH',
   clothingMesh: 'CLOTHING MESH',
   skeleton: 'SKELETON',
@@ -192,6 +206,8 @@ export const KIND_TO_CATALOGUE: Record<string, string> = {
   browsMesh: 'browsMesh',
   mouthMesh: 'mouthMesh',
   bodyMesh: 'bodyMesh',
+  handsMesh: 'handsMesh',
+  feetMesh: 'feetMesh',
   hairMesh: 'hairMesh',
   clothingMesh: 'clothingMesh',
   skeleton: 'skeleton',

@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useCharacter } from '@/lib/store';
 import { parsePreset, payloadFromMorphs, presetFileName } from '@/lib/presetIO';
+import { exportCharacterGlb } from '@/lib/exportGlb';
 import { sculptHeadFor } from '@/lib/manifestSelect';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
@@ -33,6 +34,22 @@ export function PresetIO({ manifest }: PresetIOProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<Status>(null);
   const [busy, setBusy] = useState(false);
+  const characterName = useCharacter((s) => s.name);
+  const [exportingGlb, setExportingGlb] = useState(false);
+
+  const onExportGlb = async () => {
+    setExportingGlb(true);
+    flash({ kind: 'ok', text: 'EXPORTING MODEL & RIG (.GLB)...' });
+    try {
+      await exportCharacterGlb(characterName);
+      const safeName = (characterName || 'Character').trim().replace(/[^a-zA-Z0-9_\-]/g, '_') || 'Character';
+      flash({ kind: 'ok', text: `EXPORTED ${safeName}.glb` });
+    } catch (err) {
+      flash({ kind: 'error', text: err instanceof Error ? err.message : 'GLB export failed' });
+    } finally {
+      setExportingGlb(false);
+    }
+  };
 
   const flash = (s: Status) => {
     setStatus(s);
@@ -112,7 +129,7 @@ export function PresetIO({ manifest }: PresetIOProps) {
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={busy}
-        className="group flex items-center gap-[4px] text-[8px] tracking-[0.13em] text-[#b6ad9d]/80 transition-colors hover:text-[#eee2ca] disabled:opacity-40"
+        className="group flex items-center gap-[4px] text-[10px] tracking-[0.13em] text-[#b6ad9d]/80 transition-colors hover:text-[#eee2ca] disabled:opacity-40"
       >
         <IconImport className="h-[9px] w-[9px] opacity-70 transition-transform group-hover:-translate-y-[1px]" />
         <span>IMPORT</span>
@@ -121,17 +138,28 @@ export function PresetIO({ manifest }: PresetIOProps) {
       <button
         type="button"
         onClick={onExport}
-        className="group flex items-center gap-[4px] text-[8px] tracking-[0.13em] text-[#b6ad9d]/80 transition-colors hover:text-[#eee2ca]"
+        className="group flex items-center gap-[4px] text-[10px] tracking-[0.13em] text-[#b6ad9d]/80 transition-colors hover:text-[#eee2ca]"
       >
         <IconExport className="h-[9px] w-[9px] opacity-70 transition-transform group-hover:translate-y-[1px]" />
         <span>EXPORT</span>
+      </button>
+      <span className="h-[9px] w-px bg-[#d4b483]/20" />
+      <button
+        type="button"
+        onClick={onExportGlb}
+        disabled={exportingGlb}
+        title="Export complete 3D model with skeletal rig (.glb) for Blender"
+        className="group flex items-center gap-[4px] text-[10px] tracking-[0.13em] text-[#b6ad9d]/80 transition-colors hover:text-[#eee2ca] disabled:opacity-40"
+      >
+        <IconCube className="h-[9px] w-[9px] opacity-70 transition-transform group-hover:scale-110" />
+        <span>{exportingGlb ? 'EXPORTING...' : 'EXPORT .GLB'}</span>
       </button>
 
       {status && (
         <span
           role="status"
           className={cn(
-            'max-w-[230px] truncate text-[7px] tracking-[0.11em] uppercase',
+            'max-w-[230px] truncate text-[10px] tracking-[0.11em] uppercase',
             tone,
           )}
           title={status.text}
@@ -159,6 +187,15 @@ function IconExport({ className }: { className?: string }) {
       <path d="M6 7.4V1.4" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" />
       <path d="M3.6 4 6 1.6 8.4 4" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M2 8.6v1.2a.8.8 0 0 0 .8.8h6.4a.8.8 0 0 0 .8-.8V8.6" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconCube({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 12 12" fill="none" className={className} aria-hidden>
+      <path d="M6 1.2 10.2 3.6v4.8L6 10.8 1.8 8.4V3.6L6 1.2Z" stroke="currentColor" strokeWidth="0.9" strokeLinejoin="round" />
+      <path d="M6 6v4.8M6 6 1.8 3.6M6 6l4.2-2.4" stroke="currentColor" strokeWidth="0.9" strokeLinejoin="round" />
     </svg>
   );
 }

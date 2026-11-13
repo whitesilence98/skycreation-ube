@@ -13,6 +13,7 @@ import {
 } from '@/lib/manifestSelect';
 import { payloadFromMorphs } from '@/lib/presetIO';
 import { cn } from '@/lib/cn';
+import { EQUIP_SLOT_LABEL } from '@/lib/equipment';
 import { IconSparkle } from '@/components/hud/Icons';
 import type { Mo2AssetOption, Mo2Manifest } from '@/lib/head/faceTexture';
 import type { CatalogueEntry } from '@/lib/mo2/types';
@@ -20,6 +21,9 @@ import { convertUrl, fetchCatalogue, formatBytes, matchesQuery } from '@/lib/mo2
 
 interface AssetPanelProps {
   manifest: Mo2Manifest | null;
+  /** True while the ASSETS workspace is the visible rail. The panel stays
+   *  mounted either way; it is only hidden, never unmounted. */
+  active?: boolean;
 }
 
 /** Backend fields the indexer writes; kept local so this panel compiles against
@@ -40,13 +44,22 @@ type PairMeta = Mo2AssetOption & {
   decodable?: boolean;
   untextured?: boolean;
   reason?: string;
+  /** Producer-written slot the garment occupies; EQUIPMENT filters on it. */
+  equipSlot?: string;
+  /** Producer-written `_0`/`_1` pair key and default half. The manifest lists
+   *  one row per garment (the `_1` half), so a row without `weightDefault` is
+   *  the `_0` twin and would duplicate the picker. */
+  weightKey?: string;
+  weightDefault?: 0 | 1;
 };
 type Mode = 'mesh' | 'texture' | 'asset';
 
 /** Fixed height for EVERY row, group and divider included, so the virtual
- *  spacer's `rows.length * ROW_H` stays an honest offset. */
-const WINDOW = 60;
-const ROW_H = 15;
+ *  spacer's `rows.length * ROW_H` stays an honest offset. Tracks the row type
+ *  size: at 10 px text a 15 px row clipped its own leading, so the pitch grows
+ *  with it and the window count shrinks to keep the same rendered extent. */
+const WINDOW = 44;
+const ROW_H = 20;
 
 type Row =
   | { t: 'group'; key: string; label: string }
@@ -65,8 +78,11 @@ function entryChip(e: Entry): string {
   return ext;
 }
 
-export function AssetPanel({ manifest }: AssetPanelProps) {
-  const [open, setOpen] = useState(false);
+export function AssetPanel({ manifest, active = false }: AssetPanelProps) {
+  /* The workspace tab is the disclosure control now; the panel body renders
+     whenever ASSETS owns the rail so filters, scroll and fetched catalogues
+     survive a switch. */
+  const expanded = active;
   const [query, setQuery] = useState('');
   const [scrollTop, setScrollTop] = useState(0);
   const [loading, setLoading] = useState<Set<string>>(new Set());
@@ -74,6 +90,12 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
 
   const selection = useCharacter((s) => s.assetSelection);
   const setAssets = useCharacter((s) => s.setAssets);
+  /* The paper-doll owns its own slot map: EQUIPMENT lists the same
+     `clothingMesh` rows, but a pick fills `equipment[slot]` instead of the
+     single whole-outfit id in `assetSelection`. */
+  const equipment = useCharacter((s) => s.equipment);
+  const equipSlot = useCharacter((s) => s.equipSlot);
+  const setEquip = useCharacter((s) => s.setEquip);
   const loadPreset = useCharacter((s) => s.loadPreset);
   const activeCategory = useCharacter((s) => s.activeCategory);
   const overlayLayers = useCharacter((s) => s.overlayLayers);
@@ -84,8 +106,13 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
   const setPanelMode = useCharacter((s) => s.setPanelMode);
 
   const spec: CategorySpec = CATEGORY_MAP[activeCategory];
-  const mode: Mode =
-    spec.mesh && spec.texture
+  /* EQUIPMENT is mesh-only: a garment's atlas lives inside its NIF, so there
+     is no per-slot TEX list to show, and the stored `panelMode` from the last
+     category must not leak in for even one render. */
+  const equipMode = activeCategory === 'equipment';
+  const mode: Mode = equipMode
+    ? 'mesh'
+    : spec.mesh && spec.texture
       ? panelMode === 'mesh'
         ? 'mesh'
         : 'texture'
@@ -98,18 +125,29 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
   const meshKind = spec.mesh;
   const textureKind = spec.texture;
   const overlay = isOverlayKind(activeKind);
+  const equipTarget = equipMode ? equipment[equipSlot] : undefined;
+  /* The worn value for the list's own kind: the paper-doll's slot when in
+     EQUIPMENT, otherwise the ordinary one-per-kind selection. */
+  const selectedId = equipMode ? equipTarget : selection[activeKind];
 
   /* A category with a mesh defaults to the mesh segment; a texture-only one
-     (SKIN, an overlay) and the two list-less ones open on their texture/asset. */
+     (SKIN, an overlay) and the two list-less ones open on their texture/asset.
+     EYES defaults to texture so the user sees eye colors immediately.
+     EQUIPMENT is not listed here: its mode is derived, never stored, so it
+     neither reads nor writes the shared `panelMode`. */
   useEffect(() => {
-    setPanelMode(spec.mesh ? 'mesh' : 'texture');
-  }, [activeCategory, setPanelMode]);
+    if (activeCategory === 'eyes') {
+      setPanelMode('texture');
+    } else if (activeCategory !== 'equipment') {
+      setPanelMode(spec.mesh ? 'mesh' : 'texture');
+    }
+  }, [activeCategory, setPanelMode, spec.mesh]);
 
   /* Only the open category's two kinds are fetched. Switching tabs lazily
      pulls the next pair; the client caches the promise for the session and
      this registers the result so `resolveManifest` can validate archive ids. */
   useEffect(() => {
-    if (!open) return;
+    if (!expanded) return;
     const kinds = [meshKind, textureKind].filter((k): k is AssetKind => Boolean(k));
     if (!kinds.length) return;
     let cancelled = false;
@@ -134,18 +172,29 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [open, activeCategory, meshKind, textureKind, setAssetCatalogue]);
+  }, [expanded, activeCategory, meshKind, textureKind, setAssetCatalogue]);
 
   useEffect(() => {
     setScrollTop(0);
     if (listRef.current) listRef.current.scrollTop = 0;
   }, [activeKind, query, mode]);
 
-  const curated = useMemo(() => assetOptions(manifest, activeKind) as PairMeta[], [manifest, activeKind]);
-  const catalogue = useMemo(
-    () => (assetCatalogues[activeKind] ?? []) as Entry[],
-    [assetCatalogues, activeKind],
-  );
+  const curated = useMemo(() => {
+    const list = assetOptions(manifest, activeKind) as PairMeta[];
+    /* EQUIPMENT lists one garment per slot. The pack ships each garment twice
+       (`_1` and its `_0` twin) because the renderer lerps between them, so the
+       `_0` half would offer the same boots a second time; the whole-outfit row
+       is `full` and belongs to BODY → OUTFIT. Neither is a worn-slot pick. */
+    return equipMode
+      ? list.filter((r) => r.equipSlot === equipSlot && !(r.weightKey && !r.weightDefault))
+      : list;
+  }, [manifest, activeKind, equipMode, equipSlot]);
+  const catalogue = useMemo(() => {
+    const list = (assetCatalogues[activeKind] ?? []) as Entry[];
+    return equipMode
+      ? list.filter((e) => e.equipSlot === equipSlot && !(e.weightKey && !e.weightDefault))
+      : list;
+  }, [assetCatalogues, activeKind, equipMode, equipSlot]);
   const textureCatalogue = useMemo(
     () => (textureKind ? ((assetCatalogues[textureKind] ?? []) as Entry[]) : []),
     [assetCatalogues, textureKind],
@@ -186,11 +235,16 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
     const out: Row[] = [...curatedRows];
     const packMode = manifest?.sourceLayout === 'pack';
     /* An authored pick hides the manifest default, so the way back has to be
-       a row. Pack mode's default is another authored option, never procedural. */    if (mode === 'mesh' && meshKind && selection[meshKind] && (!q || 'default procedural'.includes(q))) {
+       a row. Pack mode's default is another authored option, never procedural.
+       EQUIPMENT's way back is "leave this slot empty", not "wear the default":
+       an empty slot is a legitimate state there, so the row clears the slot. */
+    if (mode === 'mesh' && meshKind && selectedId && (!q || 'default procedural'.includes(q))) {
       out.unshift({
         t: 'reset',
         key: 'reset',
-        label: packMode ? `${spec.label} PACK DEFAULT` : `${spec.label} DEFAULT`,
+        label: equipMode
+          ? `CLEAR ${EQUIP_SLOT_LABEL[equipSlot]}`
+          : packMode ? `${spec.label} PACK DEFAULT` : `${spec.label} DEFAULT`,
       });
     }
     if (decodable.length) {
@@ -215,7 +269,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
       for (const e of blocked) out.push({ t: 'entry', key: `b:${e.id}`, e });
     }
     return out;
-  }, [curated, catalogue, query, mode, meshKind, spec.label, selection, activeCategory]);
+  }, [curated, catalogue, query, mode, meshKind, spec.label, selection, selectedId, equipMode, equipSlot]);
 
   const visible = useMemo(() => {
     const start = Math.max(0, Math.floor(scrollTop / ROW_H) - 6);
@@ -234,10 +288,13 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
       ?? rows.find(isRenderableMeshRow)
       ?? rows[0];
   };
-  const defaultId = activeKind === 'hairMesh' ? undefined : defaultRow(curated, mode === 'mesh')?.id;
-  const defaultTextureId = textureKind ? defaultRow(assetOptions(manifest, textureKind), false)?.id : undefined;
+  const defaultId = equipMode || activeKind === 'hairMesh'
+    ? undefined
+    : defaultRow(curated, mode === 'mesh')?.id;
+  const defaultTextureId = !equipMode && textureKind
+    ? defaultRow(assetOptions(manifest, textureKind), false)?.id
+    : undefined;
   const effectiveTextureId = textureKind ? selection[textureKind] ?? defaultTextureId : undefined;
-  const selectedId = selection[activeKind];
   const overlayIds = new Set(overlayLayers.map((l) => `${l.kind}:${l.id}`));
 
   /** The texture this mesh authored, if its catalogue entry is registered. */
@@ -249,6 +306,13 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
 
   const selectMesh = (id: string, pair: string | null) => {
     if (!meshKind) return;
+    /* A garment has no per-slot atlas pick: its NIF names its own DDS refs,
+       and one picked atlas painted over another set's UVs would look worse
+       than the grey placeholder. So EQUIPMENT fills the slot and nothing else. */
+    if (equipMode) {
+      setEquip({ [equipSlot]: id });
+      return;
+    }
     const patch: Partial<Record<AssetKind, string | null>> = { [meshKind]: id };
     /* Pair only when the sibling atlas is registered; otherwise retain the current texture. */
     if (textureKind && pair) patch[textureKind] = pair;
@@ -299,11 +363,13 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
   };
 
   const pairChip = (opt: PairMeta) => {
-    if (mode !== 'mesh' || !textureKind) return null;
+    /* EQUIPMENT never pairs an atlas: a garment's DDS are authored inside its
+       own NIF, and the slot is filled by the mesh alone. */
+    if (equipMode || mode !== 'mesh' || !textureKind) return null;
     const pair = pairFor(opt);
     if (!pair) {
       return (
-        <span className="shrink-0 border border-[#b56a5a]/40 bg-[#b56a5a]/[0.08] px-[3px] py-[1px] text-[5.5px] tracking-[0.08em] text-[#dda898]/85">
+        <span className="shrink-0 border border-[#b56a5a]/40 bg-[#b56a5a]/[0.08] px-[3px] py-[1px] text-[10px] tracking-[0.08em] text-[#dda898]/85">
           NO ATLAS
         </span>
       );
@@ -317,7 +383,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
     return (
       <span
         className={cn(
-          'shrink-0 border px-[3px] py-[1px] text-[5.5px] tracking-[0.08em]',
+          'shrink-0 border px-[3px] py-[1px] text-[10px] tracking-[0.08em]',
           applied
             ? 'border-[#4fd1c5]/40 bg-[#4fd1c5]/[0.08] text-[#8fe3da]/85'
             : 'border-[#d4b483]/34 bg-[#d4b483]/[0.06] text-[#c9b184]/80',
@@ -331,14 +397,14 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
   const curatedChip = (opt: PairMeta) => (
     <>
       {activeKind === 'headMesh' && (
-        <span className="shrink-0 border border-[#4fd1c5]/30 bg-[#4fd1c5]/[0.07] px-[3px] py-[1px] text-[5.5px] tracking-[0.08em] text-[#8fe3da]/75">
+        <span className="shrink-0 border border-[#4fd1c5]/30 bg-[#4fd1c5]/[0.07] px-[3px] py-[1px] text-[10px] tracking-[0.08em] text-[#8fe3da]/75">
           {(opt as { isRealMesh?: boolean }).isRealMesh ? 'REAL' : 'PROC'}
         </span>
       )}
       {activeKind === 'skin' && (
         <span
           className={cn(
-            'shrink-0 border px-[3px] py-[1px] text-[5.5px] tracking-[0.08em]',
+            'shrink-0 border px-[3px] py-[1px] text-[10px] tracking-[0.08em]',
             (opt as { atlasFit?: { measured?: boolean } }).atlasFit?.measured === false
               ? 'border-[#b56a5a]/34 bg-[#b56a5a]/[0.08] text-[#dda898]/80'
               : 'border-[#4fd1c5]/30 bg-[#4fd1c5]/[0.07] text-[#8fe3da]/75',
@@ -348,53 +414,47 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
         </span>
       )}
       {(opt as { usable?: boolean }).usable === false && (
-        <span className="shrink-0 text-[5.5px] tracking-[0.06em] text-[#c08f80]/80">NO STRAND</span>
+        <span className="shrink-0 text-[10px] tracking-[0.06em] text-[#c08f80]/80">NO STRAND</span>
       )}
     </>
   );
 
   const count = rows.filter((r) => r.t === 'curated' || r.t === 'entry').length;
 
-  /* Reference has no such panel, so it must not cover a reference element:
-     anchored in the left gutter, it grows upward and is capped at 366 px. */
+  /* The workspace rail, not a floating popover: the list fills the dock below
+     its own header. EQUIPMENT lists one slot's garments in the same panel. */
   return (
-    <section
-      aria-label="Asset pipeline"
-      className="pointer-events-auto absolute bottom-[52px] left-[71px] z-40 flex w-[222px] flex-col-reverse select-none"
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-[7px] border border-[#d4b483]/22 bg-black/42 px-[9px] py-[6px] text-left backdrop-blur-md transition-colors hover:border-[#d4b483]/45"
-      >
-        <span
-          className={cn(
-            'inline-block h-[3px] w-[3px] rounded-full',
-            manifest.available ? 'bg-[#4fd1c5] shadow-[0_0_6px_rgba(79,209,197,0.9)]' : 'bg-[#b56a5a]',
-          )}
-        />
-        <span className="text-[8px] tracking-[0.16em] text-[#cbc1af]/82">
-          {manifest.sourceLayout === 'pack' ? 'PRESET PACK' : 'MO2'} ASSET PIPELINE
-        </span>
-        <span className="ml-auto text-[7.5px] tracking-[0.1em] text-[#8f8778]/60">
-          {manifest.available ? `${spec.label}${count ? ` ${count}` : ''}` : 'OFFLINE'}
-        </span>
-        <span className="text-[9px] text-[#b3aa99]/60">{open ? '–' : '+'}</span>
-      </button>
+    <section aria-label="Asset pipeline" className="flex h-full min-h-0 w-full flex-col select-none">
+      <div className="shrink-0 border-b border-[#d4b483]/16 px-[12px] py-[7px]">
+        <div className="flex items-center gap-[7px]">
+          <span
+            className={cn(
+              'inline-block h-[4px] w-[4px] rounded-full',
+              manifest.available ? 'bg-[#4fd1c5] shadow-[0_0_6px_rgba(79,209,197,0.9)]' : 'bg-[#b56a5a]',
+            )}
+          />
+          <span className="text-[10px] tracking-[0.14em] text-[#cbc1af]/82">
+            {manifest.sourceLayout === 'pack' ? 'PRESET PACK' : 'MO2'} ASSET PIPELINE
+          </span>
+          <span className="ml-auto text-[10px] tracking-[0.1em] text-[#8f8778]/70">
+            {manifest.available ? `${spec.label}${count ? ` ${count}` : ''}` : 'OFFLINE'}
+          </span>
+        </div>
+      </div>
 
-      {open && (
-        <div className="mt-[3px] max-h-[366px] overflow-y-auto border border-[#d4b483]/20 bg-black/55 px-[9px] py-[8px] backdrop-blur-md">
-          <div className="mb-[7px] flex items-center gap-[5px] text-[7px] tracking-[0.13em] text-[#8f8778]/62">
-            <IconSparkle className="h-[7px] w-[7px] text-[#c9b184]/55" />
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[12px] py-[8px] thin-scroll">
+          <div className="mb-[7px] flex items-center gap-[5px] text-[10px] tracking-[0.13em] text-[#8f8778]/72">
+            <IconSparkle className="h-[9px] w-[9px] text-[#c9b184]/55" />
             <span className="truncate normal-case" title={manifest.source}>
               {manifest.source}
             </span>
           </div>
 
           <div className="mb-[6px] flex items-baseline justify-between border-b border-[#d4b483]/14 pb-[4px]">
-            <span className="text-[7.5px] tracking-[0.14em] text-[#d8c39c]">{spec.label}</span>
-            <span className="num text-[7px] tracking-[0.06em] text-[#8f8778]/60">
+            <span className="text-[10px] tracking-[0.14em] text-[#d8c39c]">
+              {equipMode ? `EQUIPMENT · ${EQUIP_SLOT_LABEL[equipSlot]}` : spec.label}
+            </span>
+            <span className="num text-[10px] tracking-[0.06em] text-[#8f8778]/60">
               {loading.has(activeKind)
                 ? 'INDEXING…'
                 : mode === 'asset'
@@ -404,9 +464,11 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
           </div>
 
           {/* MESH | TEX, or the one segment the category owns. SKELETON and
-              PRESET have neither, so they read ASSET. */}
+              PRESET have neither, so they read ASSET. EQUIPMENT is mesh-only
+              by construction (a garment's atlas rides its own NIF), so it
+              reads MESH rather than offering a segment with nothing behind it. */}
           <div className="mb-[6px] flex items-stretch border border-[#d4b483]/22">
-            {spec.mesh && spec.texture ? (
+            {spec.mesh && spec.texture && !equipMode ? (
               (['mesh', 'texture'] as const).map((m) => (
                 <button
                   key={m}
@@ -414,7 +476,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
                   onClick={() => setPanelMode(m)}
                   aria-pressed={panelMode === m}
                   className={cn(
-                    'flex-1 px-[4px] py-[2px] text-[6.5px] tracking-[0.12em] transition-colors',
+                    'flex-1 px-[4px] py-[3px] text-[10px] tracking-[0.12em] transition-colors',
                     panelMode === m
                       ? 'bg-[#d4b483]/[0.1] text-[#f2e4c8]'
                       : 'text-[#9b9284]/70 hover:text-[#e8ddc8]',
@@ -424,7 +486,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
                 </button>
               ))
             ) : (
-              <span className="flex-1 bg-[#d4b483]/[0.1] px-[4px] py-[2px] text-center text-[6.5px] tracking-[0.12em] text-[#f2e4c8]">
+              <span className="flex-1 bg-[#d4b483]/[0.1] px-[4px] py-[3px] text-center text-[10px] tracking-[0.12em] text-[#f2e4c8]">
                 {mode === 'mesh' ? 'MESH' : mode === 'texture' ? 'TEX' : 'ASSET'}
               </span>
             )}
@@ -435,7 +497,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="FILTER"
             aria-label={`Filter ${spec.label}`}
-            className="mb-[5px] w-full border border-[#d4b483]/25 bg-black/40 px-[5px] py-[3px] text-[7px] tracking-[0.12em] text-[#e8ddc8] uppercase placeholder:text-[#7d6f5e]/60 focus:border-[#d4b483]/55 focus:outline-none"
+            className="mb-[6px] w-full border border-[#d4b483]/25 bg-black/40 px-[6px] py-[4px] text-[10px] tracking-[0.12em] text-[#e8ddc8] uppercase placeholder:text-[#7d6f5e]/70 focus:border-[#d4b483]/55 focus:outline-none"
           />
 
           {overlayLayers.length > 0 && (
@@ -446,7 +508,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
                   type="button"
                   onClick={() => toggleOverlay(l)}
                   title="Remove this layer"
-                  className="flex items-center gap-[3px] border border-[#4fd1c5]/32 bg-[#4fd1c5]/[0.08] px-[3px] py-[1px] text-[6px] tracking-[0.05em] text-[#8fe3da]/85 hover:border-[#b56a5a]/60 hover:text-[#e0a898]"
+                  className="flex items-center gap-[3px] border border-[#4fd1c5]/32 bg-[#4fd1c5]/[0.08] px-[4px] py-[1px] text-[10px] tracking-[0.05em] text-[#8fe3da]/85 hover:border-[#b56a5a]/60 hover:text-[#e0a898]"
                 >
                   <span className="inline-block h-[4px] w-[4px] rounded-full" style={{ background: l.color }} />
                   {l.opacity.toFixed(2)}
@@ -459,7 +521,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
           <div
             ref={listRef}
             onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-            className="max-h-[176px] overflow-y-auto pr-[2px]"
+            className="min-h-[120px] flex-1 overflow-y-auto pr-[2px] thin-scroll"
           >
             <div style={{ height: rows.length * ROW_H, position: 'relative' }}>
               <div
@@ -472,7 +534,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
                       <div
                         key={row.key}
                         style={{ height: ROW_H }}
-                        className="flex items-center truncate text-[6px] tracking-[0.1em] text-[#d4b483]/60"
+                        className="flex items-center truncate text-[10px] tracking-[0.1em] text-[#d4b483]/60"
                       >
                         {row.label}
                       </div>
@@ -483,7 +545,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
                       <div
                         key={row.key}
                         style={{ height: ROW_H }}
-                        className="flex items-center gap-[4px] text-[6px] tracking-[0.1em] text-[#b56a5a]/75"
+                        className="flex items-center gap-[4px] text-[10px] tracking-[0.1em] text-[#b56a5a]/75"
                       >
                         <span className="h-[1px] flex-1 bg-[#b56a5a]/22" />
                         <span className="shrink-0">{row.label}</span>
@@ -496,9 +558,12 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
                       <button
                         key={row.key}
                         type="button"
-                        onClick={() => meshKind && setAssets({ [meshKind]: null })}
+                        onClick={() => {
+                          if (equipMode) setEquip({ [equipSlot]: null });
+                          else if (meshKind) setAssets({ [meshKind]: null });
+                        }}
                         style={{ height: ROW_H }}
-                        className="flex items-center gap-[5px] border border-[#4fd1c5]/28 bg-[#4fd1c5]/[0.06] px-[4px] text-left text-[6.5px] tracking-[0.03em] text-[#8fe3da]/85 transition-colors hover:border-[#4fd1c5]/55 hover:text-[#b6f0e9]"
+                        className="flex items-center gap-[5px] border border-[#4fd1c5]/28 bg-[#4fd1c5]/[0.06] px-[4px] text-left text-[10px] tracking-[0.03em] text-[#8fe3da]/85 transition-colors hover:border-[#4fd1c5]/55 hover:text-[#b6f0e9]"
                       >
                         <span className="inline-block h-[3px] w-[3px] shrink-0 rounded-full bg-[#4fd1c5]" />
                         <span className="min-w-0 flex-1 truncate">↺ {row.label}</span>
@@ -527,7 +592,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
                         title={reason ? `${opt.rel}\n${reason}` : opt.rel}
                         style={{ height: ROW_H }}
                         className={cn(
-                          'flex items-center gap-[5px] border px-[4px] text-left text-[6.5px] tracking-[0.03em] transition-colors',
+                          'flex items-center gap-[5px] border px-[4px] text-left text-[10px] tracking-[0.03em] transition-colors',
                           active
                             ? 'border-[#d8b273]/85 bg-[#d4b483]/[0.09] text-[#f2e4c8]'
                             : 'border-[#d4b483]/22 bg-[#d4b483]/[0.05] text-[#cdc2ac]/78 hover:border-[#d4b483]/52 hover:text-[#e8ddc8]',
@@ -543,11 +608,11 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
                         />
                         <span className="min-w-0 flex-1 truncate">{opt.label ?? opt.mod}</span>
                         {blocked ? (
-                          <span className="shrink-0 border border-[#b56a5a]/40 px-[3px] py-[1px] text-[5.5px] tracking-[0.08em] text-[#dda898]/85">
+                          <span className="shrink-0 border border-[#b56a5a]/40 px-[3px] py-[1px] text-[10px] tracking-[0.08em] text-[#dda898]/85">
                             UNAVAILABLE
                           </span>
                         ) : untextured ? (
-                          <span className="shrink-0 border border-[#d4b483]/40 bg-[#d4b483]/[0.08] px-[3px] py-[1px] text-[5.5px] tracking-[0.08em] text-[#c9b184]/85">
+                          <span className="shrink-0 border border-[#d4b483]/40 bg-[#d4b483]/[0.08] px-[3px] py-[1px] text-[10px] tracking-[0.08em] text-[#c9b184]/85">
                             UNTEXTURED
                           </span>
                         ) : (
@@ -576,13 +641,13 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
                         style={{ height: ROW_H }}
                         className="flex w-full cursor-default flex-col justify-center border border-transparent px-[4px] text-left opacity-40"
                       >
-                        <span className="flex min-w-0 items-center gap-[4px] text-[6.5px] leading-[1.1] tracking-[0.03em] text-[#cdc2ac]/78">
-                          <span className="shrink-0 border border-[#b56a5a]/40 px-[2px] text-[5.5px] tracking-[0.06em] text-[#dda898]/85">
+                        <span className="flex min-w-0 items-center gap-[4px] text-[10px] leading-[1.1] tracking-[0.03em] text-[#cdc2ac]/78">
+                          <span className="shrink-0 border border-[#b56a5a]/40 px-[2px] text-[10px] tracking-[0.06em] text-[#dda898]/85">
                             {entryChip(e)}
                           </span>
                           <span className="min-w-0 flex-1 truncate">{e.label}</span>
                         </span>
-                        <span className="min-w-0 truncate text-[5.5px] leading-[1.1] text-[#c08f80]/80">
+                        <span className="min-w-0 truncate text-[10px] leading-[1.1] text-[#c08f80]/80">
                           {reason}
                         </span>
                       </button>
@@ -597,14 +662,14 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
                       title={`${e.rel}\n${formatBytes(e.bytes)}`}
                       style={{ height: ROW_H }}
                       className={cn(
-                        'flex w-full items-center gap-[4px] border px-[3px] text-left text-[6.5px] tracking-[0.03em] transition-colors',
+                        'flex w-full items-center gap-[4px] border px-[3px] text-left text-[10px] tracking-[0.03em] transition-colors',
                         active
                           ? 'border-[#d8b273]/85 bg-[#d4b483]/[0.09] text-[#f2e4c8]'
                           : 'border-transparent text-[#cdc2ac]/78 hover:border-[#d4b483]/40 hover:text-[#e8ddc8]',
                       )}
                     >
                       {mode === 'mesh' ? (
-                        <span className="shrink-0 border border-[#d4b483]/25 px-[2px] text-[5.5px] tracking-[0.06em] text-[#c9b184]/80">
+                        <span className="shrink-0 border border-[#d4b483]/25 px-[2px] text-[10px] tracking-[0.06em] text-[#c9b184]/80">
                           {entryChip(e)}
                         </span>
                       ) : (
@@ -618,7 +683,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
                         />
                       )}
                       <span className="min-w-0 flex-1 truncate">{e.label}</span>
-                      {active && (mode === 'mesh' ? pairChip(e) : <span className="text-[6px] text-[#8fe3da]">●</span>)}
+                      {active && (mode === 'mesh' ? pairChip(e) : <span className="text-[10px] text-[#8fe3da]">●</span>)}
                     </button>
                   );
                 })}
@@ -627,7 +692,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
           </div>
 
           {!rows.length && (
-            <div className="py-[3px] text-[6.5px] text-[#7d6f5e]/60">
+            <div className="py-[3px] text-[10px] text-[#7d6f5e]/60">
               {loading.has(activeKind) ? 'indexing…' : 'not found'}
             </div>
           )}
@@ -636,12 +701,12 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
               is being browsed, so it stays below the list rather than above. */}
           {activeCategory === 'skeleton' && manifest.skeleton?.nodes?.length ? (
             <div className="mt-[8px] border-t border-[#d4b483]/14 pt-[7px]">
-              <div className="mb-[4px] text-[7px] tracking-[0.12em] text-[#8f8778]/60">BONE MAP</div>
+              <div className="mb-[4px] text-[10px] tracking-[0.12em] text-[#8f8778]/60">BONE MAP</div>
               <div className="flex flex-wrap gap-[3px]">
                 {['Head', 'Nose', 'Brow_L', 'Brow_R', 'Jaw', 'Lips', 'Cheek_L', 'Cheek_R', 'Forehead'].map((b) => (
                   <span
                     key={b}
-                    className="border border-[#4fd1c5]/28 bg-[#4fd1c5]/[0.07] px-[4px] py-[1px] text-[6.5px] tracking-[0.06em] text-[#8fe3da]/82"
+                    className="border border-[#4fd1c5]/28 bg-[#4fd1c5]/[0.07] px-[4px] py-[1px] text-[10px] tracking-[0.06em] text-[#8fe3da]/82"
                   >
                     {b}
                   </span>
@@ -652,7 +717,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
 
           {activeCategory === 'preset' && manifest.preset?.morphs?.length ? (
             <div className="mt-[8px] border-t border-[#d4b483]/14 pt-[7px]">
-              <div className="mb-[4px] flex items-baseline justify-between text-[7px] tracking-[0.12em] text-[#8f8778]/60">
+              <div className="mb-[4px] flex items-baseline justify-between text-[10px] tracking-[0.12em] text-[#8f8778]/60">
                 <span>RACEMENU MORPHS</span>
                 <span className="num text-[#c9b184]/72">{manifest.preset.morphs.length}</span>
               </div>
@@ -660,7 +725,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
                 {manifest.preset.morphs.slice(0, 8).map((m) => (
                   <span
                     key={m.name}
-                    className="border border-[#d4b483]/22 bg-[#d4b483]/[0.05] px-[4px] py-[1px] text-[6.5px] tracking-[0.04em] text-[#cdc2ac]/78"
+                    className="border border-[#d4b483]/22 bg-[#d4b483]/[0.05] px-[4px] py-[1px] text-[10px] tracking-[0.04em] text-[#cdc2ac]/78"
                   >
                     {m.name}
                   </span>
@@ -672,7 +737,7 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
           {(() => {
             const notes = [...new Set([...(manifest.diagnostics ?? []), ...(manifest.errors ?? [])])];
             return notes.length ? (
-              <div className="mt-[8px] border-t border-[#b56a5a]/24 pt-[6px] text-[6.5px] leading-[1.5] text-[#c08f80]/72">
+              <div className="mt-[8px] border-t border-[#b56a5a]/24 pt-[6px] text-[10px] leading-[1.5] text-[#c08f80]/72">
                 <div className="mb-[3px] tracking-[0.12em] text-[#b56a5a]/85">
                   DIAGNOSTICS · {notes.length}
                 </div>
@@ -685,7 +750,6 @@ export function AssetPanel({ manifest }: AssetPanelProps) {
             ) : null;
           })()}
         </div>
-      )}
     </section>
   );
 }

@@ -269,6 +269,72 @@ def to_tangent_normal(im: Image.Image, size: int) -> Image.Image:
     return rgb
 
 
+# How far the `_n.dds` gloss mask is allowed to pull roughness below the
+# material's scalar level. Skyrim gloss 0 is a mirror and 1 is matte, so a
+# multiplier of 0.8 lets the glossiest texel (eyes, lips, nose tip) reach 80 %
+# of the GLOSS slider's roughness while the matte scalp stays at 100 %.
+#
+# The raw alpha range is narrow (~10–25 of 255), so it is stretched to [0,1]
+# for *structure*; this constant sets how much of that structure becomes
+# roughness. At 0.45 the T-zone dropped to roughness 0.23, and the environment
+# map reflected as hard streak highlights across the forehead and nose —
+# polished vinyl, not skin. Only ever downward: a multiplier above 1 would
+# fight the slider instead of refining it.
+MIN_GLOSS_MUL = 0.8
+
+
+def gloss_mask_from_normal(im: Image.Image, size: int) -> Image.Image | None:
+    """The Skyrim `_n.dds` alpha channel as a three.js roughness map.
+
+    In Skyrim the specular/gloss mask rides in the alpha of the `*_n.dds`
+    tangent normal. Both Diamond/UBE head and body normals carry a real,
+    spatially structured one (measured on the 4096² head normal: cheeks 24.9,
+    nose 21.6, lips 18.6, forehead 17.1, neck 13.3, scalp 10.2 of 255) — not
+    noise, and not a height field (correlation with the nx/ny gradients is
+    ~0). `to_tangent_normal` drops it with `convert("RGB")`, which is why the
+    whole face renders at one scalar roughness.
+
+    three's `roughnessmap_fragment` multiplies the material's scalar
+    `roughness` by the map's **green** channel ("compatible with a combined
+    OcclusionRoughnessMetallic texture"), so G is a multiplier around 1:
+    `1 + (MIN_GLOSS_MUL - 1) * g`. R and B are left white exactly as an ORM
+    texture would, so nothing that samples this map as colour can mistake
+    it for a tangent normal. Lossless WebP: q88 turned a detailed 1024 map
+    into a 13 KB smear, and this is a lighting term rather than paint, so
+    banding would band the highlight.
+
+    This map is the *only* per-texel specular control now: the skin shader
+    patch adds no specular lobe of its own, so the physical GGX highlight is
+    shaped entirely by `roughness` × G here.
+
+    A source with no alpha (or one that is uniformly opaque) returns None —
+    the caller then leaves the material untouched rather than inventing a
+    constant mask.
+    """
+    if im.mode not in ("RGBA", "LA", "P"):
+        return None
+    rgba = im.convert("RGBA")
+    alpha = rgba.getchannel("A")
+    lo, hi = alpha.getextrema()
+    if hi - lo < 8:
+        return None
+    a = np.asarray(alpha).astype(np.float32)
+    p2, p98 = np.percentile(a, 2), np.percentile(a, 98)
+    if p98 - p2 < 4:
+        return None
+    gloss = np.clip((a - p2) / max(1e-6, p98 - p2), 0.0, 1.0)
+    # Skyrim gloss 0 = mirror, 1 = matte. Remap to a roughness multiplier
+    # around 1 so the GLOSS slider keeps working as the overall level.
+    rough_mul = 1.0 + (MIN_GLOSS_MUL - 1.0) * gloss
+    g = np.clip(rough_mul * 255.0, 0, 255).astype(np.uint8)
+    white = np.full_like(g, 255)
+    out = Image.fromarray(np.stack([white, g, white], axis=-1), "RGB")
+    if out.size != (size, size):
+        out = out.resize((size, size), Image.LANCZOS)
+    return out
+
+
+
 def hair_rgba(im: Image.Image) -> tuple[Image.Image, bool]:
     """Straight RGBA plus whether the source really carries transparency.
 

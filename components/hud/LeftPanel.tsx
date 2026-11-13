@@ -5,7 +5,13 @@ import { useCharacter, type UtilityToggles } from '@/lib/store';
 import { PRESETS, REGIONS } from '@/lib/regions';
 import { FaceDiagram } from '@/components/hud/FaceDiagram';
 import { HairStyles } from '@/components/hud/HairStyles';
+import { EyePicker } from '@/components/hud/EyePicker';
+import { SkinPicker } from '@/components/hud/SkinPicker';
+import { MakeupPicker } from '@/components/hud/MakeupPicker';
 import { PosePanel } from '@/components/hud/PosePanel';
+import { EquipmentPanel } from '@/components/hud/EquipmentPanel';
+import { PresetIO } from '@/components/hud/PresetIO';
+import { PresetPanel } from '@/components/hud/PresetPanel';
 import {
   IconAlbum,
   IconCamera,
@@ -24,7 +30,7 @@ const UTILITIES: Array<{
   sub?: string;
   Icon: (p: { className?: string }) => React.JSX.Element;
 }> = [
-  { key: 'camPreset', label: 'CAM PRESET', Icon: IconCamera },
+  { key: 'camPreset', label: 'CAM PRESET', sub: 'VIEW / FOV', Icon: IconCamera },
   { key: 'beautyAlbum', label: 'BEAUTY', sub: 'ALBUM', Icon: IconAlbum },
   { key: 'poseEdit', label: 'POSE', sub: 'EDIT', Icon: IconPose },
   { key: 'viewOutfit', label: 'VIEW', sub: 'OUTFIT', Icon: IconHanger },
@@ -75,30 +81,36 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
   const showMesh = useCharacter((s) => s.showMesh);
   const setShowMesh = useCharacter((s) => s.setShowMesh);
   const primaryTab = useCharacter((s) => s.primaryTab);
+  const subTab = useCharacter((s) => s.subTab);
   const activeRegion = useCharacter((s) => s.activeRegion);
   const setActiveRegion = useCharacter((s) => s.setActiveRegion);
   const preset = useCharacter((s) => s.preset);
   const applyPreset = useCharacter((s) => s.applyPreset);
+  const cameraOpen = useCharacter((s) => s.cameraOpen);
+  const setCameraOpen = useCharacter((s) => s.setCameraOpen);
+  const showUtilities = primaryTab !== 'HAIR' && primaryTab !== 'EQUIPMENT' && primaryTab !== 'BODY' && primaryTab !== 'PRESET'
+    && !(primaryTab === 'FACE' && subTab === 'MAKEUP')
+    && !(primaryTab === 'FACE' && subTab === 'SKIN');
 
   return (
-    /* Reference metric (1024 × 572): the rail is 222 px of content starting
-       at x = 71 — the cards run 71→293 on a 114 px pitch. The utilities sit
-       above at y = 61 on a 26 px pitch, and the header block is inset 45 px
-       from them, which is why this panel is not flush to the viewport edge. */
-    <aside className="pointer-events-auto absolute left-[71px] top-[61px] z-20 w-[222px] select-none hud-fade">
+    /* Docked rail body. The old absolutely-positioned 222 px column was tied to
+       the 1024 × 572 reference; the rail now owns its own scroll and width. */
+    <div className="pointer-events-auto w-full select-none px-[12px] py-[10px]">
       {/* ── utility grid ───────────────────────────────────────────
-          HAIR is a styling section, not a face-sculpt or export one: the
-          MO2 utilities and METRIC MESH would compete with the style grid and
-          have nothing to act on, so they collapse there. FACE keeps them. */}
-      {primaryTab !== 'HAIR' && (
+          Styling workspaces own their rail; sculpt utilities collapse on
+          HAIR, EQUIPMENT and FACE → MAKEUP to leave room for their pickers. */}
+      {showUtilities && (
       <div className="grid grid-cols-2 gap-x-[8px] gap-y-[2px]">
         {UTILITIES.map(({ key, label, sub, Icon }) => {
-          const on = utils[key];
+          const on = key === 'camPreset' ? cameraOpen : utils[key];
           return (
             <button
               key={key}
               type="button"
-              onClick={() => toggleUtil(key)}
+              onClick={() => {
+                if (key === 'camPreset') setCameraOpen(!cameraOpen);
+                else toggleUtil(key);
+              }}
               aria-pressed={on}
               className="group flex items-center gap-[7px] text-left"
             >
@@ -113,11 +125,11 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
                 <Icon className="h-[9px] w-[9px]" />
               </span>
               <span className="flex min-w-0 flex-col leading-[1.18]">
-                <span className="whitespace-nowrap text-[6.5px] tracking-[0.13em] text-[#b6ad9c]/84 group-hover:text-[#e0d7c6]">
+                <span className="whitespace-nowrap text-[10px] tracking-[0.13em] text-[#b6ad9c]/84 group-hover:text-[#e0d7c6]">
                   {label}
                 </span>
                 {sub && (
-                  <span className="whitespace-nowrap text-[6.5px] tracking-[0.13em] text-[#8f8778]/62">
+                  <span className="whitespace-nowrap text-[10px] tracking-[0.13em] text-[#8f8778]/62">
                     {sub}
                   </span>
                 )}
@@ -134,7 +146,7 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
           than in the asset popover: a pose is a viewport state, not a choice
           of supplied file, and the tiles have to be readable while the user
           looks at the body they are posing. */}
-      {primaryTab !== 'HAIR' && utils.poseEdit && (
+      {showUtilities && utils.poseEdit && (
         <div className="mt-[13px]">
           <PosePanel />
         </div>
@@ -142,7 +154,7 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
 
       {/* ── metric overlay ─────────────────────────────────────────
           Only meaningful on the face sections; hidden with the utilities. */}
-      {primaryTab !== 'HAIR' && (
+      {showUtilities && (
       <div className="mt-[13px] flex items-center gap-[7px]">
         <button
           type="button"
@@ -161,10 +173,10 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
             <IconCheck className="h-[9px] w-[9px]" />
           </span>
           <span className="flex min-w-0 flex-col leading-[1.18]">
-            <span className="whitespace-nowrap text-[6.5px] tracking-[0.13em] text-[#b6ad9c]/84 group-hover:text-[#e0d7c6]">
+            <span className="whitespace-nowrap text-[10px] tracking-[0.13em] text-[#b6ad9c]/84 group-hover:text-[#e0d7c6]">
               METRIC MESH
             </span>
-            <span className="whitespace-nowrap text-[6.5px] tracking-[0.13em] text-[#8f8778]/62">
+            <span className="whitespace-nowrap text-[10px] tracking-[0.13em] text-[#8f8778]/62">
               {showMesh ? 'VISIBLE' : 'HIDDEN'}
             </span>
           </span>
@@ -172,10 +184,49 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
       </div>
       )}
 
+      {/* ── character presets & I/O ─────────────────────────────────── */}
+      {primaryTab === 'PRESET' && (
+        <div className="mt-[3px]">
+          <PresetPanel manifest={manifest} />
+        </div>
+      )}
+
+      {/* ── worn gear paper-doll ──────────────────────────────────────
+          EQUIPMENT is a gear section, not a face-sculpt or export one: the
+          MO2 utilities and METRIC MESH have nothing to act on there, and they
+          would push the slot rows below the fold. It collapses them exactly
+          as HAIR does. */}
+      {primaryTab === 'EQUIPMENT' && (
+        <div className="mt-[3px]">
+          <EquipmentPanel manifest={manifest} />
+        </div>
+      )}
+
       {/* ── hair styles ────────────────────────────────────────────── */}
       {primaryTab === 'HAIR' && (
         <div className="mt-[3px]">
           <HairStyles manifest={manifest} />
+        </div>
+      )}
+
+      {/* ── skin controls / picker ───────────────────────────────────── */}
+      {((primaryTab === 'FACE' && subTab === 'SKIN') || primaryTab === 'BODY') && (
+        <div className="mt-[3px]">
+          <SkinPicker manifest={manifest} />
+        </div>
+      )}
+
+      {/* ── eye textures / picker ───────────────────────────────────── */}
+      {primaryTab === 'FACE' && subTab === 'EYES' && (
+        <div className="mt-[3px]">
+          <EyePicker manifest={manifest} />
+        </div>
+      )}
+
+      {/* ── makeup & tintmask picker ──────────────────────────────── */}
+      {primaryTab === 'FACE' && subTab === 'MAKEUP' && (
+        <div className="mt-[3px]">
+          <MakeupPicker />
         </div>
       )}
 
@@ -187,7 +238,7 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
       <div className="mt-[19px]">
         <SectionTitle>FACE SHAPE</SectionTitle>
 
-        <div className="mb-[9px] flex items-center gap-[15px] text-[7.5px] tracking-[0.1em]">
+        <div className="mb-[9px] flex items-center gap-[15px] text-[10px] tracking-[0.1em]">
           <button
             type="button"
             onClick={() => setBisymmetry(!bisymmetry)}
@@ -259,7 +310,7 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
                 </span>
                 <span
                   className={cn(
-                    'mt-[5px] whitespace-nowrap text-center text-[6.5px] leading-[1.24] tracking-[0.09em] transition-colors',
+                    'mt-[5px] whitespace-nowrap text-center text-[10px] leading-[1.24] tracking-[0.09em] transition-colors',
                     active ? 'text-[#e8dcc2]' : 'text-[#a9a192]/78 group-hover:text-[#d5ccbb]',
                   )}
                 >
@@ -324,11 +375,11 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
       </div>
       )}
 
-      <div className="mt-[12px] flex items-center gap-[5px] text-[6px] tracking-[0.15em] text-[#8b8375]/45">
+      <div className="mt-[12px] flex items-center gap-[5px] text-[10px] tracking-[0.15em] text-[#8b8375]/45">
         <IconSparkle className="h-[7px] w-[7px] text-[#c9b184]/60" />
         <span>SKYRIM SE · RACEMENU · XPMSSE</span>
       </div>
-    </aside>
+    </div>
   );
 }
 

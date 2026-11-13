@@ -234,9 +234,9 @@ export function createRig(geometry: THREE.BufferGeometry): Rig {
          0.18`), which sheared the nape whenever a slider moved the face; a
          smoothstep over 1.5 cm keeps the falloff continuous. */
       const depth = smoothstep(-0.004, 0.011, z);
-      /* Pin the neck seam: lower neck vertices (y < -0.095) must stay 100% rigid on the head bone
+      /* Pin the neck seam: lower neck vertices (y < -0.075) must stay 100% rigid on the head bone
          so facial bone deformations (jaw, chin, lips) never tear the seam with the body mesh. */
-      const neckPin = y < -0.09 ? smoothstep(-0.105, -0.09, y) : 1.0;
+      const neckPin = y < -0.075 ? (z < 0.025 ? 0.0 : smoothstep(-0.082, -0.075, y)) : 1.0;
       const w = Math.exp(-2.1 * d2) * fd.strength * (0.18 + 0.82 * depth) * neckPin;
       if (w > 0.004) acc.push({ i: fd.boneIndex, w });
     }
@@ -283,7 +283,12 @@ export function createRig(geometry: THREE.BufferGeometry): Rig {
 
   const mesh = new THREE.SkinnedMesh(geometry, material);
   mesh.name = 'FemaleHead_hph';
-  mesh.castShadow = false;
+  /* A face has to shadow *itself*: the nose onto the cheek, the brow ridge
+     into the socket, the lower lip onto the chin. Those contact creases are
+     what an SSAO pass would supply and what the key light's shadow map now
+     supplies instead; with `castShadow = false` the head was absent from the
+     map and could only ever receive shadows cast by something else. */
+  mesh.castShadow = true;
   mesh.receiveShadow = true;
   mesh.frustumCulled = false;
 
@@ -409,6 +414,52 @@ export function poseRegionBone(
   if (!bone) return;
   const side: 1 | -1 = key.endsWith('_R') ? -1 : 1;
   poseBone(bone, def, values, pose, side, regionPivot(region));
+}
+
+/**
+ * Creation Engine FaceGen weight coupling.
+ *
+ * In Bethesda's Skyrim engine (`TESNPC`), character weight (0–100) drives:
+ *  1. Cheek fullness: lateral expansion and forward projection from buccal fat.
+ *  2. Jaw & Submental fullness: transverse expansion and slight vertical drop.
+ *
+ * Weight 0.0 is the authored slender baseline (0 residual).
+ * As weight moves towards 1.0, natural anatomical fullness blends smoothly.
+ */
+export function applyCreationEngineWeight(
+  rig: Rig,
+  weight: number,
+  enabled: boolean = true,
+): void {
+  if (!enabled) return;
+
+  const w = Math.max(0, Math.min(1, weight));
+  if (w <= 0.001) return;
+
+  const cheekL = rig.bones['Cheek_L'];
+  const cheekR = rig.bones['Cheek_R'];
+  if (cheekL) {
+    cheekL.position.x += 0.0022 * w;
+    cheekL.position.z += 0.0012 * w;
+    cheekL.scale.x *= 1 + 0.05 * w;
+    cheekL.scale.y *= 1 + 0.04 * w;
+    cheekL.scale.z *= 1 + 0.05 * w;
+  }
+  if (cheekR) {
+    cheekR.position.x -= 0.0022 * w;
+    cheekR.position.z += 0.0012 * w;
+    cheekR.scale.x *= 1 + 0.05 * w;
+    cheekR.scale.y *= 1 + 0.04 * w;
+    cheekR.scale.z *= 1 + 0.05 * w;
+  }
+
+  const jaw = rig.bones['Jaw'];
+  if (jaw) {
+    jaw.position.y -= 0.0015 * w;
+    jaw.position.z += 0.0010 * w;
+    jaw.scale.x *= 1 + 0.045 * w;
+    jaw.scale.z *= 1 + 0.035 * w;
+  }
 }
 
 /**

@@ -223,6 +223,43 @@ body {
   box-shadow: 0 0 9px rgba(234, 200, 127, 0.65);
 }
 
+/* ── tint overlay slider ──────────────────────────────────────
+   The overlay rows grade a colour band, so the track shows the colour
+   itself between black and white. `--tint` comes from the row's swatch. */
+.hud-range-tint::-webkit-slider-runnable-track {
+  height: 3px;
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.55) 0%,
+    var(--tint, #d4b483) 50%,
+    rgba(255, 255, 255, 0.72) 100%
+  );
+}
+.hud-range-tint::-moz-range-track {
+  height: 3px;
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.55) 0%,
+    var(--tint, #d4b483) 50%,
+    rgba(255, 255, 255, 0.72) 100%
+  );
+}
+.hud-range-tint::-webkit-slider-thumb {
+  margin-top: -2px;
+}
+
+/* Native colour input, reduced to a plain swatch. The popup itself is drawn
+   by the browser and ignores the HUD's CSS transform — acceptable for a
+   secondary control, and the swatch still reads correctly in place. */
+input[type='color'].hud-swatch,
+input[type='color']::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input[type='color']::-webkit-color-swatch {
+  border: none;
+  border-radius: 0;
+}
+
 /* ── misc ─────────────────────────────────────────────────────── */
 .hud-divider {
   height: 1px;
@@ -253,6 +290,19 @@ body {
 }
 .hud-fade {
   animation: hudFadeIn 520ms ease both;
+}
+
+/* Keyboard focus uses the existing gold token, never a replacement palette. */
+:where(button, input, select, summary):focus-visible {
+  outline: 1px solid var(--color-gold-bright);
+  outline-offset: 3px;
+}
+
+/* Dock controls sit against the panel edge, where an outward offset ring gets
+   clipped. They draw the same gold ring inside their own border instead. */
+.hud-focus:focus-visible {
+  outline: 1px solid var(--color-gold-bright);
+  outline-offset: -3px;
 }
 
 /* scrollbar for panels */

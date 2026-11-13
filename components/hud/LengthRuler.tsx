@@ -37,10 +37,10 @@ export function LengthRuler() {
       role="group"
     >
       <div className="mb-[1px] flex flex-col items-end gap-[1px]">
-        <span className="whitespace-nowrap text-[6px] tracking-[0.16em] text-[#8f8778]/72">LENGTH</span>
-        <span className="num whitespace-nowrap text-[9px] tracking-[0.02em] text-[#eadcc0]">
+        <span className="whitespace-nowrap text-[10px] tracking-[0.16em] text-[#8f8778]/72">LENGTH</span>
+        <span className="num whitespace-nowrap text-[10px] tracking-[0.02em] text-[#eadcc0]">
           {lengthCm.toFixed(1)}
-          <span className="ml-[1px] text-[6px] tracking-[0.1em] text-[#b6a88f]/80">CM</span>
+          <span className="ml-[1px] text-[10px] tracking-[0.1em] text-[#b6a88f]/80">CM</span>
         </span>
       </div>
 
@@ -83,7 +83,7 @@ export function LengthRuler() {
                   )}
                 />
                 {major && (
-                  <span className="num absolute right-full mr-[3px] -translate-y-1/2 whitespace-nowrap text-[5.5px] leading-none tracking-[0.02em] text-[#9a9181]/62">
+                  <span className="num absolute right-full mr-[3px] -translate-y-1/2 whitespace-nowrap text-[10px] leading-none tracking-[0.02em] text-[#9a9181]/62">
                     {v}
                   </span>
                 )}
@@ -93,7 +93,7 @@ export function LengthRuler() {
         </div>
       </div>
 
-      <div className="mt-[5px] whitespace-nowrap text-right text-[5.5px] tracking-[0.1em] text-[#8b8375]/48">
+      <div className="mt-[5px] whitespace-nowrap text-right text-[10px] tracking-[0.1em] text-[#8b8375]/48">
         {authored ? 'AUTHORED' : `${MIN}–${MAX} CM`}
       </div>
     </div>

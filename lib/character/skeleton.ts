@@ -84,6 +84,100 @@ export function boneWorldMatrix(bone: MeshBone, frame = 'head'): THREE.Matrix4 {
  *  `userData` as `Record<string, any>`, so a unique-symbol key does not index. */
 const REST = '__boneRest';
 
+/**
+ * Canonical XP32 bone hierarchy.
+ *
+ * Limb attachments (hands, fingers, feet, toes) in Bethesda NIFs were often
+ * authored with flat bone hierarchies (`parent: Scene Root`). When registered,
+ * this map enforces the authentic skeletal parenting so wrists follow forearms,
+ * fingers follow hands, and feet/toes follow calves during posing.
+ */
+export const XP32_CANONICAL_PARENTS: Readonly<Record<string, string>> = {
+  // Spine & Pelvis chain
+  'NPC COM [COM ]': 'NPC Root [Root]',
+  'NPC Pelvis [Pelv]': 'NPC COM [COM ]',
+  'NPC Spine [Spn0]': 'NPC COM [COM ]',
+  'NPC Spine1 [Spn1]': 'NPC Spine [Spn0]',
+  'NPC Spine2 [Spn2]': 'NPC Spine1 [Spn1]',
+  'NPC Neck [Neck]': 'NPC Spine2 [Spn2]',
+  'NPC Head [Head]': 'NPC Neck [Neck]',
+  'NPCEyeBone': 'NPC Head [Head]',
+
+  // Arms & Hands
+  'NPC L Clavicle [LClv]': 'NPC Spine2 [Spn2]',
+  'NPC L UpperArm [LUar]': 'NPC L Clavicle [LClv]',
+  'NPC L Forearm [LLar]': 'NPC L UpperArm [LUar]',
+  'NPC L Hand [LHnd]': 'NPC L Forearm [LLar]',
+  'NPC L ForearmTwist1 [LLt1]': 'NPC L Forearm [LLar]',
+  'NPC L ForearmTwist2 [LLt2]': 'NPC L Forearm [LLar]',
+  'NPC L UpperarmTwist1 [LUt1]': 'NPC L UpperArm [LUar]',
+  'NPC L UpperarmTwist2 [LUt2]': 'NPC L UpperarmTwist1 [LUt1]',
+
+  'NPC R Clavicle [RClv]': 'NPC Spine2 [Spn2]',
+  'NPC R UpperArm [RUar]': 'NPC R Clavicle [RClv]',
+  'NPC R Forearm [RLar]': 'NPC R UpperArm [RUar]',
+  'NPC R Hand [RHnd]': 'NPC R Forearm [RLar]',
+  'NPC R ForearmTwist1 [RLt1]': 'NPC R Forearm [RLar]',
+  'NPC R ForearmTwist2 [RLt2]': 'NPC R Forearm [RLar]',
+  'NPC R UpperarmTwist1 [RUt1]': 'NPC R UpperArm [RUar]',
+  'NPC R UpperarmTwist2 [RUt2]': 'NPC R UpperarmTwist1 [RUt1]',
+
+  // Left Fingers
+  'NPC L Finger00 [LF00]': 'NPC L Hand [LHnd]',
+  'NPC L Finger01 [LF01]': 'NPC L Finger00 [LF00]',
+  'NPC L Finger02 [LF02]': 'NPC L Finger01 [LF01]',
+  'NPC L Finger10 [LF10]': 'NPC L Hand [LHnd]',
+  'NPC L Finger11 [LF11]': 'NPC L Finger10 [LF10]',
+  'NPC L Finger12 [LF12]': 'NPC L Finger11 [LF11]',
+  'NPC L Finger20 [LF20]': 'NPC L Hand [LHnd]',
+  'NPC L Finger21 [LF21]': 'NPC L Finger20 [LF20]',
+  'NPC L Finger22 [LF22]': 'NPC L Finger21 [LF21]',
+  'NPC L Finger30 [LF30]': 'NPC L Hand [LHnd]',
+  'NPC L Finger31 [LF31]': 'NPC L Finger30 [LF30]',
+  'NPC L Finger32 [LF32]': 'NPC L Finger31 [LF31]',
+  'NPC L Finger40 [LF40]': 'NPC L Hand [LHnd]',
+  'NPC L Finger41 [LF41]': 'NPC L Finger40 [LF40]',
+  'NPC L Finger42 [LF42]': 'NPC L Finger41 [LF41]',
+
+  // Right Fingers
+  'NPC R Finger00 [RF00]': 'NPC R Hand [RHnd]',
+  'NPC R Finger01 [RF01]': 'NPC R Finger00 [RF00]',
+  'NPC R Finger02 [RF02]': 'NPC R Finger01 [RF01]',
+  'NPC R Finger10 [RF10]': 'NPC R Hand [RHnd]',
+  'NPC R Finger11 [RF11]': 'NPC R Finger10 [RF10]',
+  'NPC R Finger12 [RF12]': 'NPC R Finger11 [RF11]',
+  'NPC R Finger20 [RF20]': 'NPC R Hand [RHnd]',
+  'NPC R Finger21 [RF21]': 'NPC R Finger20 [RF20]',
+  'NPC R Finger22 [RF22]': 'NPC R Finger21 [RF21]',
+  'NPC R Finger30 [RF30]': 'NPC R Hand [RHnd]',
+  'NPC R Finger31 [RF31]': 'NPC R Finger30 [RF30]',
+  'NPC R Finger32 [RF32]': 'NPC R Finger31 [RF31]',
+  'NPC R Finger40 [RF40]': 'NPC R Hand [RHnd]',
+  'NPC R Finger41 [RF41]': 'NPC R Finger40 [RF40]',
+  'NPC R Finger42 [RF42]': 'NPC R Finger41 [RF41]',
+
+  // Legs & Feet
+  'NPC L Thigh [LThg]': 'NPC Pelvis [Pelv]',
+  'NPC L Calf [LClf]': 'NPC L Thigh [LThg]',
+  'NPC L Foot [Lft ]': 'NPC L Calf [LClf]',
+  'NPC L Toe0 [LToe]': 'NPC L Foot [Lft ]',
+
+  'NPC R Thigh [RThg]': 'NPC Pelvis [Pelv]',
+  'NPC R Calf [RClf]': 'NPC R Thigh [RThg]',
+  'NPC R Foot [Rft ]': 'NPC R Calf [RClf]',
+  'NPC R Toe0 [RToe]': 'NPC R Foot [Rft ]',
+
+  // Soft Body & Physics (CBPC / SMP / UBE)
+  'Butt': 'NPC Pelvis [Pelv]',
+  'NPC L Butt': 'Butt',
+  'NPC R Butt': 'Butt',
+  'Belly': 'NPC Spine1 [Spn1]',
+  'NPC Belly': 'Belly',
+  'HDT Belly': 'NPC Spine1 [Spn1]',
+  'Breast': 'NPC Spine2 [Spn2]',
+  'CME Spine2 [Spn2]': 'NPC Spine2 [Spn2]',
+};
+
 export class SkeletonRegistry {
   readonly byName = new Map<string, THREE.Bone>();
   /** Scene node holding the bone roots. Identity transform; bones are already
@@ -125,12 +219,32 @@ export class SkeletonRegistry {
   register(meshBones: MeshBone[]): RegisteredSkeleton {
     let changed = false;
     for (const def of meshBones) {
-      if (this.byName.has(def.name)) continue;
+      const canonical = XP32_CANONICAL_PARENTS[def.name];
+      const resolvedParent =
+        def.parent && def.parent !== 'Scene Root'
+          ? def.parent
+          : (canonical ?? def.parent);
+
+      if (this.byName.has(def.name)) {
+        const bone = this.byName.get(def.name)!;
+        const rest = this.restOf(bone);
+        if (
+          rest &&
+          (!rest.parentName || rest.parentName === 'Scene Root') &&
+          resolvedParent &&
+          resolvedParent !== 'Scene Root'
+        ) {
+          rest.parentName = resolvedParent;
+          changed = true;
+        }
+        continue;
+      }
+
       const bone = new THREE.Bone();
       bone.name = def.name;
       bone.userData[REST] = {
         world: boneWorldMatrix(def, this.frame),
-        parentName: def.parent,
+        parentName: resolvedParent,
         pose: {
           position: new THREE.Vector3(),
           quaternion: new THREE.Quaternion(),
@@ -160,7 +274,15 @@ export class SkeletonRegistry {
     const parentInverse = new THREE.Matrix4();
     for (const bone of this.byName.values()) {
       const rest = this.restOf(bone);
-      const parent = rest.parentName ? this.byName.get(rest.parentName) : undefined;
+      let parentName = rest.parentName;
+      if (!parentName || parentName === 'Scene Root' || !this.byName.has(parentName)) {
+        const canonical = XP32_CANONICAL_PARENTS[bone.name];
+        if (canonical && this.byName.has(canonical)) {
+          parentName = canonical;
+          rest.parentName = canonical;
+        }
+      }
+      const parent = parentName ? this.byName.get(parentName) : undefined;
       const parentObject: THREE.Object3D = parent ?? this.group;
       if (bone.parent !== parentObject) {
         /* `add` re-parents; it does not mutate the removed bone's own TRS. */

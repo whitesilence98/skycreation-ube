@@ -14,9 +14,43 @@ import {
 } from '@/lib/head/faceTexture';
 import { resolveManifest } from '@/lib/manifestSelect';
 import { useAssetCatalogues } from '@/lib/mo2/useAssetCatalogues';
-import { useCharacter } from '@/lib/store';
+import { useCharacter, type OverlayLayer } from '@/lib/store';
 import { convertUrl } from '@/lib/mo2/client';
 import { loadMask, type OverlayInput } from '@/lib/head/overlayLayers';
+
+/**
+ * Loads every layer's mask, keyed on everything the compositor reads.
+ *
+ * The key used to be `kind:id` only, so editing a layer's colour, opacity,
+ * blend or coverage left this route drawing the previous masks and the debug
+ * bake silently disagreed with the editor.
+ */
+function useOverlayImages(overlayLayers: OverlayLayer[]): OverlayInput[] {
+  const [overlayImages, setOverlayImages] = useState<OverlayInput[]>([]);
+  const overlayKey = overlayLayers
+    .map(
+      (l) =>
+        `${l.kind}:${l.id}:${l.color}:${l.opacity}:${l.blend ?? 'normal'}:${l.coverage ?? 1}`,
+    )
+    .join('|');
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      overlayLayers.map(async (layer) => ({
+        layer,
+        mask: await loadMask(convertUrl({ kind: layer.kind, id: layer.id, mode: 'alpha' })),
+      })),
+    ).then((v) => {
+      if (!cancelled) setOverlayImages(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the
+    // serialised stack; the array identity changes on every store write.
+  }, [overlayKey]);
+  return overlayImages;
+}
 
 function Cam({ view }: { view: 'front' | 'side' | 'three' }) {
   const { camera } = useThree();
@@ -130,6 +164,7 @@ export function HeadPreview() {
   const [manifest, setManifest] = useState<Mo2Manifest | null>(null);
   const [settled, setSettled] = useState(false);
   const selection = useCharacter((s) => s.assetSelection);
+  const equipment = useCharacter((s) => s.equipment);
   const catalogues = useAssetCatalogues();
   const overlayLayers = useCharacter((s) => s.overlayLayers);
 
@@ -152,24 +187,11 @@ export function HeadPreview() {
     };
   }, []);
 
-  const resolved = useMemo(() => resolveManifest(manifest, selection, catalogues), [manifest, selection, catalogues]);
-  const [overlayImages, setOverlayImages] = useState<OverlayInput[]>([]);
-  const overlayKey = overlayLayers.map((l) => `${l.kind}:${l.id}`).join('|');
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all(
-      overlayLayers.map(async (layer) => ({
-        layer,
-        mask: await loadMask(convertUrl({ kind: layer.kind, id: layer.id, mode: 'alpha' })),
-      })),
-    ).then((v) => {
-      if (!cancelled) setOverlayImages(v);
-    });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overlayKey]);
+  const resolved = useMemo(
+    () => resolveManifest(manifest, selection, catalogues, equipment),
+    [manifest, selection, catalogues, equipment],
+  );
+  const overlayImages = useOverlayImages(overlayLayers);
 
   return (
     <Canvas

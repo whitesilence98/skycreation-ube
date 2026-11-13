@@ -69,6 +69,8 @@ KINDS = [
     "browsMesh",
     "mouthMesh",
     "bodyMesh",
+    "handsMesh",
+    "feetMesh",
     "hairMesh",
     "skeleton",
     "skin",
@@ -115,11 +117,13 @@ PRINTABLE_RUN = re.compile(rb"[ -~]{4,}")
 # filename decides which it is.
 DIR_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("eyes", ("\\eyes\\", "\\ddseyes\\", "eyes_ilv", "\\eyes_")),
-    ("brows", ("\\brows\\",)),
+    # `\brows_` is separate from `\brows\`: COR ships its second brow set in
+    # `!COR\Brows_ILV\`, and a trailing separator never matches that folder.
+    ("brows", ("\\brows\\", "\\brows_")),
     ("wrinkle", ("\\wrinkle",)),
     ("makeup", (
         "\\overlays\\", "\\makeup", "lipstick", "eyeshadow", "eyeliner", "blush",
-        "\\warpaint", "\\tintmask", "\\cotr overlays\\",
+        "\\lips\\", "lips", "\\warpaint", "\\tintmask", "\\cotr overlays\\",
     )),
 ]
 
@@ -132,7 +136,7 @@ FILE_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("wrinkle", ("wrinkle", "wrinkles", "frown", "frownlines")),
     ("makeup", (
         "makeup", "eyeliner", "eyeshadow", "eyeshadows", "lipstick", "lipgloss",
-        "blush", "contour",
+        "lips", "lip", "blush", "contour",
     )),
     ("tattoo", (
         "tattoo", "tattoos", "warpaint", "freckle", "freckles", "mole", "moles",
@@ -236,19 +240,11 @@ def refine_family(kind: str, name_lower: str) -> str:
             return "tattoo"
         if tokens & {"wrinkle", "wrinkles", "frown", "frownlines"}:
             return "wrinkle"
-        # Structural tint — eye-socket shading, nose reddening, the race's own
-        # lip tint. The SkinNerd-style packs drop these in TintMasks next to
-        # real makeup, but they are part of the skin bake and are not something
-        # the user should be able to toggle. Sent to `other` rather than `skin`
-        # so the skin picker only offers head diffuses.
-        #
-        # Concatenated names have no token boundary, so these are substring
-        # tests: `femalelowereyesocket` tokenises to one word, and a token
-        # search for "eyesocket" misses it.
-        if any(p in stem for p in STRUCTURAL_TINT_PARTS) or tokens & {
-            "nose", "cheeks", "cheek", "forehead", "chin", "neck", "socket",
-            "lips", "lip",
-        }:
+        # Structural tint — Bethesda base eye-socket shading, nose reddening, base race tint.
+        # Sent to `other` rather than `skin` so the skin picker only offers head diffuses.
+        if (stem.startswith("female") and any(k in stem for k in ("socket", "nose", "forehead", "chin", "neck"))) or any(
+            p in stem for p in STRUCTURAL_TINT_PARTS
+        ):
             return "other"
         return "makeup"
 
@@ -356,6 +352,10 @@ def classify(mod: str, rel: str) -> tuple[str, str | None]:
             kind = family_of_name(name)
         if kind:
             kind = refine_family(kind, name)
+            if kind == "eyes":
+                # Scoped to eyes: a blanket map_role_for would also demote two
+                # real makeup atlases (lips_gloss_m / lips_matte_m).
+                return kind, eye_map_role(name)
             role = "albedo"
             if name.endswith("_n.dds"):
                 role = "normal"
@@ -418,16 +418,39 @@ def canonical_actor_texture(name: str) -> tuple[str, str] | None:
     return ("skin" if part in CANONICAL_HEAD_PARTS else "body"), role
 
 
+def eye_map_role(name: str) -> str:
+    """Albedo / normal / specular for an eye DDS.
+
+    Eye folders keep irises next to shared companion maps named without a
+    `_n`/`_m` suffix — Koralina's `eyenormal.dds`, `eyecubemap.dds` and
+    `eyeenvironmentmask.dds` sit beside 73 iris atlases. Without this they
+    would each be offered as a selectable eye colour. `specular` is the
+    existing bucket for supporting maps; it does not imply the renderer uses
+    them as specular today.
+    """
+    stem = name.rsplit(".", 1)[0]
+    if re.fullmatch(r"eyes?_?normal(?:map)?", stem):
+        return "normal"
+    if "cubemap" in stem or "environmentmask" in stem:
+        return "specular"
+    return map_role_for(name)
+
+
 def map_role_for(name: str) -> str:
     """Albedo / normal / specular for a DDS companion, by suffix.
 
-    `_m` is the multilayer mask (`MouthMap_m.dds`) and `_msn` the
-    mask+normal composite — both supporting maps, never an alternate atlas,
-    or a mesh's authored mouth would look ambiguous and go unpaired.
+    `_m` is the multilayer mask (`MouthMap_m.dds`, `EyeEnvironmentMask_M.dds`),
+    `_msn` the mask+normal composite and `_g` the glow map — all supporting
+    maps, never an alternate atlas, or a mesh's authored eye would look
+    ambiguous and go unpaired. COR's eye sets put every iris in one folder next
+    to a dozen masks and glows, so without this each `EyesBlue_g.dds` would be
+    offered as a selectable iris.
     """
     if name.endswith("_n.dds"):
         return "normal"
-    if name.endswith(("_sk.dds", "_s.dds", "_m.dds", "_msn.dds")):
+    if name.endswith(("_sk.dds", "_s.dds", "_msn.dds")):
+        return "specular"
+    if name.endswith(("_m.dds", "_g.dds", "_e.dds")):
         return "specular"
     return "albedo"
 
@@ -450,8 +473,10 @@ def classify_mesh_part(path_lower: str, stem: str) -> str | None:
         return "eyeMesh"
     if re.match(r"^(femalehead|malehead|femaleface|malehead)", stem):
         return "headMesh"
-    if re.match(r"^(1stperson)?(female|male)body", stem) and "\\armor\\" not in path_lower:
-        return "bodyMesh"
+    if "\\armor\\" not in path_lower:
+        for part, kind in (("body", "bodyMesh"), ("hands", "handsMesh"), ("feet", "feetMesh")):
+            if re.match(rf"^(1stperson)?(female|male){part}", stem):
+                return kind
     if "\\hair\\" in path_lower and "\\meshes\\" in path_lower:
         return "hairMesh"
     if re.match(r"^hair\d*$", stem) or "hairline" in stem or re.match(r"^\d+hl", stem) \
@@ -666,6 +691,8 @@ TEXTURE_KIND_FOR_MESH = {
     "browsMesh": "brows",
     "mouthMesh": "mouth",
     "bodyMesh": "body",
+    "handsMesh": "body",
+    "feetMesh": "body",
     "hairMesh": "hair",
 }
 

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Effect } from 'postprocessing';
 import { Uniform, Texture, TextureLoader } from 'three';
 import { wrapEffect } from '@react-three/postprocessing';
-import type { PostFxMode } from '@/lib/store';
+import type { EnbPreset } from '@/lib/store';
 
 const fragmentShader = `
 uniform sampler2D paletteTex;
@@ -109,7 +109,7 @@ export class EnbReshadeEffectImpl extends Effect {
 const WrappedEffect = wrapEffect(EnbReshadeEffectImpl);
 
 export interface EnbReshadeEffectProps {
-  mode: PostFxMode;
+  mode: EnbPreset;
 }
 
 export function EnbReshadeEffect({ mode }: EnbReshadeEffectProps) {

@@ -11,6 +11,7 @@ import {
 import { coerceHair, type HairSettings } from '@/lib/hair/settings';
 import type { GizmoPose, OverlayLayer } from '@/lib/store';
 import { ASSET_KINDS, type AssetSelection } from '@/lib/manifestSelect';
+import { isEquipSelection, type EquipSelection } from '@/lib/equipment';
 
 /**
  * Import/export for character presets.
@@ -52,6 +53,8 @@ export interface PresetFile {
   raceMenu: { morphs: Array<{ name: string; value: number }> };
   /** Which MO2 asset each category was wearing at export time. */
   assets?: AssetSelection;
+  /** One worn garment per equipment slot (the paper-doll, not the OUTFIT slot). */
+  equipment?: EquipSelection;
   /** Body weight, 0–1 — the same field a `.jslot` calls `actor.weight`/100. */
   weight?: number;
   /** The makeup / tattoo / wrinkle stack, in draw order. */
@@ -183,6 +186,8 @@ export interface PresetPayload {
   source: 'lyra' | 'racemenu';
   /** Asset ids the file was wearing, when it records them. */
   assets?: AssetSelection;
+  /** Worn garments per equipment slot, when the file records them. */
+  equipment?: EquipSelection;
   /**
    * Body weight, 0–1. A `.jslot` stores it as an integer 0–100 under
    * `actor.weight`; this is that number divided by 100, and it is what the
@@ -339,6 +344,7 @@ export function buildPresetFile(args: {
   bisymmetry: boolean;
   regions: Record<RegionId, RegionSnapshot>;
   assets?: AssetSelection;
+  equipment?: EquipSelection;
   weight?: number;
   hair?: HairSettings;
   overlays?: OverlayLayer[];
@@ -355,6 +361,7 @@ export function buildPresetFile(args: {
     regions: args.regions,
     raceMenu: { morphs: toRaceMenuMorphs(args.regions) },
     assets: args.assets,
+    equipment: args.equipment,
     weight: args.weight,
     hair: args.hair,
     overlays: args.overlays,
@@ -369,14 +376,17 @@ export function buildPresetFile(args: {
  * is safe because a weight above 1 only ever comes from RaceMenu — nothing in
  * this app stores a value outside 0–1.
  */
-function coerceWeight(v: unknown): number | undefined {
+export function coerceWeight(v: unknown): number | undefined {
   if (typeof v !== 'number' || !Number.isFinite(v)) return undefined;
   if (v < 0 || v > 100) return undefined;
   return v > 1 ? v / 100 : v;
 }
 
-function isRegionId(v: unknown): v is RegionId {
-  return typeof v === 'string' && v in REGIONS_BY_ID;
+export function isRegionId(v: unknown): v is RegionId {
+  /* `in` walks the prototype chain, so `'constructor'` would pass and then
+     index a function; the store feeds this from localStorage, which anyone can
+     edit, so the own-property test is the honest one. */
+  return typeof v === 'string' && Object.hasOwn(REGIONS_BY_ID, v);
 }
 
 /**
@@ -386,7 +396,7 @@ function isRegionId(v: unknown): v is RegionId {
  * silently rejected every kind added after it was written, so a file exported
  * with makeup selected would import with the makeup dropped.
  */
-function isAssetSelection(v: unknown): v is AssetSelection {
+export function isAssetSelection(v: unknown): v is AssetSelection {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
   const o = v as Record<string, unknown>;
   return Object.entries(o).every(
@@ -394,8 +404,21 @@ function isAssetSelection(v: unknown): v is AssetSelection {
   );
 }
 
-/** Same treatment for the overlay stack: bounded, typed, no surprises. */
-function isOverlayLayers(v: unknown): v is OverlayLayer[] {
+/**
+ * The blend modes a layer may name. `normal` is the historical behaviour and
+ * is what an absent `blend` means, so every file written before this field
+ * existed still validates.
+ */
+export const OVERLAY_BLENDS = ['normal', 'multiply', 'screen', 'overlay'] as const;
+
+/** Same treatment for the overlay stack: bounded, typed, no surprises.
+ *
+ * `blend` and `coverage` are optional: a layer that omits them is the plain
+ * source-over, full-coverage layer this app has always written. When present
+ * they must be the real vocabulary / a finite 0–1 number, because both reach
+ * the compositor directly.
+ */
+export function isOverlayLayers(v: unknown): v is OverlayLayer[] {
   if (!Array.isArray(v) || v.length > 16) return false;
   return v.every((raw) => {
     if (!raw || typeof raw !== 'object') return false;
@@ -409,7 +432,14 @@ function isOverlayLayers(v: unknown): v is OverlayLayer[] {
       typeof o.opacity === 'number' &&
       Number.isFinite(o.opacity) &&
       o.opacity >= 0 &&
-      o.opacity <= 1
+      o.opacity <= 1 &&
+      (o.blend === undefined ||
+        (typeof o.blend === 'string' && (OVERLAY_BLENDS as readonly string[]).includes(o.blend))) &&
+      (o.coverage === undefined ||
+        (typeof o.coverage === 'number' &&
+          Number.isFinite(o.coverage) &&
+          o.coverage >= 0 &&
+          o.coverage <= 1))
     );
   });
 }
@@ -418,7 +448,7 @@ function identityPose(): GizmoPose {
   return { offset: [0, 0, 0], rotation: [0, 0, 0], scale: [0, 0, 0] };
 }
 
-function coerceSliderValues(raw: unknown, fallback: SliderValues): SliderValues {
+export function coerceSliderValues(raw: unknown, fallback: SliderValues): SliderValues {
   const out: SliderValues = { ...fallback };
   if (!raw || typeof raw !== 'object') return out;
   for (const def of SLIDER_DEFS) {
@@ -430,7 +460,7 @@ function coerceSliderValues(raw: unknown, fallback: SliderValues): SliderValues 
   return out;
 }
 
-function coercePose(raw: unknown): GizmoPose {
+export function coercePose(raw: unknown): GizmoPose {
   const base = identityPose();
   if (!raw || typeof raw !== 'object') return base;
   const r = raw as Partial<GizmoPose>;
@@ -489,6 +519,7 @@ export function parsePreset(text: string, fileName?: string): PresetPayload {
       unmapped: 0,
       source: 'lyra',
       assets: isAssetSelection(obj.assets) ? obj.assets : undefined,
+      equipment: isEquipSelection(obj.equipment) ? obj.equipment : undefined,
       weight: coerceWeight(obj.weight),
       hair: obj.hair && typeof obj.hair === 'object' && !Array.isArray(obj.hair) ? coerceHair(obj.hair) : undefined,
       overlays: isOverlayLayers(obj.overlays) ? obj.overlays : undefined,

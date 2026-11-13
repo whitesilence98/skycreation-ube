@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
-export type EnvMode = 'off' | 'studio' | 'sunset' | 'forest' | 'tavern' | 'dawn';
+/* The vocabulary lives in a three-free module so the store can validate a
+   restored session without pulling three.js into the headless check scripts. */
+import type { EnvMode } from '@/lib/envModes';
+export type { EnvMode } from '@/lib/envModes';
 
 export interface EnvPresetSpec {
   label: string;
@@ -17,7 +20,7 @@ export const ENV_CONFIG: Record<EnvMode, EnvPresetSpec> = {
     dot: 'bg-[#8c8477]/40 shadow-none',
     next: 'studio',
     description: 'Default baseline lighting (no environment effect)',
-    baseIntensity: 0.3,
+    baseIntensity: 0.85,
   },
   studio: {
     label: 'ENV: STUDIO',

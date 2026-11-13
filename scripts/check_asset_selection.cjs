@@ -6,11 +6,18 @@ const vm = require('node:vm');
 const ts = require('typescript');
 const source = fs.readFileSync(path.join(__dirname, '../lib/manifestSelect.ts'), 'utf8');
 const moduleObject = { exports: {} };
+/** `manifestSelect` imports the equipment slot vocabulary as values. */
+const equipmentSource = fs.readFileSync(path.join(__dirname, '../lib/equipment.ts'), 'utf8');
+const equipmentModule = { exports: {} };
+vm.runInNewContext(ts.transpileModule(equipmentSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText, { exports: equipmentModule.exports, module: equipmentModule });
 vm.runInNewContext(ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, {
   exports: moduleObject.exports, module: moduleObject,
   require: (id) => {
+    if (id === '@/lib/equipment') return equipmentModule.exports;
     assert.equal(id, '@/lib/mo2/client');
     return { convertUrl: (options) => `/api/mo2/convert?${new URLSearchParams(options)}` };
   },

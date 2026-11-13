@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import type { LoadedMesh, MaterialRole, MeshMaterialSpec } from '@/components/scene/useMeshGeometry';
 import type { SkeletonRegistry } from '@/lib/character/skeleton';
+import {
+  applySkinGloss,
+  skinRoughnessFromGloss,
+  updateSkinGloss,
+} from '@/components/scene/SkinShader';
+import { useCharacter } from '@/lib/store';
 
 /**
  * Renders one authored pack mesh, skinned to the character's shared skeleton.
@@ -24,6 +30,7 @@ import type { SkeletonRegistry } from '@/lib/character/skeleton';
  * mesh mid-pose and bake the pose in as its rest.
  */
 export interface SkinnedPartProps {
+  name?: string;
   mesh: LoadedMesh;
   registry: SkeletonRegistry;
   renderOrder?: number;
@@ -35,33 +42,62 @@ export interface SkinnedPartProps {
    *  embedded body when the shape carries no shader texture. */
   fallbackByRole?: Partial<Record<MaterialRole, string>>;
   fallbackNormalByRole?: Partial<Record<MaterialRole, string>>;
+  /** Per-role roughness map, e.g. the body's `_n.dds` alpha as a gloss mask. */
+  fallbackRoughnessByRole?: Partial<Record<MaterialRole, string>>;
+  /**
+   * Force the atlas of every `skin` slot, ahead of any authored texture.
+   *
+   * The body, hands and feet are one character over one selected body atlas.
+   * A prebaked limb can carry its own authored material route, but letting it
+   * win would paint two different skins on one body — so the selection the
+   * user made governs all three, and this is the one prop that says so.
+   */
+  skinOverride?: { texture?: string; normalTexture?: string; roughnessTexture?: string };
   hiddenRoles?: MaterialRole[];
   /** Hair dye/gloss; only applied to `hair` materials. */
   hair?: { tone: string; gloss: number };
+  /** Skin tone color tint `#rrggbb` applied to `skin` materials. */
+  skinColor?: string;
 }
 
 interface Slot {
   spec: MeshMaterialSpec;
   texture?: string;
   normalTexture?: string;
+  roughnessTexture?: string;
 }
 
 const GREY = '#8a8a8a';
 
 function slotsFor(part: SkinnedPartProps): Slot[] {
-  const { mesh, defaultRole = 'hair', fallbackTexture, fallbackByRole, fallbackNormalByRole } = part;
+  const {
+    mesh, defaultRole = 'hair', fallbackTexture, fallbackByRole, fallbackNormalByRole,
+    fallbackRoughnessByRole, skinOverride,
+  } = part;
   const specs = mesh.groups?.length && mesh.materials?.length
     ? mesh.materials
     : [{ name: 'default', role: defaultRole } as MeshMaterialSpec];
   return specs.map((spec) => {
-    const texture =
-      spec.texture ??
-      fallbackByRole?.[spec.role] ??
-      (spec.role === defaultRole ? fallbackTexture : undefined);
-    const normalTexture = spec.normalTexture ?? fallbackNormalByRole?.[spec.role];
+    /* A `skin` slot belongs to the one selected body. The override is
+       authoritative — it beats the authored route *and* an absent field means
+       "no such map", not "borrow the asset's own". Falling back to the baked
+       limb's atlas would paint a second skin over the torso's, and mixing a
+       textured limb with a greyed body is just as wrong. */
+    const override = spec.role === 'skin' ? skinOverride : undefined;
+    const texture = override
+      ? override.texture
+      : spec.texture ??
+        fallbackByRole?.[spec.role] ??
+        (spec.role === 'hair' || spec.role === defaultRole ? fallbackTexture : undefined);
+    const normalTexture = override
+      ? override.normalTexture
+      : spec.normalTexture ?? fallbackNormalByRole?.[spec.role];
+    const roughnessTexture = override
+      ? override.roughnessTexture
+      : fallbackRoughnessByRole?.[spec.role];
     /* The outfit's embedded body is part of the supplied asset; a missing
        garment atlas must hide only the garment, never the body it covers. */
-    return { spec, texture, normalTexture };
+    return { spec, texture, normalTexture, roughnessTexture };
   });
 }
 
@@ -77,12 +113,24 @@ function buildPart(
   mesh: LoadedMesh,
   registry: SkeletonRegistry,
   renderOrder: number,
+  name?: string,
+  defaultRole?: string,
 ): THREE.Mesh {
   const skinned = Boolean(mesh.bones?.length && mesh.geometry.getAttribute('skinWeight'));
+  const partName = name || mesh.materials?.[0]?.name || defaultRole || 'SkinnedPart';
+  /* `castShadow` on the object, but the shadow pass skips any group whose
+     material is `visible: false` (WebGLShadowMap) and alpha-tests through
+     `material.map` (getDepthMaterial copies `map` + `alphaTest`), so a hair
+     card still casts its strand silhouette and not the whole quad, while a
+     slot that has not loaded yet casts nothing. `receiveShadow` lets the
+     head's shadow fall on the chest and the hair's onto the face. */
   if (!skinned || !mesh.bones) {
     const plain = new THREE.Mesh(mesh.geometry, new THREE.MeshBasicMaterial({ visible: false }));
+    plain.name = partName;
     plain.renderOrder = renderOrder;
     plain.frustumCulled = false;
+    plain.castShadow = true;
+    plain.receiveShadow = true;
     return plain;
   }
   const registered = registry.register(mesh.bones);
@@ -90,8 +138,11 @@ function buildPart(
     mesh.geometry,
     new THREE.MeshBasicMaterial({ visible: false }),
   );
+  object.name = partName;
   object.renderOrder = renderOrder;
   object.frustumCulled = false;
+  object.castShadow = true;
+  object.receiveShadow = true;
   /* Positions are local to the character group and already in the render
      frame, so the bind matrix is the identity: the registered inverses carry
      the transform instead. `bind()` would re-derive them from the current
@@ -108,6 +159,7 @@ function buildPart(
 }
 
 export function SkinnedPart({
+  name,
   mesh,
   registry,
   renderOrder = 0,
@@ -115,35 +167,56 @@ export function SkinnedPart({
   fallbackTexture,
   fallbackByRole,
   fallbackNormalByRole,
+  fallbackRoughnessByRole,
+  skinOverride,
   hiddenRoles = [],
   hair,
+  skinColor,
 }: SkinnedPartProps) {
   const slots = useMemo(
-    () => slotsFor({ mesh, registry, defaultRole, fallbackTexture, fallbackByRole, fallbackNormalByRole }),
-    [mesh, registry, defaultRole, fallbackTexture, fallbackByRole, fallbackNormalByRole],
+    () => slotsFor({
+      mesh, registry, defaultRole, fallbackTexture, fallbackByRole, fallbackNormalByRole,
+      fallbackRoughnessByRole, skinOverride,
+    }),
+    [mesh, registry, defaultRole, fallbackTexture, fallbackByRole, fallbackNormalByRole,
+      fallbackRoughnessByRole, skinOverride],
   );
 
   const hiddenKey = hiddenRoles.join('|');
   const hidden = useMemo(() => new Set(hiddenRoles), [hiddenKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* A `skin` slot is part of the same character as the head, so it takes the
+     head's ENB-calibrated SSS and specular patch and the same gloss-derived
+     roughness. Without this the torso kept a plain MeshStandardMaterial while
+     the face under it had subsurface scattering, and the two met at the neck in
+     a hard line: warm glowing face, flat matte chest. */
+  const skinGloss = useCharacter((s) => s.skinGloss);
+  const skinSss = useCharacter((s) => s.skinSss);
 
   /* Two parallel material sets: the textured standard material each slot uses
      once its atlas lands, and the grey stand-in the same geometry draws with
      while it has none. Group/material indices stay aligned with `slots`. */
   const { standardMaterials, greyMaterials } = useMemo(() => {
     const standard = slots.map(({ spec }) => {
+      const skin = spec.role === 'skin';
+      const isHair = spec.role === 'hair';
       const material = new THREE.MeshStandardMaterial({
-        color: '#ffffff',
-        roughness: spec.role === 'hair' ? 0.62 : 0.55,
-        metalness: 0.0,
-        transparent: false,
+        color: skin && skinColor ? skinColor : (isHair && hair ? hair.tone : '#ffffff'),
+        roughness: skin
+          ? skinRoughnessFromGloss(skinGloss)
+          : isHair && hair ? Math.max(0.12, 0.62 - hair.gloss * 0.46) : 0.55,
+        metalness: isHair ? 0.05 : 0.0,
+        transparent: isHair,
         /* The producer decodes the shader's authored cutout/2-sided flags;
            only fall back to the role defaults when it did not. */
         alphaTest: spec.alphaTest ?? (spec.role === 'hair' ? 0.35 : 0),
+        alphaToCoverage: isHair,
         depthWrite: true,
         side: (spec.doubleSided ?? spec.role === 'hair') ? THREE.DoubleSide : THREE.FrontSide,
-        visible: false,
+        visible: true,
       });
       material.name = spec.name;
+      if (skin) applySkinGloss(material, skinGloss, skinSss);
       return material;
     });
     const grey = slots.map(({ spec }) => new THREE.MeshBasicMaterial({
@@ -159,14 +232,55 @@ export function SkinnedPart({
         : {}),
     }));
     return { standardMaterials: standard, greyMaterials: grey };
-    // Materials are rebuilt only when the mesh's authored slots change.
+    // Materials are rebuilt only when the mesh's authored slots change; the
+    // gloss is pushed live by the effect below instead of rebuilding them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mesh]);
 
-  /** Slots whose atlas has actually loaded this mount; everything else greys. */
+  /* The same live update `HeadModel` applies to the face and neck. It has to be
+     its own effect rather than a dependency of the memo above: rebuilding the
+     material set would re-run the texture loads and flash the body grey. */
+  useEffect(() => {
+    slots.forEach((slot, i) => {
+      if (slot.spec.role !== 'skin') return;
+      const material = standardMaterials[i];
+      if (material) updateSkinGloss(material, skinGloss, skinSss);
+    });
+  }, [slots, standardMaterials, skinGloss, skinSss]);
+
+  /* Live skinColor tint for skin slots (head/neck/body sync), without reloading textures. */
+  useEffect(() => {
+    if (!skinColor) return;
+    slots.forEach((slot, i) => {
+      if (slot.spec.role !== 'skin') return;
+      const material = standardMaterials[i];
+      if (material) {
+        material.color.set(skinColor);
+        material.needsUpdate = true;
+      }
+    });
+  }, [slots, standardMaterials, skinColor]);
+
+  /* Live hair tone/gloss updates for hair slots, without reloading textures. */
+  useEffect(() => {
+    if (!hair) return;
+    slots.forEach((slot, i) => {
+      if (slot.spec.role !== 'hair') return;
+      const material = standardMaterials[i];
+      if (material) {
+        material.color.set(hair.tone);
+        material.roughness = Math.max(0.12, 0.62 - hair.gloss * 0.46);
+        material.needsUpdate = true;
+      }
+    });
+  }, [slots, standardMaterials, hair?.tone, hair?.gloss]);
+
+  /** Slots whose atlas has actually loaded or failed this mount. */
   const [loaded, setLoaded] = useState<ReadonlySet<number>>(() => new Set());
+  const [failed, setFailed] = useState<ReadonlySet<number>>(() => new Set());
   useEffect(() => {
     setLoaded(new Set());
+    setFailed(new Set());
   }, [standardMaterials]);
 
   useEffect(() => {
@@ -177,7 +291,7 @@ export function SkinnedPart({
     const clearSlot = (i: number) => {
       const material = standardMaterials[i];
       if (!material) return;
-      for (const slotName of ['map', 'normalMap'] as const) {
+      for (const slotName of ['map', 'normalMap', 'roughnessMap'] as const) {
         const tex = material[slotName];
         if (tex) {
           tex.dispose();
@@ -189,13 +303,20 @@ export function SkinnedPart({
     };
 
     setLoaded(new Set());
+    setFailed(new Set());
     slots.forEach((slot, i) => {
       const material = standardMaterials[i];
       if (!material) return;
 
-      material.visible = false;
-      if (hidden.has(slot.spec.role)) return;
-      if (!slot.texture) return;
+      if (hidden.has(slot.spec.role)) {
+        material.visible = false;
+        return;
+      }
+      if (!slot.texture) {
+        material.visible = false;
+        return;
+      }
+      material.visible = true;
 
       const tex = loader.load(
         slot.texture,
@@ -214,13 +335,22 @@ export function SkinnedPart({
         // The producer promised this URL; a failure means the pack is
         // incomplete. That slot greys rather than painting white.
         () => {
-          if (!cancelled) clearSlot(i);
+          if (!cancelled) {
+            clearSlot(i);
+            setFailed((prev) => {
+              if (prev.has(i)) return prev;
+              const next = new Set(prev);
+              next.add(i);
+              return next;
+            });
+          }
         },
       );
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.flipY = true;
       tex.wrapS = THREE.RepeatWrapping;
       tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = 8;
       material.map = tex;
 
       if (slot.normalTexture) {
@@ -233,9 +363,30 @@ export function SkinnedPart({
         normal.flipY = true;
         normal.wrapS = THREE.RepeatWrapping;
         normal.wrapT = THREE.RepeatWrapping;
+        normal.anisotropy = 8;
         material.normalMap = normal;
       }
 
+      /* The `_n.dds` alpha as a gloss mask. `colorSpace` stays linear: this is
+         a multiplier, and three reads its green channel. The material's own
+         scalar roughness remains the overall level the GLOSS slider drives. */
+      if (slot.roughnessTexture) {
+        const rough = loader.load(slot.roughnessTexture, undefined, undefined, () => {
+          if (cancelled || material.roughnessMap !== rough) return;
+          material.roughnessMap = null;
+          rough.dispose();
+          material.needsUpdate = true;
+        });
+        rough.flipY = true;
+        rough.wrapS = THREE.RepeatWrapping;
+        rough.wrapT = THREE.RepeatWrapping;
+        rough.anisotropy = 8;
+        material.roughnessMap = rough;
+      }
+
+      if (slot.spec.role === 'skin' && skinColor) {
+        material.color.set(skinColor);
+      }
       if (slot.spec.role === 'hair' && hair) {
         material.color.set(hair.tone);
         material.roughness = Math.max(0.12, 0.62 - hair.gloss * 0.46);
@@ -262,30 +413,37 @@ export function SkinnedPart({
   );
 
   /* Hidden roles vanish (their standard material is invisible and they never
-     get grey). Everything else draws: the standard material once its atlas is
-     on the GPU, the flat grey stand-in until then or for good when the pack
-     supplied no atlas. */
+     get grey). Everything else draws: the standard material if authored and not failed,
+     the flat grey stand-in when the pack supplied no atlas or failed to load. */
   const renderMaterials = useMemo(
-    () => slots.map((slot, i) =>
-      hidden.has(slot.spec.role)
-        ? standardMaterials[i]
-        : loaded.has(i) ? standardMaterials[i] : greyMaterials[i]),
-    [slots, hidden, loaded, standardMaterials, greyMaterials],
+    () => slots.map((slot, i) => {
+      if (hidden.has(slot.spec.role)) return standardMaterials[i];
+      if (!slot.texture || failed.has(i)) return greyMaterials[i];
+      return standardMaterials[i];
+    }),
+    [slots, hidden, standardMaterials, greyMaterials, failed],
   );
 
   const object = useMemo(
-    () => buildPart(mesh, registry, renderOrder),
+    () => buildPart(mesh, registry, renderOrder, name, defaultRole),
     // The registry is stable for the scene's lifetime. Materials are swapped
     // in below rather than passed here: rebuilding the object on every texture
     // load would re-register the bones and re-bind mid-pose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mesh, renderOrder],
+    [mesh, renderOrder, name, defaultRole],
   );
 
   useEffect(() => {
     object.material = renderMaterials;
     object.renderOrder = renderOrder;
-  }, [object, renderMaterials, renderOrder]);
+    /* A grey stand-in has no `map` for the shadow pass to alpha-test, so an
+       unloaded hair card would cast a solid quad. Cast only when every slot
+       that will draw is a real textured material. */
+    object.castShadow = slots.every(
+      (slot, i) => hidden.has(slot.spec.role) || !slot.texture || loaded.has(i),
+    );
+    object.receiveShadow = true;
+  }, [object, renderMaterials, renderOrder, slots, hidden, loaded]);
 
   /* The throwaway material `buildPart` needs before the real slots exist. */
   useEffect(() => {

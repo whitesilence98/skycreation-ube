@@ -4,7 +4,11 @@ import { useCharacter } from '@/lib/store';
 import { SLIDER_DEFS, REGIONS_BY_ID, type TransformMode } from '@/lib/regions';
 import { IconMove, IconRotate, IconScale, IconSparkle } from '@/components/hud/Icons';
 import { HairController } from '@/components/hud/HairController';
+import { MakeupProperties } from '@/components/hud/MakeupProperties';
+import { BodyProperties } from '@/components/hud/BodyProperties';
+import { HudSlider as Slider } from '@/components/hud/HudSlider';
 import { cn } from '@/lib/cn';
+import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
 const MODES: Array<{ id: TransformMode; label: string; Icon: (p: { className?: string }) => React.JSX.Element }> = [
   { id: 'translate', label: 'MOVE', Icon: IconMove },
@@ -12,7 +16,11 @@ const MODES: Array<{ id: TransformMode; label: string; Icon: (p: { className?: s
   { id: 'scale', label: 'SCALE', Icon: IconScale },
 ];
 
-export function RightPanel() {
+interface RightPanelProps {
+  manifest?: Mo2Manifest | null;
+}
+
+export function RightPanel({ manifest = null }: RightPanelProps) {
   const mode = useCharacter((s) => s.transformMode);
   const setMode = useCharacter((s) => s.setTransformMode);
   const activeRegion = useCharacter((s) => s.activeRegion);
@@ -20,6 +28,7 @@ export function RightPanel() {
      FACE the rail was still offering MOVE/ROTATE sliders for a region the
      tab lists no assets for, which read as two competing sections. */
   const primaryTab = useCharacter((s) => s.primaryTab);
+  const subTab = useCharacter((s) => s.subTab);
   const sliders = useCharacter((s) => s.sliders[s.activeRegion]);
   const setSlider = useCharacter((s) => s.setSlider);
   const setActiveSlider = useCharacter((s) => s.setActiveSlider);
@@ -31,15 +40,17 @@ export function RightPanel() {
   /* HAIR owns its own controller rail (and the length ruler beside it); the
      sculpt controller is a different tool for a different tab. */
   if (primaryTab === 'HAIR') return <HairController />;
+  if (primaryTab === 'FACE' && subTab === 'MAKEUP') return <MakeupProperties />;
+  if (primaryTab === 'BODY') return <BodyProperties manifest={manifest} />;
   if (primaryTab !== 'FACE SHAPE') return null;
 
   return (
-    /* Reference metric: rail content spans x 773–987; heading baseline at
-       y ≈ 111; mode tabs y 125–161 (36 px tall). */
-    <aside className="pointer-events-auto absolute right-[37px] top-[103px] z-20 w-[214px] select-none hud-fade">
-      <h2 className="mb-[10px] text-[9px] font-normal tracking-[0.13em] text-[#e2d8c6]/88">
-        CUSTOMIZATION CONTROLLER
-      </h2>
+    /* Fluid rail body: the owning aside supplies the dock and scroll, so this
+       column only handles its own padding and width. */
+    <div className="pointer-events-auto w-full select-none p-3 hud-fade">
+      <div className="mb-[12px] border-b border-[#d4b483]/20 pb-[6px]">
+        <h3 className="text-[10px] font-medium tracking-[0.14em] text-[#d8c39c] uppercase">SCULPT CONTROLLER</h3>
+      </div>
 
       {/* ── transform tabs ────────────────────────────────────────── */}
       <div className="flex items-stretch gap-[5px]">
@@ -59,7 +70,7 @@ export function RightPanel() {
               )}
             >
               <Icon className={cn('h-[9px] w-[9px] shrink-0', active ? 'opacity-90' : 'opacity-55')} />
-              <span className="whitespace-nowrap text-[7.5px] tracking-[0.1em]">
+              <span className="whitespace-nowrap text-[10px] tracking-[0.1em]">
                 [ {label} ]
               </span>
               {active && (
@@ -120,78 +131,9 @@ export function RightPanel() {
         </div>
       </div>
 
-      <p className="mt-[10px] whitespace-nowrap pl-[1px] text-[6px] tracking-[0.13em] text-[#8b8375]/52">
+      <p className="mt-[10px] whitespace-nowrap pl-[1px] text-[10px] tracking-[0.13em] text-[#8b8375]/52">
         {region.short} · {region.bone} · RACEMENU MORPH
       </p>
-    </aside>
-  );
-}
-
-interface SliderProps {
-  label: string;
-  suffix?: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  display: string;
-  onChange: (v: number) => void;
-  onActiveChange: (active: boolean) => void;
-  bracketed: boolean;
-}
-
-function Slider({
-  label,
-  suffix,
-  value,
-  min,
-  max,
-  step,
-  display,
-  onChange,
-  onActiveChange,
-  bracketed,
-}: SliderProps) {
-  const pct = ((value - min) / (max - min)) * 100;
-
-  return (
-    /* Fixed geometry, not content-derived. Reference track centres, measured
-       off reference.png: 237.5, 278.5, 320.5, | 380.5, 421.5, 462.5 — a 41.5 px
-       pitch with a 60 px stride across the divider. A 28 px row plus a
-       13.5 px margin lands exactly there, and the divider's own margins make
-       up the extra 18.5 px across the gap. */
-    <div className="mb-[13.5px] h-[28px]">
-      <div className="mb-[4px] flex h-[10px] items-baseline justify-between">
-        <label className="flex items-baseline gap-[4px] text-[7.5px] tracking-[0.09em] text-[#cec5b3]/88">
-          <span>{label}</span>
-          {suffix && <span className="text-[6.5px] tracking-[0.03em] text-[#a89e8d]/62">{suffix}</span>}
-        </label>
-        <span
-          className={cn(
-            'num text-[7.5px] tracking-[0.02em]',
-            bracketed ? 'text-[#d8c9ad]/88' : 'text-[#c3baa9]/80',
-          )}
-        >
-          {display}
-        </span>
-      </div>
-
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        onPointerDown={() => onActiveChange(true)}
-        onPointerUp={() => onActiveChange(false)}
-        onPointerCancel={() => onActiveChange(false)}
-        onFocus={() => onActiveChange(true)}
-        onBlur={() => onActiveChange(false)}
-        aria-label={`${label} ${suffix ?? ''}`.trim()}
-        className="hud-range h-[9px]"
-        style={{ ['--pct' as string]: `${pct}%` }}
-      />
     </div>
   );
 }

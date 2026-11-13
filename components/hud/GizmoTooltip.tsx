@@ -33,12 +33,12 @@ export function GizmoTooltip() {
       style={{
         left: x,
         top: y,
-        transform: 'translate(0,-50%) scale(var(--hud-scale, 1))',
+        transform: 'translate(0,-50%)',
         transformOrigin: 'left center',
       }}
     >
       <div className="h-px w-6 bg-[#d4b483]/45" />
-      <div className="tooltip-dark px-2 py-[5px] text-[9px] leading-[1.35] tracking-[0.14em] text-[#cfc6b4]">
+      <div className="tooltip-dark px-2 py-[5px] text-[10px] leading-[1.35] tracking-[0.14em] text-[#cfc6b4]">
         <div className="flex items-center gap-1">
           <span className="inline-block h-[3px] w-[3px] rounded-full bg-[#d4b483]" />
           <span className="text-[#e4d8c2]">{label}</span>

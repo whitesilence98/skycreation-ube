@@ -3,11 +3,13 @@
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Hud } from '@/components/hud/Hud';
-import { resolveManifest } from '@/lib/manifestSelect';
+import { resolveManifest, sculptHeadFor } from '@/lib/manifestSelect';
+import { payloadFromMorphs } from '@/lib/presetIO';
 import { useAssetCatalogues } from '@/lib/mo2/useAssetCatalogues';
 import { resetAssetCatalogues } from '@/lib/mo2/client';
-import { useCharacter } from '@/lib/store';
+import { restoreSession, useCharacter } from '@/lib/store';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
+import { WebGLErrorBoundary } from '@/components/scene/WebGLErrorBoundary';
 
 /** A cold load reads a 2.2 MB head mesh plus a 4 k atlas; on a slow disk that
  *  can miss this. Past it the veil lifts regardless, so a dead URL degrades to
@@ -125,6 +127,7 @@ export function CharacterCreation() {
   const [sceneIssue, setSceneIssue] = useState<string | null>(null);
   const [revealFailsafe, setRevealFailsafe] = useState(false);
   const assetSelection = useCharacter((s) => s.assetSelection);
+  const equipment = useCharacter((s) => s.equipment);
   const catalogues = useAssetCatalogues();
   const setAssetSource = useCharacter((s) => s.setAssetSource);
 
@@ -200,8 +203,8 @@ export function CharacterCreation() {
      object when nothing is selected, which keeps the identity stable and
      stops the face bake from re-running on every render. */
   const resolved = useMemo(
-    () => resolveManifest(manifest, assetSelection, catalogues),
-    [manifest, assetSelection, catalogues],
+    () => resolveManifest(manifest, assetSelection, catalogues, equipment),
+    [manifest, assetSelection, catalogues, equipment],
   );
 
   /**
@@ -212,6 +215,59 @@ export function CharacterCreation() {
    */
   const sourceKnown = manifestSettled && manifest !== null;
   const sceneReady = sourceKnown && manifest?.available === true;
+
+  /**
+   * Restore the last session before anything else can overwrite it.
+   *
+   * The store skips hydration at import time (see `lib/store.ts`): the module
+   * is also evaluated on the server and inside the headless check scripts,
+   * where hydrating during initialisation either mismatches the server HTML or
+   * would need a `localStorage` that does not exist. Here there is a mounted
+   * document, so this is the one place the saved character is read. Writes are
+   * gated until it finishes, so an early click cannot save defaults over it.
+   */
+  useEffect(() => {
+    void restoreSession();
+  }, []);
+
+  const hydrated = useCharacter((s) => s.hydrated);
+  const restored = useCharacter((s) => s.restored);
+  const defaultOpened = useCharacter((s) => s.defaultOpened);
+  const markDefaultOpened = useCharacter((s) => s.markDefaultOpened);
+  const loadPreset = useCharacter((s) => s.loadPreset);
+  /**
+   * Open on the pack's `Default.jslot` rather than whichever preset sorts
+   * first. It is the face a new character starts with, and the panel's first
+   * row ([3BA] Nini) is an arbitrary alphabetical winner.
+   *
+   * Its shape lives in `morphs.sculpt`, not in `morphs.custom`, so the file
+   * alone cannot change the head: the producer bakes the sculpt against its
+   * `!UBE\Head\femaleHeadCharGen.tri` host into a `-sculpt` headMesh, and
+   * selecting that mesh is what actually shows the face. Without the baked
+   * head this would only nudge the sliders and look like a no-op.
+   */
+  useEffect(() => {
+    /* A saved session is the character the user was building — the startup
+       preset must not touch it. A first visit has nothing stored, so
+       `restored` stays false and the default face still opens. */
+    if (!hydrated || restored || defaultOpened || !manifest?.available) return;
+    const preset = manifest.assets?.preset?.find((p) => p.file === 'Default.jslot');
+    if (!preset) return;
+    /* Marked in the store, not a ref: React StrictMode double-mounts this
+       effect in development and a ref would be recreated for the second pass,
+       applying the preset (and its camera bump) twice. */
+    markDefaultOpened();
+    const head = sculptHeadFor(manifest, preset.file);
+    loadPreset(
+      /* No name: the catalogue's `Default (sculpt only; approximate)` label is
+         producer diagnostics, not something to wear in the top bar. */
+      payloadFromMorphs(head?.origin === 'racemenu-export' ? [] : preset.morphs ?? [], {
+        baked: head?.origin === 'racemenu-export',
+        actorWeight: preset.actor?.weight,
+      }),
+      head?.id,
+    );
+  }, [hydrated, restored, defaultOpened, manifest, loadPreset, markDefaultOpened]);
   /* Settled without an available source — including a network failure, where
      the source is unknown — is a final state, not a longer spinner. */
   const unavailable = manifestSettled && !sceneReady;
@@ -224,11 +280,13 @@ export function CharacterCreation() {
           an early mount would issue legacy asset requests that pack mode must
           never make. */}
       {sceneReady ? (
-        <CharacterScene
-          manifest={resolved}
-          onAssetsReady={handleAssetsReady}
-          onIssue={handleSceneIssue}
-        />
+        <WebGLErrorBoundary>
+          <CharacterScene
+            manifest={resolved}
+            onAssetsReady={handleAssetsReady}
+            onIssue={handleSceneIssue}
+          />
+        </WebGLErrorBoundary>
       ) : (
         <ViewportBackdrop />
       )}

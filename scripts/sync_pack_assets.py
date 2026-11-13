@@ -16,6 +16,7 @@ never leaves the config.
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import hashlib
 import json
@@ -42,7 +43,7 @@ from index_mo2_assets import (  # noqa: E402
 # Kind order mirrors `lib/mo2/types.ts` PICKER_KINDS.
 PACK_KINDS = [
     "headMesh", "eyeMesh", "lashesMesh", "browsMesh", "mouthMesh", "bodyMesh",
-    "hairMesh", "clothingMesh",
+    "handsMesh", "feetMesh", "hairMesh", "clothingMesh",
     "skeleton",
     "skin", "eyes", "lashes", "brows", "mouth", "body", "hair", "clothing",
     "preset", "makeup", "tattoo", "wrinkle", "other",
@@ -51,6 +52,7 @@ PACK_MESH_KINDS = frozenset(k for k in PACK_KINDS if k.endswith("Mesh"))
 TEXTURE_KIND_FOR_MESH = {
     "headMesh": "skin", "eyeMesh": "eyes", "lashesMesh": "lashes",
     "browsMesh": "brows", "mouthMesh": "mouth", "bodyMesh": "body",
+    "handsMesh": "body", "feetMesh": "body",
     "hairMesh": "hair", "clothingMesh": "clothing",
 }
 TEXTURE_EXTS = {".dds", ".png", ".jpg", ".jpeg", ".tga"}
@@ -71,6 +73,99 @@ TEXTURE_KIND_BY_ROLE = {
 SLOT_TO_MAPROLE = {"albedo": "albedo", "normal": "normal"}
 REQUIRED_SLOTS = ("albedo", "normal")
 OPTIONAL_SLOTS = ("specular", "gloss", "emissive")
+
+PARTS: dict[str, dict[str, Any]] = {
+    "clothing": {
+        "label": "Clothing & Armor",
+        "subdirs": ["clothing", "clothes", "shared"],
+        "kinds": ["clothingMesh", "clothing"],
+        "manifest_keys": ["clothingMesh", "clothing"],
+        "aliases": ["clothes", "outfit", "outfits", "armor", "armour", "equipment"],
+    },
+    "hair": {
+        "label": "Hair & Wigs",
+        "subdirs": ["hair", "hairs"],
+        "kinds": ["hairMesh", "hair"],
+        "manifest_keys": ["hairMesh", "hair"],
+        "aliases": ["hairs", "wig", "wigs", "hairstyle", "hairstyles"],
+    },
+    "presets": {
+        "label": "RaceMenu Presets",
+        "subdirs": ["presets"],
+        "kinds": ["preset"],
+        "manifest_keys": ["preset", "headMesh"],
+        "aliases": ["preset", "jslot", "chargen"],
+    },
+    "body": {
+        "label": "Body, Hands & Feet",
+        "subdirs": ["body"],
+        "kinds": ["bodyMesh", "body", "handsMesh", "feetMesh"],
+        "manifest_keys": ["body", "bodyMesh", "handsMesh", "feetMesh"],
+        "aliases": ["bodies", "figure", "torso", "hands", "feet"],
+    },
+    "skin": {
+        "label": "Head Skin",
+        "subdirs": ["head", "skin"],
+        "kinds": ["skin"],
+        "manifest_keys": ["skin", "headMesh", "textures"],
+        "aliases": ["head", "face", "diffuse"],
+    },
+    "eyes": {
+        "label": "Eyes",
+        "subdirs": ["eyes"],
+        "kinds": ["eyes", "eyeMesh"],
+        "manifest_keys": ["eyes", "eyeMesh", "textures", "eye"],
+        "aliases": ["eye", "iris"],
+    },
+    "lashes": {
+        "label": "Eyelashes",
+        "subdirs": ["lashes"],
+        "kinds": ["lashes", "lashesMesh"],
+        "manifest_keys": ["lashes", "lashesMesh"],
+        "aliases": ["lash", "eyelash", "eyelashes"],
+    },
+    "brows": {
+        "label": "Eyebrows",
+        "subdirs": ["brows"],
+        "kinds": ["brows", "browsMesh"],
+        "manifest_keys": ["brows", "browsMesh"],
+        "aliases": ["brow", "eyebrow", "eyebrows"],
+    },
+    "mouth": {
+        "label": "Mouth & Teeth",
+        "subdirs": ["mouth"],
+        "kinds": ["mouth", "mouthMesh"],
+        "manifest_keys": ["mouth", "mouthMesh"],
+        "aliases": ["teeth", "lips"],
+    },
+    "skeleton": {
+        "label": "Skeleton Rig",
+        "subdirs": ["skeleton"],
+        "kinds": ["skeleton"],
+        "manifest_keys": ["skeleton"],
+        "aliases": ["skel", "rig", "bones"],
+    },
+    "overlays": {
+        "label": "Overlays (Makeup / Tattoos)",
+        "subdirs": ["overlays"],
+        "kinds": ["makeup", "tattoo", "wrinkle"],
+        "manifest_keys": ["makeup", "tattoo", "wrinkle"],
+        "aliases": ["overlay", "makeup", "tattoo", "tattoos", "wrinkle", "wrinkles"],
+    },
+}
+
+
+def resolve_part(name: str | None) -> str | None:
+    if not name:
+        return None
+    norm = name.strip().replace("/", "\\").split("\\")[-1].lower().replace("-", "_")
+    if norm in PARTS:
+        return norm
+    for canonical, info in PARTS.items():
+        if norm in info["aliases"]:
+            return canonical
+    return None
+
 
 
 # The validated FRTRI bases. The pack's NIF head/eye/lash/brow/mouth meshes are
@@ -196,6 +291,27 @@ def atomic_image(im, path: Path, fmt: str, **kwargs: Any) -> None:
     os.replace(tmp, path)
 
 
+def facial_albedo_for_webp(im):
+    """An atlas for the GPU: alpha kept only where the source actually uses it.
+
+    `to_srgb_rgb` composites onto the HUD's dark ground, which is right for a
+    skin or body diffuse that covers its whole rectangle. It is wrong for the
+    alpha-cutout parts: COR's lashes are 73% transparent and its brows 92%, so
+    compositing turned both into fully opaque plates and `alphaTest` had
+    nothing left to cut — the part drew as a black slab over the eye.
+
+    Deciding from the pixels rather than from the part's name keeps eyes and
+    mouth (100% opaque) as the smaller RGB map while lashes and brows carry the
+    channel their geometry needs.
+    """
+    if im.mode not in ("RGBA", "LA", "P"):
+        return im.convert("RGB")
+    rgba = im.convert("RGBA")
+    if rgba.getchannel("A").getextrema() == (255, 255):
+        return rgba.convert("RGB")
+    return rgba
+
+
 def safe_needles(root: str | Path) -> list[str]:
     """Every spelling of the absolute root that must never reach served JSON.
 
@@ -281,21 +397,32 @@ def classify_pack(rel: str, path: Path | None = None) -> tuple[str, str | None, 
     # Data-like tree (`meshes\hairs`), and the old MO2 top-level form
     # (`hairs\...`, `clothes\...`).
     hair_section = (
-        section == "hairs"
-        or (section == "hair" and data_section == "meshes")
-        or (data_section == "meshes" and data_sub == "hairs")
+        section in ("hairs", "hair")
+        or (data_section == "meshes" and data_sub in ("hairs", "hair"))
     )
     cloth_section = (
-        section == "clothes"
-        or (section == "clothing" and data_section == "meshes")
-        or (data_section == "meshes" and data_sub == "clothes")
+        section in ("clothes", "clothing")
+        or (data_section == "meshes" and data_sub in ("clothes", "clothing"))
     )
-    if hair_section and ext == ".nif":
-        return "hairMesh", None, True
-    if cloth_section and ext == ".nif":
-        return "clothingMesh", None, True
+    if hair_section:
+        if ext == ".nif":
+            return "hairMesh", None, True
+        if ext in TEXTURE_EXTS:
+            map_role = "normal" if stem.endswith("_n") else "albedo"
+            return "hair", map_role, False
+        return "other", "mesh", False
+    if cloth_section:
+        if ext == ".nif":
+            return "clothingMesh", None, True
+        if ext in TEXTURE_EXTS:
+            map_role = "normal" if stem.endswith("_n") else "albedo"
+            return "clothing", map_role, False
+        return "other", "mesh", False
 
     kind, role = classify(data_parts[0] if data_parts else "pack", rest)
+
+    if ext == ".nif" and kind in ("bodyMesh", "handsMesh", "feetMesh"):
+        return kind, None, True
 
     if ext == ".nif" and kind in PACK_MESH_KINDS:
         # Part NIFs used to be demoted wholesale on the belief that only the
@@ -313,8 +440,29 @@ def classify_pack(rel: str, path: Path | None = None) -> tuple[str, str | None, 
     return kind, role, False
 
 
-def iter_pack_files(root: Path) -> Iterable[tuple[str, Path, os.stat_result]]:
+def iter_pack_files(root: Path, subdirs: Iterable[str] | None = None) -> Iterable[tuple[str, Path, os.stat_result]]:
     root_real = root.resolve()
+    if subdirs:
+        for sub in subdirs:
+            sub_real = (root_real / sub).resolve()
+            if not sub_real.is_dir() or not _inside(root_real, sub_real):
+                continue
+            for dirpath, dirnames, filenames in os.walk(sub_real):
+                dirnames[:] = sorted(d for d in dirnames if _inside(root_real, Path(dirpath, d)))
+                for fn in sorted(filenames):
+                    p = Path(dirpath) / fn
+                    ext = p.suffix.lower()
+                    if ext in IGNORED_EXTS or ext not in PACK_EXTS:
+                        continue
+                    try:
+                        st = p.stat()
+                        rel = str(p.relative_to(root_real)).replace("/", "\\")
+                    except (OSError, ValueError):
+                        continue
+                    if asset_source.resolve_rel(root_real, rel) is None:
+                        continue
+                    yield rel, p, st
+        return
     for dirpath, dirnames, filenames in os.walk(root_real):
         # Symlinked/junctioned directories could leave the pack.
         dirnames[:] = sorted(d for d in dirnames if _inside(root_real, Path(dirpath, d)))
@@ -376,30 +524,37 @@ def weight_key(stem: str) -> tuple[str, int] | None:
 
 
 def build_weight_pairs(entries: list[dict[str, Any]]) -> int:
-    """Join `_0`/`_1` body meshes into a weight pair. Returns how many joined.
+    """Join `_0`/`_1` meshes into a weight pair. Returns how many joined.
 
     The two halves are only a pair when they are the same topology — same
     indices, same UVs, same normal count — because the renderer lerps
     positions vertex-for-vertex and anything else would tear. Measured on
     CBBE 3BA: 20,542 v / 39,842 t both sides, indices and UVs identical.
+
+    Clothing is included: a Skyrim armour NIF ships the same `_0`/`_1` halves
+    over one atlas, and measured on every decodable outfit pair in the pack the
+    topology is identical (UV deltas are ~1e-4, below a texel). The blend is
+    position + normal only, so that is safe.
     """
-    groups: dict[str, dict[int, dict[str, Any]]] = {}
+    groups: dict[tuple[str, str, str], dict[int, dict[str, Any]]] = {}
     for e in entries:
-        if e.get("kind") != "bodyMesh" or e.get("decodable") is False:
+        if e.get("kind") not in ("bodyMesh", "handsMesh", "feetMesh", "clothingMesh") or e.get("decodable") is False:
             continue
         key = weight_key(Path(e["file"]).stem)
         if not key or key[1] not in (0, 1):
             continue
-        groups.setdefault(key[0], {})[key[1]] = e
+        groups.setdefault((e["kind"], str(Path(e["rel"]).parent).lower(), key[0]), {})[key[1]] = e
 
     joined = 0
-    for stem, halves in groups.items():
+    for (_, _, stem), halves in groups.items():
         w0, w1 = halves.get(0), halves.get(1)
         if not w0 or not w1:
             continue
         # Both must have decoded with the same counts. A pair that does not
         # match is left as two independent rows rather than blended wrongly.
-        if (w0.get("vertices"), w0.get("triangles")) != (w1.get("vertices"), w1.get("triangles")):
+        if (not w0.get("vertices") or not w0.get("triangles")
+                or (w0.get("vertices"), w0.get("triangles")) != (w1.get("vertices"), w1.get("triangles"))
+                or w0.get("topologyKey") != w1.get("topologyKey")):
             continue
         w0["weightKey"] = stem
         w1["weightKey"] = stem
@@ -412,7 +567,7 @@ def build_weight_pairs(entries: list[dict[str, Any]]) -> int:
     return joined
 
 
-def build_pairing(entries: list[dict[str, Any]], root: Path) -> None:
+def build_pairing(entries: list[dict[str, Any]], root: Path, target_kinds: set[str] | None = None) -> None:
     textures = [e for e in entries if e.get("kind") in TEXTURE_KIND_FOR_MESH.values()]
     by_rel = {e["rel"].lower(): e for e in textures}
     # NIFs name Data-relative paths; the rows are stored under their category.
@@ -425,6 +580,8 @@ def build_pairing(entries: list[dict[str, Any]], root: Path) -> None:
 
     for e in entries:
         if e.get("kind") not in PACK_MESH_KINDS or e.get("decodable") is False:
+            continue
+        if target_kinds is not None and e.get("kind") not in target_kinds:
             continue
         path = pack_rel(root, e["rel"])
         if path is None:
@@ -491,6 +648,74 @@ def material_roles(materials: list[dict[str, Any]]) -> dict[str, Any]:
     body = [m for m in materials if m.get("role") == "skin"]
     clothing = [m for m in materials if m.get("role") in ("clothing", "accessory")]
     return {"body": body, "clothing": clothing}
+
+
+# ── equipment slots ───────────────────────────────────────────────────────
+#
+# A Skyrim armour set is a folder of per-slot NIFs (`Gladiator Top`, `Gladiator
+# Arms`, `Gladiator Legs`), each with its own `_0`/`_1` weight halves. The pack
+# names them in English and in the original mod's language, so the slot is read
+# off the file stem by token, never off the folder: one folder legitimately
+# holds a chest piece and a pair of boots.
+#
+# `full` is the special case the app already had: a whole-body outfit that
+# carries its own embedded body and replaces the BODY tab's torso. It is kept
+# because presets and sessions reference those rows.
+
+EQUIP_SLOTS = (
+    "outfit",
+    "top",
+    "bottom",
+    "bra",
+    "panties",
+    "stockings",
+    "hands",
+    "feet",
+    "accessories",
+)
+
+# Matched **longest needle first**, so `armor` cannot be read as `arm` and
+# `sleaves` cannot be read as a bare `s`. Skyrim filenames are usually one
+# glued token (`hinterlandrangerpantsf`, `GladiatorArms`), so a whole-token
+# comparison would never fire — substring is the only workable match here.
+_EQUIP_NEEDLES: tuple[tuple[str, str], ...] = (
+    ("shoulder", "accessories"), ("pauldron", "accessories"), ("spaulder", "accessories"),
+    ("sleeve", "accessories"), ("sleaves", "accessories"), ("mantle", "accessories"),
+    ("gauntlet", "hands"), ("bracer", "hands"), ("glove", "hands"),
+    ("trouser", "bottom"), ("greave", "bottom"), ("skirt", "bottom"),
+    ("circlet", "accessories"), ("helmet", "accessories"), ("diadem", "accessories"),
+    ("breast", "bra"), ("bikini", "bra"), ("cuirass", "top"),
+    ("corset", "top"), ("armour", "top"), ("armor", "top"),
+    ("sandal", "feet"), ("boot", "feet"), ("shoe", "feet"), ("foot", "feet"),
+    ("helm", "accessories"), ("hood", "accessories"), ("mask", "accessories"), ("tiara", "accessories"),
+    ("shirt", "top"), ("vest", "top"), ("robe", "outfit"),
+    ("waist", "accessories"), ("belt", "accessories"), ("chest", "top"),
+    ("hand", "hands"), ("arm", "hands"),
+    ("pant", "bottom"), ("leg", "bottom"), ("kilt", "bottom"),
+    ("top", "top"), ("hat", "accessories"),
+    ("stocking", "stockings"), ("sock", "stockings"), ("knee guard", "stockings"),
+    ("undies", "panties"), ("panty", "panties"), ("panties", "panties"),
+)
+# Longest first; ties keep their declared order.
+_EQUIP_NEEDLES = tuple(sorted(_EQUIP_NEEDLES, key=lambda pair: -len(pair[0])))
+
+_WEIGHT_SUFFIX = re.compile(r"_([01])$")
+
+
+def equip_slot_for(rel: str, stem: str, has_body: bool = False, paired: bool = False) -> str:
+    """Which paper-doll slot a clothing NIF belongs to."""
+    parts = rel.replace("/", "\\").split("\\")
+    if len(parts) >= 2 and parts[0].lower() == "clothing":
+        slot = parts[1].lower()
+        if slot in EQUIP_SLOTS:
+            return slot
+    if has_body and not paired:
+        return "outfit"
+    name = _WEIGHT_SUFFIX.sub("", stem.lower())
+    for needle, slot in _EQUIP_NEEDLES:
+        if needle in name:
+            return slot
+    return "top"
 
 
 def material_refs(materials: list[dict[str, Any]]) -> dict[str, list[str]]:
@@ -588,10 +813,12 @@ def _validate_authored(
         entry["decodable"] = False
         entry["reason"] = "authored decode returned no render groups"
         return None
-    if entry.get("kind") == "clothingMesh" and not material_roles(mats)["body"]:
-        entry["decodable"] = False
-        entry["reason"] = "outfit has no identifiable embedded body/skin shape"
-        return None
+    # A garment-only NIF (boots, pants, sleeves) used to be discarded here for
+    # "no identifiable embedded body/skin shape". That rule dates from when the
+    # outfit was a single whole-body pick, where a garment with no body left a
+    # hole. With per-slot equipment the body comes from the BODY tab and these
+    # are exactly the pieces the paper-doll wants, so they decode normally and
+    # land on the same missing-texture path as every other authored row.
 
     canonical_refs(mats, root)
     refs = material_refs(mats)
@@ -601,8 +828,27 @@ def _validate_authored(
     normal_missing = required_missing(mats, set(existing_rel), ("normal",))
     opt_missing = optional_missing(mats, set(existing_rel))
     entry["decodable"] = True
+    entry["vertices"] = decoded["vertexCount"]
+    entry["triangles"] = decoded["triangleCount"]
+    # ponytail: blend positions only over the _1 atlas layout; UV morphing
+    # needs a separate interpolated attribute if a future pair requires it.
+    entry["topologyKey"] = hashlib.sha256(json.dumps(
+        [decoded.get(k) for k in ("indices", "skinIndex", "skinWeight", "bones")],
+        separators=(",", ":"),
+    ).encode()).hexdigest()
     entry["meshFrame"] = "head"
     entry["hasBodyShape"] = bool(material_roles(mats)["body"])
+    if entry.get("kind") == "clothingMesh":
+        # `_0`/`_1` pairing runs later over the whole catalogue, so a half is
+        # recognised here only by its filename; the pair flag only decides
+        # whether an embedded body means "whole outfit" or "one slot piece".
+        half = _WEIGHT_SUFFIX.search(Path(entry["file"]).stem.lower())
+        entry["equipSlot"] = equip_slot_for(
+            entry.get("rel", ""),
+            Path(entry["file"]).stem,
+            bool(entry["hasBodyShape"]),
+            paired=bool(half),
+        )
     entry["materialCount"] = len(mats)
     entry["groupCount"] = len(groups)
     if albedo_missing:
@@ -684,117 +930,148 @@ def by_rel_body_normal(catalogue: dict[str, list[dict[str, Any]]], body_row: dic
     return hit["id"] if hit is not None else None
 
 
-def build_catalogue(cfg: dict) -> int:
+def build_catalogue(cfg: dict, part: str | None = None) -> int:
     root = pack_root(cfg)
     out = Path(cfg["out"])
-    catalogue: dict[str, list[dict[str, Any]]] = {k: [] for k in PACK_KINDS}
+    target_part = resolve_part(part) if part and part.lower() != "all" else None
+    if part and not target_part and part.lower() != "all":
+        print(f"[!] Unknown part '{part}'. Available: {', '.join(sorted(PARTS.keys()))}", file=sys.stderr)
+        return 1
+
     errors: list[str] = []
     diagnostics: list[str] = []
     scanned = skipped = 0
 
     if not root.is_dir():
         errors.append(f"pack root not found: {root.name}")
+        return 1
+
+    existing_rel: dict[str, tuple[Path, os.stat_result]] = {}
+    referenced: dict[str, tuple[str, str]] = {}
+    skin_albedo: dict[str, str] = {}
+    raw: list[tuple[str, Path, os.stat_result]] = []
+
+    if target_part:
+        spec = PARTS[target_part]
+        target_subdirs = spec["subdirs"]
+        target_kinds = set(spec["kinds"])
+
+        catalogue: dict[str, list[dict[str, Any]]] = {k: _read_entries(out, k) for k in PACK_KINDS}
+        for k in PACK_KINDS:
+            catalogue[k] = [
+                e for e in catalogue[k]
+                if not any(e.get("rel", "").lower().startswith(s.lower() + "\\") for s in target_subdirs)
+            ]
+
+        for rows in catalogue.values():
+            for e in rows:
+                rel = e.get("rel")
+                if rel:
+                    fake_st = os.stat_result((33188, 0, 0, 1, 0, 0, e.get("bytes", 0), 0, int(e.get("mtime", 0)), 0))
+                    existing_rel[rel.lower()] = (root / rel, fake_st)
+
+        for rel, path, st in iter_pack_files(root, subdirs=target_subdirs):
+            raw.append((rel, path, st))
+            existing_rel[rel.lower()] = (path, st)
+            scanned += 1
     else:
-        existing_rel: dict[str, tuple[Path, os.stat_result]] = {}
-        referenced: dict[str, tuple[str, str]] = {}
-        # Lowercased shape rel -> the albedo its skin-role material names. The
-        # flat NIF scan can miss refs past its read window; the authored decode
-        # already has them, so pairing does not have to decode again.
-        skin_albedo: dict[str, str] = {}
-        raw: list[tuple[str, Path, os.stat_result]] = []
+        catalogue = {k: [] for k in PACK_KINDS}
+        target_kinds = set(PACK_KINDS)
         for rel, path, st in iter_pack_files(root):
             raw.append((rel, path, st))
             existing_rel[rel.lower()] = (path, st)
             scanned += 1
 
-        for rel, path, st in raw:
-            ext = path.suffix.lower()
-            kind, role, authored = classify_pack(rel, path)
-            if ext not in PACK_EXTS:
-                skipped += 1
-                continue
-            entry: dict[str, Any] = {
-                "id": pack_id(kind, rel, st, authored),
-                "mod": pack_paths.pack_mod(rel),
-                "file": path.name,
-                "label": path.stem,
-                "rel": rel,
-                "bytes": st.st_size,
-                "mtime": int(st.st_mtime),
-                "kind": kind,
-            }
-            if ext == ".jslot":
-                from sync_mo2_assets import parse_jslot_morphs
+    for rel, path, st in raw:
+        ext = path.suffix.lower()
+        kind, role, authored = classify_pack(rel, path)
+        if ext not in PACK_EXTS:
+            skipped += 1
+            continue
+        entry: dict[str, Any] = {
+            "id": pack_id(kind, rel, st, authored),
+            "mod": pack_paths.pack_mod(rel),
+            "file": path.name,
+            "label": path.stem,
+            "rel": rel,
+            "bytes": st.st_size,
+            "mtime": int(st.st_mtime),
+            "kind": kind,
+        }
+        if ext == ".jslot":
+            from sync_mo2_assets import parse_jslot_morphs
 
-                try:
-                    data = json.loads(path.read_text(encoding="utf-8-sig"))
-                    if not isinstance(data, dict) or not isinstance(data.get("morphs"), dict):
-                        raise ValueError("expected a RaceMenu morphs object")
-                    custom = data["morphs"].get("custom") or []
-                    if not isinstance(custom, list) or any(
-                        not isinstance(c, dict) or not isinstance(c.get("name"), str)
-                        or not isinstance(c.get("value"), (int, float))
-                        or not math.isfinite(c["value"]) for c in custom
-                    ):
-                        raise ValueError("invalid custom morph list")
-                    parsed = parse_jslot_morphs(path)
-                    if parsed.get("error"):
-                        raise ValueError(parsed["error"])
-                    entry.update(parsed)
-                    entry["available"] = True
-                except (ValueError, TypeError, AttributeError, KeyError, OverflowError) as exc:
-                    entry.update(available=False, unavailable=True, reason=f"Invalid preset: {exc}")
-            if role:
-                entry["mapRole"] = role
-            if ext == ".dds":
-                size = read_size(path)
-                if size:
-                    entry["size"] = size
-            if authored:
-                entry["authored"] = True
+            try:
+                data = json.loads(path.read_text(encoding="utf-8-sig"))
+                if not isinstance(data, dict) or not isinstance(data.get("morphs"), dict):
+                    raise ValueError("expected a RaceMenu morphs object")
+                custom = data["morphs"].get("custom") or []
+                if not isinstance(custom, list) or any(
+                    not isinstance(c, dict) or not isinstance(c.get("name"), str)
+                    or not isinstance(c.get("value"), (int, float))
+                    or not math.isfinite(c["value"]) for c in custom
+                ):
+                    raise ValueError("invalid custom morph list")
+                parsed = parse_jslot_morphs(path)
+                if parsed.get("error"):
+                    raise ValueError(parsed["error"])
+                entry.update(parsed)
+                entry["available"] = True
+            except (ValueError, TypeError, AttributeError, KeyError, OverflowError) as exc:
+                entry.update(available=False, unavailable=True, reason=f"Invalid preset: {exc}")
+        if role:
+            entry["mapRole"] = role
+        if ext == ".dds":
+            size = read_size(path)
+            if size:
+                entry["size"] = size
+        if authored:
+            entry["authored"] = True
 
-            if kind in PACK_MESH_KINDS:
-                entry["mapRole"] = "mesh"
-                stem_lower = path.stem.lower()
-                if path.suffix.lower() == ".tri" and "chargen" in stem_lower:
-                    entry["decodable"] = False
-                    entry["reason"] = "CharGen variant — not a standalone render choice"
-                elif path.suffix.lower() == ".nif" and authored:
-                    refs = _validate_authored(entry, path, existing_rel, root)
-                    if refs:
-                        for role, role_refs in refs.items():
-                            for ref in role_refs:
-                                referenced.setdefault(ref.lower(), (role, rel))
-                        skin_refs = refs.get("skin") or []
-                        albedo = next((r for r in skin_refs if r.lower().endswith("_d.dds")), None)
-                        if albedo:
-                            skin_albedo[rel.lower()] = albedo.lower()
-                else:
-                    probe = probe_mesh(path, path.stem)
-                    # `probe_mesh` only reads the 64-byte signature, which is
-                    # enough to refuse a PIRT `.tri` but not to promise a NIF
-                    # will decode: Xiaoyu's two files and Nini's sculpt carry a
-                    # valid Gamebryo header and still fail in the worker. The
-                    # pack is small (82 NIFs, 23 s to decode them all), so the
-                    # producer decodes once here and records the truth. This is
-                    # what keeps a greyed row greyed and a working one usable.
-                    if probe.get("decodable") and path.suffix.lower() == ".nif":
-                        probe = decode_probe(path)
-                    entry.update(probe)
-                    if probe.get("decodable"):
-                        entry["meshFrame"] = (
-                            "ground"
-                            if kind == "hairMesh" and "\\!cor\\hair\\" in rel.lower()
-                            else "head"
-                        )
+        if kind in PACK_MESH_KINDS:
+            entry["mapRole"] = "mesh"
+            stem_lower = path.stem.lower()
+            if path.suffix.lower() == ".tri" and "chargen" in stem_lower:
+                entry["decodable"] = False
+                entry["reason"] = "CharGen variant — not a standalone render choice"
+            elif path.suffix.lower() == ".nif" and authored:
+                refs = _validate_authored(entry, path, existing_rel, root)
+                if refs:
+                    for role, role_refs in refs.items():
+                        for ref in role_refs:
+                            referenced.setdefault(ref.lower(), (role, rel))
+                    skin_refs = refs.get("skin") or []
+                    albedo = next((r for r in skin_refs if r.lower().endswith("_d.dds")), None)
+                    if albedo:
+                        skin_albedo[rel.lower()] = albedo.lower()
+            else:
+                probe = probe_mesh(path, path.stem)
+                # `probe_mesh` only reads the 64-byte signature, which is
+                # enough to refuse a PIRT `.tri` but not to promise a NIF
+                # will decode: Xiaoyu's two files and Nini's sculpt carry a
+                # valid Gamebryo header and still fail in the worker. The
+                # pack is small (82 NIFs, 23 s to decode them all), so the
+                # producer decodes once here and records the truth. This is
+                # what keeps a greyed row greyed and a working one usable.
+                if probe.get("decodable") and path.suffix.lower() == ".nif":
+                    probe = decode_probe(path)
+                entry.update(probe)
+                if probe.get("decodable"):
+                    entry["meshFrame"] = (
+                        "ground"
+                        if kind == "hairMesh" and "\\!cor\\hair\\" in rel.lower()
+                        else "head"
+                    )
 
-            catalogue[kind].append(entry)
-            seen = {e["id"] for e in catalogue[kind][:-1]}
-            if entry["id"] in seen:
-                errors.append(f"duplicate id {entry['id']} in {kind}")
+        catalogue[kind].append(entry)
+        seen = {e["id"] for e in catalogue[kind][:-1]}
+        if entry["id"] in seen:
+            errors.append(f"duplicate id {entry['id']} in {kind}")
 
-        _apply_referenced_textures(catalogue, referenced, existing_rel)
+    _apply_referenced_textures(catalogue, referenced, existing_rel)
+    if not target_part or target_part in ("eyes", "lashes", "brows", "mouth", "skin"):
         _ensure_facial_rows(catalogue, existing_rel, root)
+    if not target_part or target_part in ("clothing", "body"):
         # The bodyMesh catalogue row is derived from the outfit, not a pack file.
         if not catalogue["bodyMesh"]:
             body_src = next(
@@ -839,7 +1116,7 @@ def build_catalogue(cfg: dict) -> int:
     all_entries = [e for rows in catalogue.values() for e in rows]
     weight_pairs = build_weight_pairs(all_entries)
     if root.is_dir():
-        build_pairing(all_entries, root)
+        build_pairing(all_entries, root, target_kinds=target_kinds if target_part else None)
 
     if not catalogue["preset"]:
         diagnostics.append("No .jslot presets in the pack (SKSE/Plugins/CharGen/Presets is empty).")
@@ -863,8 +1140,17 @@ def build_catalogue(cfg: dict) -> int:
     for kind in PACK_KINDS:
         rows = scrub(cfg, catalogue[kind])
         rows.sort(key=lambda e: e["rel"].lower())
-        atomic_json(out / "catalogue" / f"{kind}.json", rows)
+        if not target_part or kind in target_kinds:
+            atomic_json(out / "catalogue" / f"{kind}.json", rows)
         kinds_meta[kind] = {"count": len(rows), "file": f"catalogue/{kind}.json"}
+
+    cat_doc_path = out / "catalogue.json"
+    old_doc: dict[str, Any] = {}
+    if cat_doc_path.is_file():
+        try:
+            old_doc = json.loads(cat_doc_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
 
     doc = {
         "generatedAt": dt.datetime.now().isoformat(timespec="seconds"),
@@ -873,8 +1159,8 @@ def build_catalogue(cfg: dict) -> int:
         "sourceLayout": cfg["layout"],
         "sourceKey": cfg["sourceKey"],
         "available": root.is_dir(),
-        "scanned": scanned,
-        "skipped": skipped,
+        "scanned": scanned if not target_part else old_doc.get("scanned", scanned),
+        "skipped": skipped if not target_part else old_doc.get("skipped", skipped),
         "kinds": kinds_meta,
         "weightPairs": weight_pairs,
         "mesh": {
@@ -887,10 +1173,16 @@ def build_catalogue(cfg: dict) -> int:
         "diagnostics": diagnostics,
         "errors": errors,
     }
-    atomic_json(out / "catalogue.json", scrub(cfg, doc))
+    atomic_json(cat_doc_path, scrub(cfg, doc))
 
-    print(f"scanned {scanned} pack files under {root.name} ({skipped} irrelevant)")
-    for kind in PACK_KINDS:
+    if target_part:
+        print(f"scanned {scanned} pack files for part '{target_part}' ({skipped} irrelevant)")
+        for kind in sorted(target_kinds):
+            print(f"  {kind:12s} {kinds_meta[kind]['count']:5d}")
+    else:
+        print(f"scanned {scanned} pack files under {root.name} ({skipped} irrelevant)")
+        for kind in PACK_KINDS:
+            print(f"  {kind:12s} {kinds_meta[kind]['count']:5d}")
         print(f"  {kind:12s} {kinds_meta[kind]['count']:5d}")
     for d in diagnostics:
         print(f"  note: {d}")
@@ -971,6 +1263,26 @@ def _prebake_geometry(cfg: dict, cutoff: float, diagnostics: list[str]) -> tuple
     return rows, urls
 
 
+def _morphs_fingerprint(path: Path) -> str | None:
+    """Identity of a preset's *face*.
+
+    Only `morphs` shapes the head; `actor`, `headParts` and `tintInfo`
+    describe colour and worn parts. So two `.jslot` files carrying the same
+    `morphs` object render the same mesh — which is how `Default.jslot` and
+    `Ice Coffee 2025.jslot`, copies of `Iced Coffee.jslot` that differ only in
+    those other fields, find the export baked from it.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None
+    morphs = data.get("morphs") if isinstance(data, dict) else None
+    if not isinstance(morphs, dict):
+        return None
+    canon = json.dumps(morphs, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha1(canon.encode("utf-8")).hexdigest()
+
+
 def _prebake_presets(cfg: dict, cutoff: float, diagnostics: list[str]) -> tuple[list[dict], list[dict]]:
     """Prefer a same-name exported face; otherwise replay a validated host sculpt."""
     import math
@@ -981,6 +1293,10 @@ def _prebake_presets(cfg: dict, cutoff: float, diagnostics: list[str]) -> tuple[
     presets = json.loads((out / "catalogue" / "preset.json").read_text(encoding="utf-8"))
     heads: list[dict] = []
     exports: dict[str, dict] = {}
+    # Face fingerprint -> the export row already decoded for a preset that
+    # carries that same `morphs`. Filled during the loop below; consumed after
+    # it, so a copy can never be matched before the file it copies.
+    by_face: dict[str, dict] = {}
     sources = list(iter_pack_files(root))
     for rel, src, st in sources:
         if src.suffix.lower() != ".nif" or "chargen" not in [p.lower() for p in src.parts]:
@@ -1021,10 +1337,61 @@ def _prebake_presets(cfg: dict, cutoff: float, diagnostics: list[str]) -> tuple[
                 "bytes": st.st_size, "nodes": [], "version": "BSDynamicTriShape",
                 "shapes": {"vertexCount": head["vertexCount"], "triangleCount": head["triangleCount"]},
             }
+            # Companion face parts (eyes, lashes, brows) sculpted to match this head
+            for part_kind, part_key, rx in [
+                ("eyeMesh", "eyeMeshUrl", r"eye"),
+                ("lashesMesh", "lashesMeshUrl", r"lash"),
+                ("browsMesh", "browsMeshUrl", r"brow(?!n)"),
+            ]:
+                part_groups = []
+                for g in geo.get("groups", []):
+                    sname = str(geo["materials"][g["materialIndex"]].get("sourceShape", ""))
+                    if not re.search(rx, sname, re.I):
+                        continue
+                    if part_kind == "eyeMesh" and re.search(r"shadow|outer|lens|dummy|wetness|head|brow(?!n)", sname, re.I):
+                        continue
+                    if part_kind == "browsMesh" and re.search(r"eye", sname, re.I):
+                        continue
+                    part_groups.append(g)
+                if len(part_groups) == 1:
+                    pg = part_groups[0]
+                    p_indices = geo["indices"][pg["start"]:pg["start"] + pg["count"]]
+                    p_used = sorted(set(p_indices))
+                    p_remap = {v: i for i, v in enumerate(p_used)}
+                    part_geo = {
+                        key: [geo[key][v * width + axis] for v in p_used for axis in range(width)]
+                        for key, width in (("positions", 3), ("normals", 3), ("uvs", 2))
+                    }
+                    part_geo.update(indices=[p_remap[v] for v in p_indices], vertexCount=len(p_used), triangleCount=len(p_indices) // 3)
+                    if all(math.isfinite(v) and -0.5 < v < 0.5 for v in part_geo["positions"]):
+                        suffix = "eyes" if part_kind == "eyeMesh" else ("lashes" if part_kind == "lashesMesh" else "brows")
+                        sub_id = f"{mesh_id}-{suffix}"
+                        atomic_json(out / "meshes" / f"{sub_id}.json", part_geo, indent=None)
+                        row[part_key] = f"{cfg['publicBase']}/meshes/{sub_id}.json"
             heads.append(row)
             exports[src.stem.casefold()] = row
         except (ValueError, OSError, KeyError, IndexError, TypeError) as exc:
             diagnostics.append(f"RaceMenu export {src.name} unavailable: {exc}")
+
+    # Which export owns which face. Resolved before any preset is decided,
+    # because a copy can sort before the file it copies (`Default.jslot` comes
+    # before `Iced Coffee.jslot`) and must still find it.
+    faces: dict[str, str | None] = {}
+    for preset in presets:
+        if preset.get("available") is False:
+            continue
+        src = pack_rel(root, preset["rel"])
+        if src is not None:
+            faces[preset["id"]] = _morphs_fingerprint(src)
+    for preset in presets:
+        src = pack_rel(root, preset["rel"]) if preset.get("available") is not False else None
+        if src is None:
+            continue
+        stem = src.stem.casefold()
+        export = exports.get(stem) or (exports.get("nini") if stem == "[3ba] nini" else None)
+        face = faces.get(preset["id"])
+        if export and face:
+            by_face[face] = export
 
     for preset in presets:
         if preset.get("available") is False:
@@ -1039,6 +1406,34 @@ def _prebake_presets(cfg: dict, cutoff: float, diagnostics: list[str]) -> tuple[
             export["sculptSource"] = src.name
             preset["label"] = f"{src.stem} (RaceMenu export)"
             preset["geometrySource"] = "racemenu-export"
+            continue
+        # No export of its own, but the same `morphs` as one that has: the
+        # same face under another name. Point at that geometry rather than
+        # replaying a sculpt that cannot reach it. Each alias keeps its own id
+        # and its own `sculptSource` (so `sculptHeadFor` resolves exactly one
+        # head per preset and the one-head-per-preset rule holds) while
+        # sharing the mesh URL, never copying 1.2 MB.
+        twin = by_face.get(faces.get(preset["id"]) or "")
+        if twin and twin is not export:
+            twin_row = {
+                "id": preset["id"] + "-face", "mod": preset["mod"], "file": preset["file"],
+                "label": f"{src.stem} (RaceMenu export)",
+                # The NIF, not the `.jslot`: check_pack_contract re-decodes it
+                # to prove the export really is that head group.
+                "rel": twin["rel"],
+                "meshUrl": twin["meshUrl"], "isRealMesh": True, "meshFrame": "head",
+                "sculptSource": src.name, "origin": "racemenu-export", "available": True,
+                "headTextureMissing": twin.get("headTextureMissing", False),
+                "bytes": twin.get("bytes"), "nodes": [],
+                "version": twin.get("version", "BSDynamicTriShape"),
+                "shapes": dict(twin.get("shapes") or {}),
+            }
+            for k in ("eyeMeshUrl", "lashesMeshUrl", "browsMeshUrl"):
+                if k in twin:
+                    twin_row[k] = twin[k]
+            heads.append(twin_row)
+            preset["geometrySource"] = "racemenu-export"
+            preset["label"] = f"{src.stem} (RaceMenu export)"
             continue
         try:
             data = json.loads(src.read_text(encoding="utf-8-sig"))
@@ -1095,11 +1490,19 @@ def _prebake_presets(cfg: dict, cutoff: float, diagnostics: list[str]) -> tuple[
             preset["geometrySource"] = "morphs-only"
             preset["label"] = f"{src.stem} (no baked head)"
             diagnostics.append(f"Preset {src.name}: {exc}")
+    presets.sort(key=lambda p: (0 if str(p.get("file", "")).lower() == "default.jslot" else 1, p.get("label", "")))
     return presets, heads
 
 
+SKIN_BAKE = 2048
+SKIN_BAKE_QUALITY = 95
+SKIN_ROUGH_BAKE = 1024
+
+
 def _prebake_skin(cfg: dict, cutoff: float, diagnostics: list[str]) -> dict[str, Any] | None:
-    from sync_mo2_assets import analyze_skin, open_dds, to_srgb_rgb, to_tangent_normal
+    from sync_mo2_assets import (
+        analyze_skin, gloss_mask_from_normal, open_dds, to_srgb_rgb, to_tangent_normal,
+    )
 
     root = pack_root(cfg)
     out = Path(cfg["out"])
@@ -1119,14 +1522,36 @@ def _prebake_skin(cfg: dict, cutoff: float, diagnostics: list[str]) -> dict[str,
                 s = min(sq.size)
                 sq = sq.crop(((sq.width - s) // 2, (sq.height - s) // 2,
                               (sq.width + s) // 2, (sq.height + s) // 2))
-            atomic_image(sq.resize((1024, 1024), 1), dst, "WEBP", quality=88, method=6)
+            # The face occupies 47 % of the atlas width, so a 1024 bake leaves
+            # it ~480 px on screen. Measured mean |Laplacian| of the face crop
+            # at display scale: source 5.41, 1024 q88 (the previous bake) 0.72,
+            # 2048 q95 4.97. Almost all of the old loss was WebP quality, not
+            # the resize: 1024 lossless still measures 4.09. The bake is a
+            # one-off per pack, so it can afford the larger file.
+            atomic_image(
+                sq.resize((SKIN_BAKE, SKIN_BAKE), 1), dst,
+                "WEBP", quality=SKIN_BAKE_QUALITY, method=6,
+            )
         normal_url = None
         normal_src = pack_rel(root, HEAD_N)
+        gloss_url = None
         if normal_src is not None:
             n_dst = out / "textures" / "skin" / "head_n.png"
             if not is_fresh(normal_src, n_dst, cutoff):
                 atomic_image(to_tangent_normal(open_dds(normal_src), 1024), n_dst, "PNG", optimize=True)
             normal_url = f"{cfg['publicBase']}/textures/skin/head_n.png"
+            # Skyrim's `_n.dds` alpha is the gloss/specular mask, and this
+            # head's is spatially structured (cheeks 24.9, nose 21.6, lips
+            # 18.6, forehead 17.1, neck 13.3, scalp 10.2 of 255). Rendering it
+            # as a roughness map is what stops the whole face sharing one
+            # scalar roughness. Lossless: a lighting term must not band.
+            r_dst = out / "textures" / "skin" / "head_rough.webp"
+            if not is_fresh(normal_src, r_dst, cutoff):
+                mask = gloss_mask_from_normal(open_dds(normal_src), SKIN_ROUGH_BAKE)
+                if mask is not None:
+                    atomic_image(mask, r_dst, "WEBP", lossless=True, method=4)
+            if r_dst.exists():
+                gloss_url = f"{cfg['publicBase']}/textures/skin/head_rough.webp"
         print(f"[+] skin  {diffuse.name} {tuple(size)} -> textures/skin/head.webp")
         return {
             "id": pack_id("skin", rel, diffuse.stat()),
@@ -1136,6 +1561,7 @@ def _prebake_skin(cfg: dict, cutoff: float, diagnostics: list[str]) -> dict[str,
             "rel": rel,
             "texture": f"{cfg['publicBase']}/textures/skin/head.webp",
             "normalTexture": normal_url,
+            "roughnessTexture": gloss_url,
             "size": size,
             "palette": palette,
         }
@@ -1146,7 +1572,9 @@ def _prebake_skin(cfg: dict, cutoff: float, diagnostics: list[str]) -> dict[str,
 
 
 def _prebake_body(cfg: dict, cutoff: float, diagnostics: list[str]) -> dict[str, Any] | None:
-    from sync_mo2_assets import open_dds, to_srgb_rgb, to_tangent_normal
+    from sync_mo2_assets import (
+        gloss_mask_from_normal, open_dds, to_srgb_rgb, to_tangent_normal,
+    )
 
     root = pack_root(cfg)
     out = Path(cfg["out"])
@@ -1160,14 +1588,29 @@ def _prebake_body(cfg: dict, cutoff: float, diagnostics: list[str]) -> dict[str,
         dst = out / "textures" / "body" / "body.webp"
         if not is_fresh(diffuse, dst, cutoff):
             rgba = to_srgb_rgb(im)
-            atomic_image(rgba.resize((1024, 1024), 1), dst, "WEBP", quality=88, method=6)
+            # Same reasoning as the head: 8192 source, and the torso fills much
+            # more of the frame on the BODY tab than the face does on FACE.
+            # Measured mean |Laplacian| of the body crop: source 2.71, 1024 q88
+            # 1.65, 2048 q95 2.54.
+            atomic_image(
+                rgba.resize((2048, 2048), 1), dst,
+                "WEBP", quality=SKIN_BAKE_QUALITY, method=6,
+            )
         normal_url = None
         normal_src = pack_rel(root, BODY_N)
+        gloss_url = None
         if normal_src is not None:
             n_dst = out / "textures" / "body" / "body_n.png"
             if not is_fresh(normal_src, n_dst, cutoff):
                 atomic_image(to_tangent_normal(open_dds(normal_src), 1024), n_dst, "PNG", optimize=True)
             normal_url = f"{cfg['publicBase']}/textures/body/body_n.png"
+            r_dst = out / "textures" / "body" / "body_rough.webp"
+            if not is_fresh(normal_src, r_dst, cutoff):
+                mask = gloss_mask_from_normal(open_dds(normal_src), SKIN_ROUGH_BAKE)
+                if mask is not None:
+                    atomic_image(mask, r_dst, "WEBP", lossless=True, method=4)
+            if r_dst.exists():
+                gloss_url = f"{cfg['publicBase']}/textures/body/body_rough.webp"
         print(f"[+] body  {diffuse.name} {tuple(im.size)} -> textures/body/body.webp")
         return {
             "id": pack_id("body", rel, diffuse.stat()),
@@ -1177,6 +1620,7 @@ def _prebake_body(cfg: dict, cutoff: float, diagnostics: list[str]) -> dict[str,
             "rel": rel,
             "texture": f"{cfg['publicBase']}/textures/body/body.webp",
             "normalTexture": normal_url,
+            "roughnessTexture": gloss_url,
             "size": list(im.size),
         }
     except Exception as exc:  # noqa: BLE001
@@ -1293,18 +1737,13 @@ def _prebake_body_mesh(cfg: dict, cutoff: float, diagnostics: list[str]) -> tupl
         return None, {"reason": f"The outfit's embedded body shape could not be extracted: {exc}"}
 
 
-def _prebake_weight_body(cfg: dict, cutoff: float, diagnostics: list[str]) -> dict[str, Any] | None:
-    """The canonical `femalebody_0`/`_1` pair, as the default body mesh.
-
-    This is the shape Skyrim's own Data folder has, and it is the only body
-    that can carry a live weight slider. It wins over the outfit's embedded
-    body whenever both halves are present, because a real weight pair is a
-    strictly better body than one frozen shape.
-    """
+def _prebake_weight_body(cfg: dict, cutoff: float, diagnostics: list[str], kind: str = "bodyMesh") -> dict[str, Any] | None:
+    """Prebake the canonical female body, hands or feet weight pair, with skinning."""
     out = Path(cfg["out"])
     rows = [
-        e for e in _read_entries(out, "bodyMesh")
+        e for e in _read_entries(out, kind)
         if e.get("weightVariants") and e.get("decodable") is not False
+        and not e.get("unavailable")
     ]
     if not rows:
         return None
@@ -1315,14 +1754,15 @@ def _prebake_weight_body(cfg: dict, cutoff: float, diagnostics: list[str]) -> di
     # duplicate, a named NPC) must never become the default.
     def body_rank(e: dict[str, Any]) -> tuple[int, int]:
         key = str(e.get("weightKey") or "")
-        preferred = 0 if key == "femalebody" else 1 if key.startswith("1stperson") else 2
+        canonical = {"bodyMesh": "femalebody", "handsMesh": "femalehands", "feetMesh": "femalefeet"}[kind]
+        preferred = 0 if key in (canonical, canonical + "_tangent") else 1 if key.startswith("female") else 2 if key.startswith("male") else 3
         return (preferred, -int(e.get("weightDefault") or 0))
 
     entry = sorted(rows, key=body_rank)[0]
     root = pack_root(cfg)
     src = pack_rel(root, entry["rel"])
     if src is None:
-        diagnostics.append(f"Weight body source is missing or outside the pack: {entry['rel']}")
+        diagnostics.append(f"Weight {kind} source is missing or outside the pack: {entry['rel']}")
         return None
     try:
         from convert_worker import nif_geometry  # local: keeps catalogue import light
@@ -1334,21 +1774,21 @@ def _prebake_weight_body(cfg: dict, cutoff: float, diagnostics: list[str]) -> di
         # would be missing from a static deploy.
         urls: dict[str, str] = {}
         for half in (w0_id, w1_id):
-            row = next((e for e in _read_entries(out, "bodyMesh") if e["id"] == half), None)
+            row = next((e for e in _read_entries(out, kind) if e["id"] == half), None)
             if row is None:
                 raise ValueError(f"paired half {half} is not in the catalogue")
             half_src = pack_rel(root, row["rel"])
             if half_src is None:
                 raise ValueError(f"{row['rel']} is missing from the pack")
-            mesh_id = pack_id("bodyMesh", row["rel"], half_src.stat())
+            mesh_id = row["id"]
             dst = out / "meshes" / f"{mesh_id}.json"
             if not is_fresh(half_src, dst, cutoff):
-                geo = nif_geometry(half_src, "head")
+                geo = nif_geometry(half_src, "head", authored=True)
                 if not geo.get("vertexCount") or not geo.get("triangleCount"):
                     raise ValueError(f"{row['rel']} decoded to no geometry")
                 atomic_json(dst, geo, indent=None)
             urls[half] = f"{cfg['publicBase']}/meshes/{mesh_id}.json"
-        print(f"[+] bodyMesh  {src.name} weight pair -> {entry['weightKey']}")
+        print(f"[+] {kind}  {src.name} weight pair -> {entry['weightKey']}")
         return {
             "id": entry["id"],
             "mod": entry.get("mod") or "meshes",
@@ -1364,8 +1804,8 @@ def _prebake_weight_body(cfg: dict, cutoff: float, diagnostics: list[str]) -> di
             "meshFrame": "head",
         }
     except Exception as exc:  # noqa: BLE001
-        diagnostics.append(f"Weight body unavailable: {exc}")
-        print(f"[!] weight body failed: {exc}", file=sys.stderr)
+        diagnostics.append(f"Weight {kind} unavailable: {exc}")
+        print(f"[!] weight {kind} failed: {exc}", file=sys.stderr)
         return None
 
 
@@ -1387,7 +1827,8 @@ def _facial_refs(root: Path, kind: str) -> tuple[str, str | None]:
     def usable(ref: str) -> bool:
         low = ref.lower()
         return low.endswith(".dds") and "cubemap" not in low and not any(
-            low.endswith(suffix) for suffix in ("_n.dds", "_sk.dds", "_m.dds", "_e.dds")
+            low.endswith(suffix)
+            for suffix in ("_n.dds", "_sk.dds", "_m.dds", "_e.dds", "_g.dds")
         )
 
     def stored(ref: str) -> str:
@@ -1396,7 +1837,28 @@ def _facial_refs(root: Path, kind: str) -> tuple[str, str | None]:
     albedo = next((r for r in refs if usable(r)), "")
     if not albedo:
         return "", None
-    normal = next((r for r in refs if r.lower() == normal_key_for(albedo)), None)
+    # The normal a NIF actually names, in the albedo's own folder, beats the
+    # `_n` name derived from the albedo: COR's brow set shares one
+    # `femalebrow_n.dds` across `femalebrow_01..11.dds`, so a derived
+    # `femalebrow_01_n.dds` never exists and the brow lost its normal map.
+    folder = albedo.replace("/", "\\").rsplit("\\", 1)[0].lower()
+    normal = next(
+        (
+            r for r in refs
+            if r.lower().endswith("_n.dds")
+            and r.replace("/", "\\").rsplit("\\", 1)[0].lower() == folder
+        ),
+        None,
+    )
+    if normal is None:
+        normal = next((r for r in refs if r.lower() == normal_key_for(albedo)), None)
+    if normal is None:
+        alb_path = pack_paths.pack_rel(root, albedo)
+        if alb_path is not None and alb_path.is_file():
+            for cand in sorted(alb_path.parent.glob("*_n.dds")):
+                if cand.is_file():
+                    normal = str(cand.relative_to(root.resolve()))
+                    break
     return stored(albedo), stored(normal) if normal else None
 
 
@@ -1570,7 +2032,7 @@ def _prebake_facial(cfg: dict, cutoff: float, diagnostics: list[str]) -> dict[st
             im = open_dds(src)
             dst = out / "textures" / kind / f"{kind}.webp"
             if not is_fresh(src, dst, cutoff):
-                atomic_image(to_srgb_rgb(im), dst, "WEBP", quality=90, method=6)
+                atomic_image(facial_albedo_for_webp(im), dst, "WEBP", quality=90, method=6)
             normal_url = None
             if normal_src is not None:
                 n_dst = out / "textures" / kind / f"{kind}_n.png"
@@ -1605,34 +2067,60 @@ def _prebake_facial(cfg: dict, cutoff: float, diagnostics: list[str]) -> dict[st
 
 
 def _authored_rows(cfg: dict, kind: str, reason: str) -> tuple[list[dict[str, Any]], int]:
-    """Catalogue rows for on-demand hair/clothing NIFs (never prebaked)."""
+    """Catalogue rows for on-demand hair/clothing NIFs (never prebaked).
+
+    A `_0`/`_1` pair becomes **one** row, not two. The `_0` half is dropped
+    from the list because both halves are the same garment and the panel would
+    otherwise offer it twice under two names; its id survives in the row's
+    `weightVariants`, which is what the worker is asked to convert.
+    """
     out = Path(cfg["out"])
     catalogued = _read_entries(out, kind)
     rows: list[dict[str, Any]] = []
     unavailable = 0
+    # A clothing pair whose halves did not join still has both halves on disk.
+    # Listing the `_0` twin would show one broken garment twice, so only the
+    # `_1` half (or the solo file) is kept. Hair is deliberately excluded: its
+    # `_0`/`_1` files are separate styles in this pack, not weight halves, and
+    # nothing pairs them.
+    half_counts: dict[str, int] = {}
+    if kind == "clothingMesh":
+        for e in catalogued:
+            key = weight_key(Path(e["file"]).stem)
+            if key:
+                group = str(Path(e["rel"]).parent).lower() + "\\" + key[0]
+                half_counts[group] = half_counts.get(group, 0) + 1
     for e in catalogued:
+        if e.get("weightKey") and not e.get("weightDefault"):
+            continue
+        key = weight_key(Path(e["file"]).stem)
+        if key and key[1] == 0 and e.get("weightKey") is None:
+            group = str(Path(e["rel"]).parent).lower() + "\\" + key[0]
+            if half_counts.get(group, 0) >= 2:
+                continue
+        base = {
+            "id": e["id"], "mod": e["mod"], "file": e["file"], "label": e["label"],
+            "rel": e["rel"], "catalogueId": e["id"], "authored": True,
+            "onDemand": True,
+        }
+        if e.get("equipSlot"):
+            base["equipSlot"] = e["equipSlot"]
+        if e.get("weightKey"):
+            base.update({
+                "weightKey": e["weightKey"],
+                "weightVariants": e["weightVariants"],
+                "weightDefault": e["weightDefault"],
+            })
         if e.get("decodable") is False:
-            row = {
-                "id": e["id"], "mod": e["mod"], "file": e["file"], "label": e["label"],
-                "rel": e["rel"], "catalogueId": e["id"], "authored": True,
-                "onDemand": True, "available": False, "decodable": False,
+            base.update({
+                "available": False, "decodable": False,
                 "reason": e.get("reason") or reason,
-            }
-            rows.append(row)
+            })
+            rows.append(base)
             unavailable += 1
             continue
         missing = e.get("missingTextures") or []
-        row: dict[str, Any] = {
-            "id": e["id"],
-            "mod": e["mod"],
-            "file": e["file"],
-            "label": e["label"],
-            "rel": e["rel"],
-            "catalogueId": e["id"],
-            "authored": True,
-            "onDemand": True,
-            "meshFrame": "head",
-        }
+        row: dict[str, Any] = {**base, "meshFrame": "head"}
         if e.get("hasBodyShape"):
             row["hasBodyShape"] = True
         if e.get("optionalMissingTextures"):
@@ -1655,12 +2143,139 @@ def _authored_rows(cfg: dict, kind: str, reason: str) -> tuple[list[dict[str, An
     return rows, unavailable
 
 
-def build_manifest(cfg: dict) -> int:
+def build_manifest(cfg: dict, part: str | None = None, force: bool = False) -> int:
     root = pack_root(cfg)
     out = Path(cfg["out"])
-    cutoff = script_cutoff()
+    cutoff = -1.0 if force else script_cutoff()
     diagnostics: list[str] = []
     errors: list[str] = []
+
+    target_part = resolve_part(part) if part and part.lower() != "all" else None
+    if part and not target_part and part.lower() != "all":
+        print(f"[!] Unknown part '{part}'. Available: {', '.join(sorted(PARTS.keys()))}", file=sys.stderr)
+        return 1
+
+    existing_manifest_path = out / "manifest.json"
+    if target_part and existing_manifest_path.is_file():
+        try:
+            manifest = json.loads(existing_manifest_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            print(f"[!] Could not load existing manifest: {exc}, running full rebuild...", file=sys.stderr)
+            target_part = None
+
+    if target_part:
+        if target_part == "clothing":
+            clothing_rows, clothing_missing = _authored_rows(cfg, "clothingMesh", MISSING_CLOTHING_REASON)
+            manifest.setdefault("assets", {})["clothingMesh"] = clothing_rows
+            clothing_tex = _read_entries(out, "clothing")
+            manifest["assets"]["clothing"] = clothing_tex if clothing_tex else [_unavailable("Clothing", MISSING_CLOTHING_REASON)]
+            manifest.setdefault("mods", {})["clothingMesh"] = next((r["rel"] for r in clothing_rows if r.get("available") is not False and r.get("rel")), None)
+            manifest["mods"]["clothing"] = next((r["rel"] for r in manifest["assets"]["clothing"] if r.get("available") is not False and r.get("rel")), None)
+            if clothing_missing:
+                diagnostics.append(f"{clothing_missing} clothing NIF(s) render untextured until their DDS atlases are added.")
+            print(f"[+] clothingMesh: {len(clothing_rows)} row(s)")
+
+        elif target_part == "hair":
+            hair_rows, hair_missing = _authored_rows(cfg, "hairMesh", MISSING_HAIR_REASON)
+            manifest.setdefault("assets", {})["hairMesh"] = hair_rows
+            hair_tex = _read_entries(out, "hair")
+            manifest["assets"]["hair"] = hair_tex if hair_tex else [_unavailable("Hair", MISSING_HAIR_REASON)]
+            manifest.setdefault("mods", {})["hairMesh"] = next((r["rel"] for r in hair_rows if r.get("available") is not False and r.get("rel")), None)
+            manifest["mods"]["hair"] = next((r["rel"] for r in manifest["assets"]["hair"] if r.get("available") is not False and r.get("rel")), None)
+            if hair_missing:
+                diagnostics.append(f"{hair_missing} hair NIF(s) render untextured until their DDS atlases are added.")
+            print(f"[+] hairMesh: {len(hair_rows)} row(s)")
+
+        elif target_part == "presets":
+            presets, preset_heads = _prebake_presets(cfg, cutoff, diagnostics)
+            manifest.setdefault("assets", {})["preset"] = presets or [_unavailable("Preset", "The pack contains no .jslot presets.")]
+            manifest.setdefault("mods", {})["preset"] = next((r["rel"] for r in manifest["assets"]["preset"] if r.get("available") is not False and r.get("rel")), None)
+            base_heads = [h for h in manifest.get("assets", {}).get("headMesh", []) if h.get("origin") not in ("racemenu-export", "sculpt-replay")]
+            manifest["assets"]["headMesh"] = base_heads + preset_heads
+            print(f"[+] presets: {len(presets)} preset(s), {len(preset_heads)} preset head(s)")
+
+        elif target_part == "body":
+            body = _prebake_body(cfg, cutoff, diagnostics)
+            weight_body = _prebake_weight_body(cfg, cutoff, diagnostics)
+            hands_mesh = _prebake_weight_body(cfg, cutoff, diagnostics, "handsMesh")
+            feet_mesh = _prebake_weight_body(cfg, cutoff, diagnostics, "feetMesh")
+            body_mesh, body_mesh_extra = _prebake_body_mesh(cfg, cutoff, diagnostics)
+            existing_bodies = manifest.get("assets", {}).get("body", [])
+            manifest.setdefault("assets", {})["body"] = existing_bodies if len(existing_bodies) > 1 else ([body] if body else [])
+            manifest["assets"]["bodyMesh"] = [weight_body] if weight_body else [body_mesh] if body_mesh else [_unavailable(
+                "Body mesh",
+                (body_mesh_extra or {}).get("reason", "The pack ships no standalone female body mesh; clothing uses its embedded body shape."),
+            )]
+            manifest["assets"]["handsMesh"] = [hands_mesh] if hands_mesh else [_unavailable("Hands mesh", "No decodable hands weight pair in the pack.")]
+            manifest["assets"]["feetMesh"] = [feet_mesh] if feet_mesh else [_unavailable("Feet mesh", "No decodable feet weight pair in the pack.")]
+            for k in ("body", "bodyMesh", "handsMesh", "feetMesh"):
+                manifest.setdefault("mods", {})[k] = next((r["rel"] for r in manifest["assets"][k] if r.get("available") is not False and r.get("rel")), None)
+            print("[+] body meshes and textures updated")
+
+        elif target_part == "skin":
+            skin = _prebake_skin(cfg, cutoff, diagnostics)
+            existing_skins = manifest.get("assets", {}).get("skin", [])
+            manifest.setdefault("assets", {})["skin"] = existing_skins if len(existing_skins) > 1 else ([skin] if skin else [_unavailable("Skin", "The pack's head diffuse is missing.")])
+            if skin:
+                manifest["skinSource"] = {"file": skin["file"], "size": skin["size"]}
+                manifest["skin"] = skin["palette"]
+                manifest.setdefault("textures", {})["skin"] = skin["texture"]
+                if skin.get("normalTexture"):
+                    manifest["textures"]["normal"] = skin["normalTexture"]
+                if skin.get("roughnessTexture"):
+                    manifest["textures"]["skinRoughness"] = skin["roughnessTexture"]
+                manifest.setdefault("mods", {})["skin"] = skin["rel"]
+            print("[+] skin updated")
+
+        elif target_part == "eyes":
+            facial = _prebake_facial(cfg, cutoff, diagnostics)
+            manifest.setdefault("assets", {})["eyes"] = [facial["eyes"]]
+            manifest.setdefault("mods", {})["eyes"] = facial["eyes"].get("rel")
+            if facial.get("eyes") and facial["eyes"].get("texture"):
+                manifest.setdefault("textures", {})["eye"] = facial["eyes"]["texture"]
+                manifest["eye"] = {
+                    "meshUrl": (manifest.get("assets", {}).get("eyeMesh") or [{}])[0].get("meshUrl"),
+                    "texture": facial["eyes"]["texture"],
+                    "normalTexture": facial["eyes"].get("normalTexture"),
+                    "atlas": facial["eyes"].get("atlas"),
+                    "iris": facial["eyes"].get("iris"),
+                    "mean": facial["eyes"].get("mean"),
+                }
+            print("[+] eyes updated")
+
+        elif target_part in ("lashes", "brows", "mouth"):
+            facial = _prebake_facial(cfg, cutoff, diagnostics)
+            manifest.setdefault("assets", {})[target_part] = [facial[target_part]]
+            manifest.setdefault("mods", {})[target_part] = facial[target_part].get("rel")
+            print(f"[+] {target_part} updated")
+
+        elif target_part == "skeleton":
+            skeleton_row = _prebake_skeleton(cfg, diagnostics)
+            manifest.setdefault("assets", {})["skeleton"] = [skeleton_row] if skeleton_row else [
+                _unavailable("Skeleton", "The pack contains no skeleton NIF.")
+            ]
+            if skeleton_row:
+                manifest["skeleton"] = {
+                    "file": skeleton_row["file"],
+                    "version": "NIF SSE",
+                    "bytes": skeleton_row.get("bytes"),
+                    "nodes": skeleton_row["nodes"],
+                    "isGltf": False,
+                }
+                manifest.setdefault("mods", {})["skeleton"] = skeleton_row["rel"]
+            print("[+] skeleton updated")
+
+        elif target_part == "overlays":
+            for k in ("makeup", "tattoo", "wrinkle"):
+                manifest.setdefault("assets", {})[k] = _read_entries(out, k)
+            print("[+] overlays updated")
+
+        manifest["generatedAt"] = dt.datetime.now().isoformat(timespec="seconds")
+        atomic_json(out / "manifest.json", scrub(cfg, manifest))
+        print(f"\n[=] wrote {out / 'manifest.json'}")
+        for d in diagnostics:
+            print(f"  note: {d}")
+        return 0
 
     manifest: dict[str, Any] = {
         "generatedAt": dt.datetime.now().isoformat(timespec="seconds"),
@@ -1685,14 +2300,30 @@ def build_manifest(cfg: dict) -> int:
     body = _prebake_body(cfg, cutoff, diagnostics)
     facial = _prebake_facial(cfg, cutoff, diagnostics)
     weight_body = _prebake_weight_body(cfg, cutoff, diagnostics)
+    hands_mesh = _prebake_weight_body(cfg, cutoff, diagnostics, "handsMesh")
+    feet_mesh = _prebake_weight_body(cfg, cutoff, diagnostics, "feetMesh")
     body_mesh, body_mesh_extra = _prebake_body_mesh(cfg, cutoff, diagnostics)
     hair_rows, hair_missing = _authored_rows(cfg, "hairMesh", MISSING_HAIR_REASON)
     clothing_rows, clothing_missing = _authored_rows(cfg, "clothingMesh", MISSING_CLOTHING_REASON)
     skeleton_row = _prebake_skeleton(cfg, diagnostics)
 
+    existing_manifest_path = out / "manifest.json"
+    existing_skins = []
+    existing_bodies = []
+    if existing_manifest_path.is_file():
+        try:
+            ex_data = json.loads(existing_manifest_path.read_text(encoding="utf-8"))
+            existing_skins = ex_data.get("assets", {}).get("skin", [])
+            existing_bodies = ex_data.get("assets", {}).get("body", [])
+        except Exception:
+            pass
+
+    skin_list = existing_skins if len(existing_skins) > 1 else ([skin] if skin else [_unavailable("Skin", "The pack's head diffuse is missing.")])
+    body_list = existing_bodies if len(existing_bodies) > 1 else ([body] if body else [])
+
     assets: dict[str, list[dict[str, Any]]] = {
-        "skin": [skin] if skin else [_unavailable("Skin", "The pack's head diffuse is missing.")],
-        "body": [body] if body else [],
+        "skin": skin_list,
+        "body": body_list,
         "eyes": [facial["eyes"]],
         "lashes": [facial["lashes"]],
         "brows": [facial["brows"]],
@@ -1712,6 +2343,8 @@ def build_manifest(cfg: dict) -> int:
                 "The pack ships no standalone female body mesh; clothing uses its embedded body shape.",
             ),
         )],
+        "handsMesh": [hands_mesh] if hands_mesh else [_unavailable("Hands mesh", "No decodable hands weight pair in the pack.")],
+        "feetMesh": [feet_mesh] if feet_mesh else [_unavailable("Feet mesh", "No decodable feet weight pair in the pack.")],
         "hairMesh": hair_rows,
         "clothingMesh": clothing_rows,
         "headMesh": ([meshes["headMesh"]] if "headMesh" in meshes else []) + preset_heads,
@@ -1732,8 +2365,20 @@ def build_manifest(cfg: dict) -> int:
         textures["skin"] = skin["texture"]
         if skin.get("normalTexture"):
             textures["normal"] = skin["normalTexture"]
+        if skin.get("roughnessTexture"):
+            textures["skinRoughness"] = skin["roughnessTexture"]
     if "headMesh" in mesh_urls:
         textures["headMesh"] = mesh_urls["headMesh"]
+    if facial.get("eyes") and facial["eyes"].get("texture"):
+        textures["eye"] = facial["eyes"]["texture"]
+        manifest["eye"] = {
+            "meshUrl": mesh_urls.get("eyeMesh") or (meshes.get("eyeMesh") or {}).get("meshUrl"),
+            "texture": facial["eyes"]["texture"],
+            "normalTexture": facial["eyes"].get("normalTexture"),
+            "atlas": facial["eyes"].get("atlas"),
+            "iris": facial["eyes"].get("iris"),
+            "mean": facial["eyes"].get("mean"),
+        }
     manifest["textures"] = textures
     manifest["mods"] = mods
 
@@ -1800,26 +2445,28 @@ def build_manifest(cfg: dict) -> int:
 # ── entrypoints ─────────────────────────────────────────────────────────────
 
 
-def catalogue_main(cfg: dict) -> int:
-    return build_catalogue(cfg)
+def catalogue_main(cfg: dict, part: str | None = None) -> int:
+    return build_catalogue(cfg, part=part)
 
 
-def sync_main(cfg: dict) -> int:
-    return build_manifest(cfg)
+def sync_main(cfg: dict, part: str | None = None, force: bool = False) -> int:
+    return build_manifest(cfg, part=part, force=force)
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Build pack catalogue and manifest.")
     ap.add_argument("--catalogue", action="store_true", help="catalogue only")
+    ap.add_argument("--part", help="sync only a specific part (e.g. clothing, hair, presets, body, skin, eyes, lashes, brows, mouth, skeleton, overlays)")
+    ap.add_argument("--force", action="store_true", help="force rebuild ignoring cutoff timestamps")
     args = ap.parse_args()
     cfg = asset_source.load()
     if cfg["layout"] != "pack":
         print("asset-source.json layout is not 'pack'; nothing to do.", file=sys.stderr)
         return 0
     if args.catalogue:
-        return catalogue_main(cfg)
-    code = catalogue_main(cfg)
-    return sync_main(cfg) or code
+        return catalogue_main(cfg, part=args.part)
+    code = catalogue_main(cfg, part=args.part)
+    return sync_main(cfg, part=args.part, force=args.force) or code
 
 
 if __name__ == "__main__":

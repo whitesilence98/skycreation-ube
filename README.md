@@ -152,10 +152,10 @@ scripts/               sync_mo2_assets.py
 
 ## Controls
 
-- **LMB drag on the mesh** — move / rotate / scale the active bone, per the
-  MOVE / ROTATE / SCALE tabs on the right
-- **RMB drag** — orbit the camera
-- **Scroll** — zoom
+- **LMB / RMB drag** — orbit the camera
+- **LMB drag on a FACE SHAPE gizmo handle** — move / rotate / scale the active bone
+- **Middle drag / Scroll** — zoom
+- **Camera gutter button** — framing, view angles, FOV, drag speed, lighting and environment. Each lighting rig sets key/fill/rim level, azimuth, elevation and key colour; the environment chips swap the procedural IBL. Lighting/input settings survive reloads, not preset exports.
 - **IMPORT / EXPORT** in the footer — preset files, below
 
 Sliders and the gizmo both write into the active region's bank, so switching

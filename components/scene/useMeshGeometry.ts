@@ -11,7 +11,7 @@
  * shown nor kept, and it is disposed when it is replaced.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
 export interface MeshGroup {
@@ -213,16 +213,9 @@ export function disposeMesh(mesh: LoadedMesh | null): void {
 }
 
 /**
- * Per-vertex blend between the two weight variants of a body.
- *
- * Skyrim ships `femalebody_0.nif` and `femalebody_1.nif`: same topology, same
- * UVs, one atlas, different positions. Measured on CBBE 3BA — 20,542 vertices,
- * 39,842 triangles both sides, `indices` and `uvs` identical, every vertex
- * moved by 1.4–22.4 mm (mean 8.2 mm). So weight is a straight lerp of the
- * position attribute and nothing else; there is no skinning to do.
- *
- * `out` is written in place when supplied, so a slider drag does not allocate
- * 250 KB per frame. Returns the array it wrote (or a new one).
+ * Blend matching `_0`/`_1` positions; skinning remains on the rendered geometry.
+ * ponytail: keep the `_1` UV layout; add UV interpolation if a pair needs it.
+ * Writes `out` in place when supplied, otherwise allocates a new array.
  */
 export function lerpPositions(
   a: Float32Array,
@@ -245,10 +238,38 @@ export function lerpPositions(
   return dst;
 }
 
+const MESH_DATA_CACHE = new Map<string, MeshData>();
+const TEXTURE_PRELOAD_CACHE = new Set<string>();
+
+/** Preload an image URL into browser cache so TextureLoader resolves seamlessly. */
+export function preloadTexture(url: string | undefined): void {
+  if (!url || TEXTURE_PRELOAD_CACHE.has(url)) return;
+  TEXTURE_PRELOAD_CACHE.add(url);
+  if (typeof Image !== 'undefined') {
+    const img = new Image();
+    img.src = url;
+  }
+}
+
+/** Preload an image asynchronously and wait for decode/cache. */
+export function preloadTextureAsync(url: string | undefined): Promise<void> {
+  if (!url) return Promise.resolve();
+  if (TEXTURE_PRELOAD_CACHE.has(url)) return Promise.resolve();
+  TEXTURE_PRELOAD_CACHE.add(url);
+  if (typeof Image === 'undefined') return Promise.resolve();
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = url;
+    if (img.complete) resolve();
+  });
+}
+
 /**
- * Fetch a part's geometry. Returns `null` immediately when `url` is absent or
- * differs from the loaded one, so a selection change never keeps painting the
- * previous part's vertices.
+ * Fetch a part's geometry. Seamlessly keeps the previous mesh active while
+ * a newly selected mesh is fetching/decoding in the background, eliminating
+ * blank/empty unmounts and preload glitches.
  */
 export interface MeshResource {
   mesh: LoadedMesh | null;
@@ -259,30 +280,84 @@ export interface MeshResource {
 }
 
 export function useMeshResource(url: string | undefined, label: string): MeshResource {
-  const [entry, setEntry] = useState<{
+  const [loaded, setLoaded] = useState<{
     url?: string;
     mesh: LoadedMesh | null;
+  }>({ url: undefined, mesh: null });
+
+  const [status, setStatus] = useState<{
     error: string | null;
     settled: boolean;
-  }>({ settled: true, mesh: null, error: null });
+  }>({ error: null, settled: true });
+
+  const activeMeshRef = useRef<LoadedMesh | null>(null);
 
   useEffect(() => {
+    // Explicit removal / unequip: clear immediately so the part is removed as requested
     if (!url) {
-      setEntry({ url: undefined, mesh: null, error: null, settled: true });
+      if (activeMeshRef.current) {
+        disposeMesh(activeMeshRef.current);
+        activeMeshRef.current = null;
+      }
+      setLoaded({ url: undefined, mesh: null });
+      setStatus({ error: null, settled: true });
       return;
     }
+
+    // Already showing this exact URL
+    if (loaded.url === url && loaded.mesh) {
+      return;
+    }
+
     let cancelled = false;
-    setEntry({ url, mesh: null, error: null, settled: false });
+    setStatus((prev) => ({ ...prev, settled: false }));
+
+    const handleSuccess = async (data: MeshData) => {
+      MESH_DATA_CACHE.set(url, data);
+
+      // Pre-warm primary textures before swapping the active mesh so the character
+      // never flashes as bald or flat grey while waiting for images to download.
+      if (data.materials && typeof Image !== 'undefined') {
+        const texUrls: string[] = [];
+        for (const m of data.materials) {
+          if (m.texture) texUrls.push(m.texture);
+          if (m.normalTexture) texUrls.push(m.normalTexture);
+        }
+        if (texUrls.length > 0) {
+          await Promise.all(texUrls.map(preloadTextureAsync));
+        }
+      }
+      if (cancelled) return;
+
+      const newMesh = meshDataToGeometry(data);
+      // Dispose old mesh now that the new one is built and ready
+      if (activeMeshRef.current && activeMeshRef.current !== newMesh) {
+        disposeMesh(activeMeshRef.current);
+      }
+      activeMeshRef.current = newMesh;
+      setLoaded({ url, mesh: newMesh });
+      setStatus({ error: null, settled: true });
+    };
+
+    // Check memory cache for instant 0ms swap
+    const cached = MESH_DATA_CACHE.get(url);
+    if (cached) {
+      try {
+        void handleSuccess(cached);
+        return;
+      } catch {
+        // Fall back to network fetch if cached object was corrupted
+      }
+    }
+
     fetch(url)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
       .then((data: MeshData) => {
         if (cancelled) return;
         try {
-          setEntry({ url, mesh: meshDataToGeometry(data), error: null, settled: true });
+          void handleSuccess(data);
         } catch (err) {
-          setEntry({
-            url,
-            mesh: null,
+          setStatus({
             error: `${label}: ${err instanceof Error ? err.message : 'malformed mesh data'}`,
             settled: true,
           });
@@ -292,29 +367,132 @@ export function useMeshResource(url: string | undefined, label: string): MeshRes
         if (cancelled) return;
         const message = `${label}: ${err instanceof Error ? err.message : 'failed to load mesh'}`;
         console.error(`[HeadModel] ${message}`);
-        setEntry({ url, mesh: null, error: message, settled: true });
+        setStatus({ error: message, settled: true });
       });
+
     return () => {
       cancelled = true;
     };
   }, [url, label]);
 
-  // Release a superseded result as soon as its URL stops being selected.
+  // Clean up on component unmount
   useEffect(() => {
-    if (entry.mesh && entry.url !== url) setEntry({ url: undefined, mesh: null, error: null, settled: true });
-  }, [entry, url]);
+    return () => {
+      if (activeMeshRef.current) {
+        disposeMesh(activeMeshRef.current);
+        activeMeshRef.current = null;
+      }
+    };
+  }, []);
 
-  useEffect(() => {
-    const mesh = entry.mesh;
-    return () => disposeMesh(mesh ?? null);
-  }, [entry]);
-
-  if (entry.url !== url) return { mesh: null, error: null, settled: false };
-  return { mesh: entry.mesh, error: entry.error, settled: entry.settled };
+  return {
+    mesh: loaded.mesh,
+    error: status.error,
+    settled: status.settled,
+  };
 }
 
 export function useMeshGeometry(url: string | undefined, label: string): LoadedMesh | null {
   return useMeshResource(url, label).mesh;
+}
+
+/**
+ * Write the blended weight positions into a mesh's rendered attribute.
+ *
+ * Split out of the hook so the blend → bounds update can be exercised without
+ * React. Returns false when the geometry carries no position attribute (a
+ * malformed decode already rejected upstream, but the caller must not crash).
+ */
+export function applyWeightedPositions(
+  geometry: THREE.BufferGeometry,
+  w0: Float32Array,
+  w1: Float32Array,
+  weight: number,
+  norm0?: Float32Array,
+  norm1?: Float32Array,
+): boolean {
+  const attr = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+  if (!attr) return false;
+  /* The decoded attribute may share its storage with one of the source
+     variants (three keeps the array it was constructed with). Blending into
+     it would overwrite a source, so the next slider move would interpolate
+     from already-blended vertices. Allocate once in that case; afterwards the
+     attribute owns its own buffer and every move writes in place. */
+  const out =
+    attr.array === w0 || attr.array === w1 ? undefined : (attr.array as Float32Array);
+  const blended = lerpPositions(w0, w1, weight, out);
+  if (blended !== attr.array) attr.array = blended;
+  attr.needsUpdate = true;
+
+  if (norm0 && norm1) {
+    const normAttr = geometry.getAttribute('normal') as THREE.BufferAttribute | undefined;
+    if (normAttr) {
+      const outNorm = normAttr.array === norm0 || normAttr.array === norm1 ? undefined : (normAttr.array as Float32Array);
+      const blendedNorm = lerpPositions(norm0, norm1, weight, outNorm);
+      if (blendedNorm !== normAttr.array) normAttr.array = blendedNorm;
+      normAttr.needsUpdate = true;
+    }
+  }
+
+  /* Endpoints and every intermediate point move, so the bounds must follow. */
+  geometry.computeBoundingSphere();
+  geometry.computeBoundingBox();
+  return true;
+}
+
+/**
+ * Fetch and blend one body part's `_0`/`_1` weight pair.
+ *
+ * Torso, hands and feet pairs have matching indices and skinning over one atlas.
+ * Both halves are fetched; the single weight slider blends their positions.
+ * A part with no pair keeps its single mesh unchanged.
+ *
+ * A pair stays hidden until both halves load. Loading settles once both requests
+ * resolve or fail, with either failure exposed to the caller.
+ */
+export function useWeightedMeshResource(
+  variants: { w0: string; w1: string } | undefined,
+  singleUrl: string | undefined,
+  label: string,
+  weight: number,
+): MeshResource {
+  const w0 = variants?.w0;
+  const w1 = variants?.w1;
+  const low = useMeshResource(w0, `${label} weight 0`);
+  const high = useMeshResource(w1, `${label} weight 1`);
+  /* A pair's `_1` half *is* the part. Fetching the single URL as well would
+     download and decode the same mesh twice. */
+  const single = useMeshResource(variants ? undefined : singleUrl, label);
+
+  const activePairRef = useRef<LoadedMesh | null>(null);
+
+  useEffect(() => {
+    // Only blend when both halves have settled for the current variant pair
+    if (!low.mesh || !high.mesh || !low.settled || !high.settled) return;
+    const norm0 = low.mesh.geometry.getAttribute('normal')?.array as Float32Array | undefined;
+    const norm1 = high.mesh.geometry.getAttribute('normal')?.array as Float32Array | undefined;
+    applyWeightedPositions(high.mesh.geometry, low.mesh.positions, high.mesh.positions, weight, norm0, norm1);
+    activePairRef.current = high.mesh;
+  }, [low.mesh, high.mesh, low.settled, high.settled, weight]);
+
+  if (!variants) {
+    activePairRef.current = null;
+    return single;
+  }
+
+  const pairReady = Boolean(low.mesh && high.mesh && low.settled && high.settled);
+  if (pairReady) {
+    activePairRef.current = high.mesh;
+  }
+
+  return {
+    mesh: pairReady ? high.mesh : activePairRef.current,
+    error:
+      low.error ??
+      high.error ??
+      (low.settled && high.settled && !pairReady ? `${label}: weight pair is incomplete` : null),
+    settled: low.settled && high.settled,
+  };
 }
 
 /**
@@ -327,7 +505,7 @@ export type TextureState = 'idle' | 'pending' | 'loaded' | 'failed';
 
 export function useMaterialTexture(
   material: THREE.MeshStandardMaterial,
-  slot: 'map' | 'normalMap',
+  slot: 'map' | 'normalMap' | 'roughnessMap',
   src: string | undefined,
   opts: { colorSpace?: THREE.ColorSpace; wrap?: boolean } = {},
 ): TextureState {
@@ -349,32 +527,43 @@ export function useMaterialTexture(
 
     let cancelled = false;
     setState('pending');
+    const prevTex = material[slot];
     const tex = new THREE.TextureLoader().load(
       src,
       () => {
-        if (!cancelled && material[slot] === tex) setState('loaded');
+        if (cancelled) {
+          tex.dispose();
+          return;
+        }
+        if (colorSpace) tex.colorSpace = colorSpace;
+        tex.flipY = true;
+        /* Atlas UVs run straight across the head, so at the grazing angles the
+           cheeks and jaw are always seen at, isotropic filtering blurs the pores
+           into a smear. 8 is what the generated canvases already use; the renderer
+           clamps it to `capabilities.getMaxAnisotropy()`. */
+        tex.anisotropy = 8;
+        if (wrap) {
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.RepeatWrapping;
+        }
+        if (prevTex && prevTex !== tex) {
+          prevTex.dispose();
+        }
+        material[slot] = tex;
+        material.needsUpdate = true;
+        setState('loaded');
       },
       undefined,
       (err) => {
         console.error(`[HeadModel] Failed to load texture ${src}:`, err);
-        if (cancelled || material[slot] !== tex) return;
+        if (cancelled) return;
         clear();
         setState('failed');
       },
     );
-    if (colorSpace) tex.colorSpace = colorSpace;
-    tex.flipY = true;
-    if (wrap) {
-      tex.wrapS = THREE.RepeatWrapping;
-      tex.wrapT = THREE.RepeatWrapping;
-    }
-    material[slot] = tex;
-    material.needsUpdate = true;
 
     return () => {
       cancelled = true;
-      if (material[slot] === tex) clear();
-      tex.dispose();
     };
   }, [material, slot, src, colorSpace, wrap]);
 

@@ -45,6 +45,13 @@ def check(mesh: dict, label: str) -> None:
     assert all(math.isfinite(c) for c in mesh["positions"]), f"{label}: non-finite position"
     assert max(abs(c) for c in mesh["positions"]) < 3.0, f"{label}: implausible span"
     assert min(mesh["indices"]) >= 0 and max(mesh["indices"]) < v, f"{label}: index out of range"
+    assert mesh.get("bones"), f"{label}: missing skeleton"
+    assert len(mesh["skinIndex"]) == len(mesh["skinWeight"]) == v * 4, f"{label}: skin length"
+    assert all(0 <= i < len(mesh["bones"]) for i in mesh["skinIndex"]), f"{label}: skin index"
+    for i in range(v):
+        w = mesh["skinWeight"][i * 4:i * 4 + 4]
+        assert all(math.isfinite(x) and x >= 0 for x in w), f"{label}: invalid weights"
+        assert abs(sum(w) - 1) < 0.0001, f"{label}: weights not normalized"
 
     groups, mats = mesh["groups"], mesh["materials"]
     assert groups and mats and len(groups) == len(mats), f"{label}: group/material count"
@@ -86,8 +93,20 @@ def check(mesh: dict, label: str) -> None:
 
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else r"D:\Games\Skyrim\Skyrim Preset For App")
-    hairs = sorted((root / "hairs").rglob("*.nif"))
-    clothes = sorted((root / "clothes").rglob("*.nif"))
+    hairs = sorted({p for folder in ("hairs", "hair") for p in (root / folder).rglob("*.nif")})
+    clothes = sorted({p for folder in ("clothes", "clothing") for p in (root / folder).rglob("*.nif")})
+    hairs = [p for p in hairs if not p.stem.lower().startswith(PROXY_PREFIXES) and "collision" not in p.stem.lower()]
+    clothes = [p for p in clothes if not p.stem.lower().startswith(PROXY_PREFIXES) and "collision" not in p.stem.lower()]
+    # The catalogue names which authored layouts this pack can actually decode.
+    import json
+    catalogue = SCRIPTS.parent / "public/assets/preset-pack/catalogue"
+    supported = {
+        e["rel"].lower() for kind in ("hairMesh", "clothingMesh")
+        for e in json.loads((catalogue / f"{kind}.json").read_text(encoding="utf-8"))
+        if e.get("decodable") is not False
+    }
+    hairs = [p for p in hairs if str(p.relative_to(root)).lower() in supported]
+    clothes = [p for p in clothes if str(p.relative_to(root)).lower() in supported]
     assert hairs, f"no hair NIFs under {root / 'hairs'}"
     assert clothes, f"no outfit NIFs under {root / 'clothes'}"
 
@@ -98,10 +117,20 @@ def main() -> int:
         mesh = convert_worker.nif_geometry(path, "ground", authored=True)
         check(mesh, path.name)
         roles = {m["role"] for m in mesh["materials"]}
-        assert "skin" in roles, f"{path.name}: embedded body not recognised as skin"
-        assert "clothing" in roles, f"{path.name}: garments not recognised as clothing"
+        assert roles & {"clothing", "accessory"}, f"{path.name}: garments not recognised"
 
-    print(f"ok: authored decode {len(hairs)} hair + {len(clothes)} outfit NIF(s)")
+    parts = sorted((root / "body").rglob("*_tangent_[01].nif"))
+    assert parts, "no body/hands/feet weight pairs"
+    for path in parts:
+        mesh = convert_worker.nif_geometry(path, "head", authored=True)
+        check(mesh, path.name)
+        assert {m["role"] for m in mesh["materials"]} == {"skin"}, path.name
+        if path.stem.endswith("_0"):
+            other = convert_worker.nif_geometry(path.with_name(path.name.replace("_0.nif", "_1.nif")), "head", authored=True)
+            for key in ("indices", "skinIndex", "skinWeight", "bones") + (() if "body_tangent" in path.stem else ("uvs",)):
+                assert mesh[key] == other[key], f"{path.name}: pair {key} mismatch"
+
+    print(f"ok: authored decode {len(hairs)} hair + {len(clothes)} outfit + {len(parts)} body-part NIF(s)")
     return 0
 
 

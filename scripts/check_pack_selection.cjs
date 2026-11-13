@@ -7,18 +7,28 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 
-const source = fs.readFileSync(path.join(__dirname, '../lib/manifestSelect.ts'), 'utf8');
-const moduleObject = { exports: {} };
-vm.runInNewContext(ts.transpileModule(source, {
+/** TypeScript's own resolver has no path alias here; this stub is enough for
+ *  `tsc`'s emit pass because the imports are type-only. */
+const transpile = (file) => ts.transpileModule(fs.readFileSync(path.join(__dirname, file), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText, {
-  exports: moduleObject.exports, module: moduleObject,
-  require: (id) => {
-    assert.equal(id, '@/lib/mo2/client');
-    return { convertUrl: (options) => `/api/mo2/convert?${new URLSearchParams(options)}` };
-  },
-});
-const { resolveManifest, assetOptions, CATEGORY_MAP } = moduleObject.exports;
+}).outputText;
+const fakeRequire = (id) => {
+  if (id === '@/lib/equipment') return equipmentModule();
+  assert.equal(id, '@/lib/mo2/client');
+  return { convertUrl: (options) => `/api/mo2/convert?${new URLSearchParams(options)}` };
+};
+const loadModule = (file) => {
+  const moduleObject = { exports: {} };
+  vm.runInNewContext(transpile(file), {
+    exports: moduleObject.exports, module: moduleObject, require: fakeRequire,
+  });
+  return moduleObject.exports;
+};
+let equipmentCache;
+/** `manifestSelect` imports the slot vocabulary as values, so the vm needs it. */
+const equipmentModule = () => (equipmentCache ??= loadModule('../lib/equipment.ts'));
+const { resolveManifest, assetOptions, CATEGORY_MAP } = loadModule('../lib/manifestSelect.ts');
+const { EQUIP_SLOTS, isEquipSelection } = equipmentModule();
 
 const asset = (id, more = {}) => ({ id, mod: 'pack', file: id, rel: `pack/${id}`, ...more });
 const pack = {
@@ -67,8 +77,86 @@ assert.ok(resolved.parts.clothing.texture.includes('id=outfitTexAlt'));
 resolved = resolveManifest(pack, { hairMesh: 'hairB' }, catalogue);
 assert.ok(resolved.parts.hair.meshUrl.includes('id=hairB'));
 
+// ── hands / feet ───────────────────────────────────────────────────────────
+// They are geometry slots that share the BODY atlas; no new texture kind.
+const types = loadModule('../lib/mo2/types.ts');
+for (const kind of ['handsMesh', 'feetMesh']) {
+  assert.ok(types.MESH_KINDS.includes(kind), `${kind} is a mesh kind`);
+  assert.ok(types.PICKER_KINDS.includes(kind), `${kind} is a picker kind`);
+  assert.ok(!types.TEXTURE_KINDS.includes(kind), `${kind} must not become a texture kind`);
+}
+assert.equal(CATEGORY_MAP.hands.mesh, 'handsMesh');
+assert.equal(CATEGORY_MAP.hands.texture, 'body');
+assert.equal(CATEGORY_MAP.feet.mesh, 'feetMesh');
+assert.equal(CATEGORY_MAP.feet.texture, 'body');
+
+// Default: the authored hand/foot meshes are drawn and wear the body default
+// atlas, because the pack may already have selected one.
+const extremityPack = {
+  ...pack,
+  assets: {
+    ...pack.assets,
+    body: [asset('bodyTex', { texture: '/body.webp', normalTexture: '/body_n.png' })],
+    handsMesh: [asset('hands', { meshUrl: '/hands.json' })],
+    feetMesh: [asset('feet', { meshUrl: '/feet.json' })],
+  },
+};
+resolved = resolveManifest(extremityPack, {}, {});
+assert.equal(resolved.parts.hands.meshUrl, '/hands.json');
+assert.equal(resolved.parts.feet.meshUrl, '/feet.json');
+assert.equal(resolved.parts.hands.texture, '/body.webp');
+assert.equal(resolved.parts.feet.texture, '/body.webp');
+assert.equal(resolved.parts.hands.normalTexture, '/body_n.png');
+
+// A shared BODY override reaches all three slots...
+const sharedAtlas = { body: [asset('bodyAlt', { mapRole: 'albedo', normalId: 'bodyAltN' }), asset('bodyAltN', { mapRole: 'normal' })] };
+resolved = resolveManifest(extremityPack, { body: 'bodyAlt' }, sharedAtlas);
+const shared = '/api/mo2/convert?kind=body&id=bodyAlt&mode=atlas';
+assert.equal(resolved.parts.body.texture, shared, 'body uses the shared BODY override');
+assert.equal(resolved.parts.hands.texture, shared, 'hands inherit the BODY override');
+assert.equal(resolved.parts.feet.texture, shared, 'feet inherit the BODY override');
+assert.equal(
+  resolved.parts.hands.normalTexture,
+  '/api/mo2/convert?kind=body&id=bodyAltN&mode=normal',
+  'hand normals come from the BODY kind, not a hands kind',
+);
+
+// ...and selecting a mesh must neither invent a cross-kind URL nor borrow a
+// weight pair from the default row it replaced.
+const pairedBody = {
+  ...extremityPack,
+  assets: {
+    ...extremityPack.assets,
+    bodyMesh: [asset('bodyPair', {
+      meshUrl: '/body.json', weightKey: 'femalebody',
+      weightVariants: { w0: 'bw0', w1: 'bw1' },
+    })],
+    handsMesh: [asset('handsPair', {
+      meshUrl: '/hands.json', weightKey: 'femalehands',
+      weightVariants: { w0: 'hw0', w1: 'hw1' },
+    })],
+  },
+};
+const pairCatalogue = {
+  handsMesh: [asset('handsCatalogue', { mapRole: 'mesh', decodable: true })],
+};
+resolved = resolveManifest(pairedBody, { bodyMesh: 'bodyPair' }, pairCatalogue);
+assert.ok(resolved.parts.body.weightVariants, 'the paired body resolves its own weight URLs');
+assert.ok(resolved.parts.body.weightVariants.w0.includes('kind=bodyMesh'), 'body weight URLs keep the body mesh kind');
+assert.ok(resolved.parts.body.weightVariants.w0.includes('id=bw0'));
+
+resolved = resolveManifest(pairedBody, {}, {});
+assert.ok(resolved.parts.hands.weightVariants?.w0.includes('kind=handsMesh'), 'hand weight URLs name the hands mesh kind, not bodyMesh');
+assert.ok(resolved.parts.hands.weightVariants?.w0.includes('id=hw0'));
+
+resolved = resolveManifest(pairedBody, { bodyMesh: 'bodyPair', handsMesh: 'handsCatalogue' }, pairCatalogue);
+assert.ok(resolved.parts.hands.meshUrl.includes('kind=handsMesh'), 'hand geometry uses the handsMesh route kind');
+assert.ok(resolved.parts.hands.meshUrl.includes('id=handsCatalogue'));
+assert.equal(resolved.parts.hands.weightVariants, undefined, 'a single hand mesh must not inherit the default row weight pair');
+
 // A stale cross-source id must not name another source's file.
 assert.equal(resolveManifest(pack, { clothingMesh: 'legacyOnly' }, catalogue).parts.clothing.meshUrl, '/outfit.json');
+assert.equal(resolveManifest(extremityPack, { handsMesh: 'legacyOnly' }, {}).parts.hands.meshUrl, '/hands.json', 'stale hand id restores the pack default');
 
 // A producer default that is converted on demand has no meshUrl until the
 // worker runs: the default branch must resolve it exactly like a pick.
@@ -171,4 +259,75 @@ for (const part of ['hair', 'clothing']) {
   if (!renderable) assert.equal(actual.parts[part].meshUrl, undefined);
   else assert.ok(actual.parts[part].meshUrl, `${part} mesh resolves a renderable row`);
 }
+
+// ── equipment paper-doll ───────────────────────────────────────────────────
+// Several garments are worn at once from the same `clothingMesh` kind, which
+// `assetSelection.clothingMesh` cannot express: one id per slot, resolved into
+// `parts.equipment`. A garment pair contributes its own weight URLs so the
+// WEIGHT slider morphs it with the body.
+const gear = {
+  ...pack,
+  assets: {
+    ...pack.assets,
+    clothingMesh: [
+      asset('top1', {
+        authored: true, onDemand: true, catalogueId: 'top1', equipSlot: 'chest',
+        weightKey: 'gladiator top', weightDefault: 1, weightVariants: { w0: 'top0', w1: 'top1' },
+      }),
+      asset('arms1', { authored: true, onDemand: true, catalogueId: 'arms1', equipSlot: 'hands' }),
+      asset('legs1', { authored: true, onDemand: true, catalogueId: 'legs1', equipSlot: 'legs' }),
+      asset('outfit', { meshUrl: '/outfit.json', equipSlot: 'full' }),
+    ],
+  },
+};
+const gearCatalogue = {
+  clothingMesh: [
+    asset('boots0', { mapRole: 'mesh', decodable: true, equipSlot: 'feet', weightKey: 'boots' }),
+    asset('boots1', { mapRole: 'mesh', decodable: true, equipSlot: 'feet', weightKey: 'boots', weightDefault: 1,
+      onDemand: true, weightVariants: { w0: 'boots0', w1: 'boots1' } }),
+  ],
+};
+
+assert.deepEqual([...EQUIP_SLOTS], ['head', 'shoulders', 'chest', 'hands', 'legs', 'feet']);
+assert.ok(isEquipSelection({ chest: 'top1' }), 'a slot map validates');
+assert.ok(!isEquipSelection({ chest: 'top1', elbows: 'x' }), 'an unknown slot is refused');
+assert.ok(!isEquipSelection({ chest: 3 }), 'a non-string id is refused');
+assert.equal(CATEGORY_MAP.equipment.mesh, 'clothingMesh', 'EQUIPMENT lists clothing meshes');
+
+// Empty selection: no equipment parts, and the legacy outfit is untouched.
+resolved = resolveManifest(gear, {}, gearCatalogue);
+assert.equal(resolved.parts.equipment, undefined, 'an empty paper-doll contributes no parts');
+assert.equal(resolved.parts.clothing.meshUrl, '/outfit.json', 'the whole outfit still resolves');
+assert.equal(gear.assets.clothingMesh.find((r) => r.id === 'outfit').equipSlot, 'full',
+  'the whole outfit is the `full` pseudo-slot, not a worn slot');
+
+// Three slots filled at once, each its own part.
+resolved = resolveManifest(gear, {}, gearCatalogue, { chest: 'top1', hands: 'arms1', legs: 'legs1' });
+assert.equal(resolved.parts.equipment.length, 3, 'one part per filled slot');
+/* Every resolved array comes out of the vm's own realm, so compare a copy. */
+assert.deepEqual([...resolved.parts.equipment.map((p) => p.slot)].sort(), ['chest', 'hands', 'legs']);
+for (const part of resolved.parts.equipment) {
+  assert.ok(part.meshUrl?.includes('kind=clothingMesh'), `${part.slot} garment uses the clothingMesh route`);
+}
+const chest = resolved.parts.equipment.find((p) => p.slot === 'chest');
+assert.deepEqual(Object.keys(chest.weightVariants ?? {}), ['w0', 'w1'], 'a garment pair resolves its weight URLs');
+assert.ok(chest.weightVariants.w0.includes('kind=clothingMesh'), 'garment weight URLs keep the clothing mesh kind');
+assert.ok(chest.weightVariants.w0.includes('id=top0'));
+
+// A slot only wears its own garment: the wrong-slot id resolves nothing there.
+resolved = resolveManifest(gear, {}, gearCatalogue, { feet: 'top1' });
+assert.equal(resolved.parts.equipment, undefined, 'a chest garment does not fill the feet slot');
+
+resolved = resolveManifest(gear, {}, gearCatalogue, { feet: 'boots1' });
+assert.equal(resolved.parts.equipment.length, 1);
+assert.equal(resolved.parts.equipment[0].slot, 'feet');
+assert.ok(resolved.parts.equipment[0].meshUrl.includes('id=boots1'));
+assert.ok(resolved.parts.equipment[0].weightVariants.w1.includes('id=boots1'));
+
+// A garment the pack cannot draw contributes nothing rather than a broken shape.
+resolved = resolveManifest(pack, {}, {
+  clothingMesh: [asset('torn', { mapRole: 'mesh', decodable: false, reason: 'unsupported' })],
+}, { chest: 'torn' });
+assert.equal(resolved.parts.equipment, undefined, 'an undecodable garment is not drawn');
+
 console.log('pack selection: ok');

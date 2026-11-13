@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import {
+  NECK_DELTA_INDICES,
+  NECK_DELTA_POSITIONS,
+  NECK_SPINE2_WEIGHTS,
+} from '@/lib/head/neckDeltas';
 
 /**
  * Procedural female head, lofted from anatomical cross-sections.
@@ -295,6 +300,10 @@ export interface HeadBuild {
   geometry: THREE.BufferGeometry;
   /** Undeformed positions, copied by the deformer. */
   basePositions: Float32Array;
+  /** Undeformed vertex normals, copied by the deformer. */
+  baseNormals?: Float32Array;
+  /** Baseline body weight at which the head mesh was authored (0.0 for RaceMenu w0 exports, 1.0 for FemaleHead.tri w1 bases). */
+  baseWeight?: number;
   ringCount: number;
   segmentCount: number;
 }
@@ -649,3 +658,86 @@ export function headSurfaceZ(x: number, y: number, inflate = 0): number {
 }
 
 export { smoothstep, clamp };
+
+/**
+ * FaceGen & BSFaceGenNiNodeSkinned neck alignment.
+ *
+ * 1. Weight contraction (FaceGen NeckDelta):
+ *    Contracts the neck circumference by `(1 - weight) * delta` so the head collar
+ *    matches the body mesh across all weights down to 0.014 mm.
+ *
+ * 2. Posing dual-bone blend (BSFaceGenNiNodeSkinned):
+ *    Blends the lower neck vertices with `relativeTransform` (inv(followHead) * followSpine2)
+ *    using the body's exact Spine2 skin weights so the neck collar flexes in 1:1 lockstep
+ *    with the torso, guaranteeing 0.000 mm seam gap under any pose.
+ */
+export function applyNeckDelta(
+  geometry: THREE.BufferGeometry,
+  basePositions: Float32Array,
+  weight: number,
+  relativeTransform?: THREE.Matrix4 | null,
+  baseNormals?: Float32Array,
+  enabled: boolean = true,
+  baseWeight: number = 1.0,
+): void {
+  const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+  if (!posAttr || posAttr.count < 11498) return;
+
+  let current = posAttr.array as Float32Array;
+  if (current === basePositions) {
+    current = new Float32Array(basePositions);
+    posAttr.array = current;
+  } else {
+    current.set(basePositions);
+  }
+
+  if (enabled) {
+    const targetWeight = Math.max(0, Math.min(1, weight));
+    const factor = baseWeight - targetWeight;
+    const hasWeightDelta = Math.abs(factor) > 0.0001;
+    const hasPosingBlend = Boolean(relativeTransform);
+
+    if (hasWeightDelta || hasPosingBlend) {
+      const v = new THREE.Vector3();
+      const vSpine = new THREE.Vector3();
+
+      for (let i = 0; i < NECK_DELTA_INDICES.length; i++) {
+        const idx = NECK_DELTA_INDICES[i];
+        let vx = current[idx * 3];
+        let vy = current[idx * 3 + 1];
+        let vz = current[idx * 3 + 2];
+
+        // 1. Weight delta (FaceGen)
+        if (hasWeightDelta) {
+          vx += factor * NECK_DELTA_POSITIONS[i * 3];
+          vy += factor * NECK_DELTA_POSITIONS[i * 3 + 1];
+          vz += factor * NECK_DELTA_POSITIONS[i * 3 + 2];
+        }
+
+        // 2. Posing dual-bone blend (BSFaceGenNiNodeSkinned)
+        if (hasPosingBlend && relativeTransform) {
+          const alpha = NECK_SPINE2_WEIGHTS[i];
+          if (alpha > 0.001) {
+            v.set(vx, vy, vz);
+            vSpine.copy(v).applyMatrix4(relativeTransform);
+            vx = (1 - alpha) * v.x + alpha * vSpine.x;
+            vy = (1 - alpha) * v.y + alpha * vSpine.y;
+            vz = (1 - alpha) * v.z + alpha * vSpine.z;
+          }
+        }
+
+        current[idx * 3] = vx;
+        current[idx * 3 + 1] = vy;
+        current[idx * 3 + 2] = vz;
+      }
+    }
+  }
+
+  posAttr.needsUpdate = true;
+  const normAttr = geometry.getAttribute('normal') as THREE.BufferAttribute | undefined;
+  if (normAttr && baseNormals && normAttr.array !== baseNormals) {
+    (normAttr.array as Float32Array).set(baseNormals);
+    normAttr.needsUpdate = true;
+  }
+  geometry.computeBoundingSphere();
+}

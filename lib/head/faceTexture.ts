@@ -50,6 +50,8 @@ export interface Mo2PartOption extends Mo2AssetOption {
   meshUrl?: string;
   texture?: string;
   normalTexture?: string;
+  /** Skyrim `_n.dds` alpha as a roughness map (see `Mo2SkinOption`). */
+  roughnessTexture?: string;
   /** Catalogue row for an authored NIF converted on demand (`mode=mesh`). */
   catalogueId?: string;
   /** Pack producer flag: the NIF has to be decoded by the worker on demand. */
@@ -64,11 +66,13 @@ export interface Mo2PartOption extends Mo2AssetOption {
   /** Produced geometry decodes but lacks a required albedo atlas: convert in
    *  mesh mode and draw it flat grey; never request texture URLs for it. */
   untextured?: boolean;
-  /** Body meshes: the `_0`/`_1` weight pair, resolved to convert URLs. The
-   *  renderer fetches both and lerps positions between them. */
+  /** Body-family meshes: the `_0`/`_1` weight pair, resolved to convert URLs.
+   *  The renderer fetches both and lerps positions between them. */
   weightVariants?: { w0: string; w1: string };
-  /** Body meshes: the normalised stem shared by the pair (`femalebody`). */
+  /** Body-family meshes: the normalised stem shared by the pair (`femalebody`). */
   weightKey?: string;
+  /** Clothing meshes: the equipment slot this garment occupies (`chest`, …). */
+  equipSlot?: string;
   /** The outfit supplies its embedded body shape. */
   hasBodyShape?: boolean;
 }
@@ -78,6 +82,14 @@ export interface Mo2SkinOption extends Mo2AssetOption {
   /** Lossless PNG tangent-space normal authored for the same head UV as
    *  `texture`, when the mod ships a `*_n.dds`. Absent otherwise. */
   normalTexture?: string | null;
+  /** Skyrim's `_n.dds` alpha as a three.js roughness map: R = gloss, G = a
+   *  roughness multiplier around 1, B = 255. Produced by the pack bake; a
+   *  hand-picked catalogue atlas only has one if the worker can derive it. */
+  roughnessTexture?: string | null;
+  /** Paired body diffuse texture (torso, hands, and feet in UBE). */
+  bodyTexture?: string;
+  bodyNormalTexture?: string | null;
+  bodyRoughnessTexture?: string | null;
   size: [number, number];
   palette: Mo2SkinPalette;
   /** This atlas's own landmark calibration. Absent = the canonical `ATLAS_FIT`,
@@ -103,6 +115,8 @@ export interface Mo2EyeOption extends Mo2AssetOption {
   iris: string;
   mean: string;
   atlas: Mo2EyeAtlas;
+  /** Tangent-space normal baked beside the iris atlas (`textures/eyes/eyes_n.png`). */
+  normalTexture?: string;
   meshUrl?: string;
   lashesMeshUrl?: string;
   lashesTexture?: string;
@@ -156,6 +170,9 @@ export interface Mo2MeshOption extends Mo2AssetOption {
   sculptSource?: string;
   origin?: 'racemenu-export' | 'sculpt-replay';
   headTextureMissing?: boolean;
+  eyeMeshUrl?: string;
+  lashesMeshUrl?: string;
+  browsMeshUrl?: string;
 }
 
 export interface Mo2SkeletonOption extends Mo2AssetOption {
@@ -187,7 +204,7 @@ export interface Mo2Manifest {
   /** Producer-side problems that never became a usable resource. */
   diagnostics?: string[];
   generatedAt?: string;
-  textures: Partial<Record<'skin' | 'eye' | 'hair' | 'normal' | 'headMesh' | 'eyeDisc', string>>;
+  textures: Partial<Record<'skin' | 'eye' | 'hair' | 'normal' | 'headMesh' | 'eyeDisc' | 'skinRoughness', string>>;
   skin?: Mo2SkinPalette;
   /** Landmark calibration for the active skin's atlas, when measured. */
   atlasFit?: Mo2AtlasFit;
@@ -197,7 +214,9 @@ export interface Mo2Manifest {
   eye?: {
     iris: string;
     mean: string;
+    texture?: string;
     atlas?: Mo2EyeAtlas;
+    normalTexture?: string;
     meshUrl?: string;
     lashesMeshUrl?: string;
     lashesTexture?: string;
@@ -205,13 +224,19 @@ export interface Mo2Manifest {
   skinSource?: { file: string; size: [number, number] };
   eyeSource?: { file: string; size: [number, number] };
   hairSource?: { file: string; size: [number, number] };
-  body?: Mo2AssetOption & { meshUrl?: string; texture?: string; normalTexture?: string };
+  body?: Mo2AssetOption & { meshUrl?: string; texture?: string; normalTexture?: string; roughnessTexture?: string };
   /**
    * Per-part overrides resolved from the selection. Each key is independent:
    * a part's mesh and texture can be chosen separately, and an absent key
    * falls back to the older single-value fields (`body`, `eye.lashes*`).
    */
-  parts?: Partial<Record<'mouth' | 'brows' | 'lashes' | 'hair' | 'body' | 'clothing', Mo2PartOption>>;
+  parts?: Partial<Record<'mouth' | 'brows' | 'lashes' | 'hair' | 'body' | 'hands' | 'feet' | 'clothing', Mo2PartOption>> & {
+    /** One worn garment per filled equipment slot. Each entry is the same
+     *  shape as `clothing` (a mesh over its own authored atlases) plus the
+     *  slot it occupies and, when the NIF ships `_0`/`_1` halves, the weight
+     *  pair the renderer blends between. */
+    equipment?: Array<Mo2PartOption & { slot: string }>;
+  };
   /** The active hair atlas's per-group strand blocks, when it needed remapping. */
   hairGroups?: Partial<
     Record<'curtain' | 'fringe' | 'wisp', [number, number, number, number]>
@@ -227,6 +252,9 @@ export interface Mo2Manifest {
     isGltf?: boolean;
     meshUrl?: string;
     isRealMesh?: boolean;
+    eyeMeshUrl?: string;
+    lashesMeshUrl?: string;
+    browsMeshUrl?: string;
   };
   skeleton?: {
     file: string;
@@ -253,7 +281,7 @@ export interface Mo2Manifest {
     headMesh?: Mo2MeshOption[];
     skeleton?: Mo2SkeletonOption[];
     preset?: Mo2PresetOption[];
-    body?: (Mo2AssetOption & { meshUrl?: string; texture?: string; normalTexture?: string })[];
+    body?: (Mo2AssetOption & { meshUrl?: string; texture?: string; normalTexture?: string; roughnessTexture?: string })[];
     /** Per-part mesh/texture options, one list per part. */
     mouth?: Mo2PartOption[];
     eyeMesh?: Mo2PartOption[];
@@ -265,6 +293,9 @@ export interface Mo2Manifest {
     /** `hair` already names the atlas list; `hairMesh` carries authored hair. */
     hairMesh?: Mo2PartOption[];
     bodyMesh?: Mo2PartOption[];
+    /** Hands and feet are separate geometry slots sharing the BODY atlas. */
+    handsMesh?: Mo2PartOption[];
+    feetMesh?: Mo2PartOption[];
     /** Authored outfit; one mesh carries both the embedded body and garment. */
     clothingMesh?: Mo2PartOption[];
     clothing?: Mo2PartOption[];
@@ -345,6 +376,7 @@ function paintFaceFeatures(
   eyeTex: HTMLImageElement | null,
   irisHex: string,
   atlas: Mo2EyeAtlas,
+  has3dEyes: boolean = false,
 ) {
   const rectW = rect.x1 - rect.x0;
   const rectH = rect.y1 - rect.y0;
@@ -473,6 +505,15 @@ function paintFaceFeatures(
 
     almond();
     ctx.clip();
+
+    if (has3dEyes) {
+      // With real 3D eyeball geometry in the socket, keep the socket cavity
+      // naturally dark so the true 3D eyeball renders with specular depth.
+      ctx.fillStyle = '#1e1613';
+      ctx.fill();
+      ctx.restore();
+      continue;
+    }
 
     /* ── the eyeball itself ─────────────────────────────────────
        When the mod's eye atlas is available it is blitted straight into
@@ -878,6 +919,11 @@ export async function buildFaceTexture(
      painted over the graded skin. Order matters: after the grade, so the
      lift does not wash them out, and before the sharpen, so the pores
      multiply over the paint and sit it in the skin. */
+  const has3dEyes = Boolean(
+    manifest?.headMesh?.isRealMesh ||
+    manifest?.eye?.meshUrl ||
+    manifest?.assets?.eyeMesh?.length
+  );
   paintFaceFeatures(
     ctx,
     S,
@@ -885,6 +931,7 @@ export async function buildFaceTexture(
     eyeTex,
     manifest?.eye?.iris ?? '#6f7d68',
     manifest?.eye?.atlas ?? EYE_ATLAS,
+    has3dEyes,
   );
 
   // sharpen so the upscaled pores still bite under the normal-mapped light

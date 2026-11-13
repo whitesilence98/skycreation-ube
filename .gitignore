@@ -34,6 +34,10 @@ test-results/
 
 # local scratch: ad-hoc inspection scripts and measurements
 /.scratch-weight/
+/tools/poser/*.exe
+/tools/poser/*.hkx
+.claude/
+.impeccable/
 
 # OS / editor
 .DS_Store

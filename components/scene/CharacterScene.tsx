@@ -11,14 +11,23 @@ import {
   Bloom,
   Noise,
   ToneMapping,
+  SMAA,
 } from '@react-three/postprocessing';
-import { BlendFunction, ToneMappingMode, type DepthOfFieldEffect } from 'postprocessing';
+import { BlendFunction, ToneMappingMode, SMAAPreset, type DepthOfFieldEffect } from 'postprocessing';
 import * as THREE from 'three';
 import { createEnvironmentScene, ENV_CONFIG } from '@/components/scene/environments';
 import { HeadModel, type SceneHandles } from '@/components/scene/HeadModel';
 import { EnbReshadeEffect } from '@/components/scene/EnbReshadeEffect';
+import { GradeEffect } from '@/components/scene/GradeEffect';
+import { BackgroundStage } from '@/components/scene/BackgroundStage';
+import { StatsProbe } from '@/components/scene/StatsProbe';
+import { isGradeNeutral } from '@/lib/graphics';
+import { cameraSpherical, FRAMING_SPECS } from '@/lib/camera';
+import { rigDirections } from '@/lib/lighting';
+import { useViewState } from '@/lib/viewState';
 import { useCharacter } from '@/lib/store';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
+import { GlbExportBridge } from '@/lib/exportGlb';
 
 interface CharacterSceneProps {
   manifest: Mo2Manifest | null;
@@ -38,6 +47,15 @@ interface CharacterSceneProps {
  *  (y ≈ −0.0116) so the hair keeps a little headroom and the neck gets a
  *  sliver of frame at the bottom, as in the reference. */
 const CAM = { y: -0.036, z: 0.75 } as const;
+const ORBIT_MOUSE_BUTTONS = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+
+function ViewControls() {
+  const rotateSpeed = useCharacter((s) => s.cameraRotateSpeed);
+  return <OrbitControls makeDefault enablePan={false} enableDamping dampingFactor={0.06}
+    mouseButtons={ORBIT_MOUSE_BUTTONS} rotateSpeed={rotateSpeed} zoomSpeed={0.55}
+    minDistance={0.35} maxDistance={5} minPolarAngle={Math.PI * 0.15}
+    maxPolarAngle={Math.PI * 0.85} target={[0, CAM.y, 0]} />;
+}
 
 /**
  * Frames the head the way the reference does — the head filling most of the
@@ -46,30 +64,108 @@ const CAM = { y: -0.036, z: 0.75 } as const;
  * which the head framing can never reach.
  */
 function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
-  const { camera, controls } = useThree();
+  const { camera, controls, gl } = useThree();
   const hair = useCharacter((s) => s.primaryTab === 'HAIR');
+  const cameraFov = useCharacter((s) => s.cameraFov);
+  const cameraFraming = useCharacter((s) => s.cameraFraming);
+  const cameraPoseRequest = useCharacter((s) => s.cameraPoseRequest);
+
   const moving = useRef(false);
   const goal = useRef(new THREE.Vector3());
   const target = useRef(new THREE.Vector3());
+  const lastNonce = useRef<number | null>(null);
+  // Publishing a settled pose has to bypass the throttle: the final snap moves
+  // the camera without emitting an orbit `change`, so a throttled readout would
+  // otherwise stay on a mid-animation value (0.74 m for a 0.75 m reset).
+  const publishNow = useRef<(() => void) | null>(null);
+
   useEffect(() => {
-    // Bust framing on HAIR: the head mesh spans y = +0.138…−0.130, so a 1.0 m
-    // standoff (≈0.48 m of visible height) frames the crown down to the upper
-    // chest. The earlier 1.5 m pulled back to a 0.72 m view — head plus whole
-    // torso, not a bust. Long styles run past the bottom edge by design; the
-    // wheel reaches 2.2 m for those.
-    if (bodyFraming) {
-      goal.current.set(0, -0.65, 3.8);
-      target.current.set(0, -0.65, 0);
-    } else {
-      goal.current.set(0, hair ? -0.10 : CAM.y, hair ? 1.0 : CAM.z);
-      target.current.set(0, hair ? -0.10 : CAM.y, 0);
+    if (camera instanceof THREE.PerspectiveCamera) {
+      if (camera.fov !== cameraFov) {
+        camera.fov = cameraFov;
+        camera.updateProjectionMatrix();
+      }
     }
-    moving.current = true;
+  }, [camera, cameraFov]);
+
+  useEffect(() => {
+    let baseStandoff: number = CAM.z;
+    let baseTargetY: number = CAM.y;
+
+    if (cameraFraming === 'auto') {
+      if (bodyFraming) {
+        baseStandoff = 3.8;
+        baseTargetY = -0.65;
+      } else if (hair) {
+        baseStandoff = 1.0;
+        baseTargetY = -0.10;
+      }
+    } else {
+      baseStandoff = FRAMING_SPECS[cameraFraming].standoff;
+      baseTargetY = FRAMING_SPECS[cameraFraming].targetY;
+    }
+
     const orbit = controls as OrbitControlsImpl | null;
-    const stop = () => { moving.current = false; };
-    orbit?.addEventListener('start', stop);
-    return () => orbit?.removeEventListener('start', stop);
-  }, [hair, bodyFraming, controls]);
+    const req = cameraPoseRequest;
+
+    if (req && req.nonce !== lastNonce.current) {
+      lastNonce.current = req.nonce;
+      const current = cameraSpherical(camera.position, orbit?.target ?? new THREE.Vector3(0, baseTargetY, 0));
+      // Changing only yaw or pitch must not reset the other angle or wheel zoom.
+      const dist = req.distance ?? (req.reset ? baseStandoff : current.distance);
+      const tY = req.targetY ?? (req.reset ? baseTargetY : orbit?.target.y ?? baseTargetY);
+      const yaw = req.yaw ?? current.yawDeg * Math.PI / 180;
+      const pitch = req.pitch ?? current.pitchDeg * Math.PI / 180;
+
+      const r = dist;
+      const cosPitch = Math.cos(pitch);
+      const sinPitch = Math.sin(pitch);
+      const x = r * cosPitch * Math.sin(yaw);
+      const y = tY - r * sinPitch;
+      const z = r * cosPitch * Math.cos(yaw);
+
+      goal.current.set(x, y, z);
+      target.current.set(0, tY, 0);
+      moving.current = true;
+    } else {
+      goal.current.set(0, baseTargetY, baseStandoff);
+      target.current.set(0, baseTargetY, 0);
+      moving.current = true;
+    }
+
+    moving.current = true;
+  }, [hair, bodyFraming, cameraFraming, cameraPoseRequest, controls, camera]);
+
+  useEffect(() => {
+    const orbit = controls as OrbitControlsImpl | null;
+    if (!orbit) return;
+    let lastPublished = 0;
+    const publish = (force = false) => {
+      const now = performance.now();
+      if (!force && now - lastPublished < 80) return;
+      lastPublished = now;
+      const view = cameraSpherical(camera.position, orbit.target);
+      const next = { yawDeg: Math.round(view.yawDeg), pitchDeg: -Math.round(view.pitchDeg), distance: Math.round(view.distance * 100) / 100 };
+      const old = useViewState.getState();
+      if (next.yawDeg !== old.yawDeg || next.pitchDeg !== old.pitchDeg || next.distance !== old.distance) useViewState.setState(next);
+    };
+    const start = () => { moving.current = false; gl.domElement.style.cursor = 'grabbing'; };
+    const end = () => { gl.domElement.style.cursor = 'grab'; publish(true); };
+    const change = () => publish();
+    publishNow.current = () => publish(true);
+    gl.domElement.style.cursor = 'grab';
+    publish(true);
+    orbit.addEventListener('start', start);
+    orbit.addEventListener('end', end);
+    orbit.addEventListener('change', change);
+    return () => {
+      orbit.removeEventListener('start', start);
+      orbit.removeEventListener('end', end);
+      orbit.removeEventListener('change', change);
+      publishNow.current = null;
+      gl.domElement.style.cursor = '';
+    };
+  }, [camera, controls, gl]);
   // Before drei's -1 update: camera and target move together, never fight damping.
   useFrame((_, dt) => {
     if (!moving.current) return;
@@ -77,7 +173,13 @@ function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
     const alpha = 1 - Math.exp(-10 * Math.min(dt, 0.1));
     camera.position.lerp(goal.current, alpha);
     orbit?.target.lerp(target.current, alpha);
-    if (camera.position.distanceTo(goal.current) < 0.0005) moving.current = false;
+    if (camera.position.distanceTo(goal.current) < 0.0005 && (!orbit || orbit.target.distanceTo(target.current) < 0.0005)) {
+      camera.position.copy(goal.current);
+      orbit?.target.copy(target.current);
+      moving.current = false;
+      // The exact final pose never reaches OrbitControls, so flush it here.
+      publishNow.current?.();
+    }
     if (!orbit) camera.lookAt(target.current);
   }, -2);
   return null;
@@ -94,20 +196,29 @@ function PipelineRig({ dof }: { dof: React.RefObject<DepthOfFieldEffect | null> 
   const { gl, scene } = useThree();
   const envMode = useCharacter((s) => s.envMode);
   const envRotation = useCharacter((s) => s.envRotation);
+  const envIntensity = useCharacter((s) => s.envIntensity);
 
   useEffect(() => {
     const pmrem = new THREE.PMREMGenerator(gl);
     const envScene = createEnvironmentScene(envMode);
-    const env = pmrem.fromScene(envScene, 0.04).texture;
-    scene.environment = env;
-    scene.environmentIntensity = ENV_CONFIG[envMode].baseIntensity;
+    const envTarget = pmrem.fromScene(envScene, 0.04);
+    scene.environment = envTarget.texture;
     pmrem.dispose();
-    (envScene as any).dispose?.();
+    envScene.traverse((object) => {
+      if (object instanceof THREE.Mesh) {
+        object.geometry.dispose();
+        for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.dispose();
+      }
+    });
     return () => {
       scene.environment = null;
-      env.dispose();
+      envTarget.dispose();
     };
   }, [gl, scene, envMode]);
+
+  useEffect(() => {
+    scene.environmentIntensity = ENV_CONFIG[envMode].baseIntensity * envIntensity;
+  }, [scene, envMode, envIntensity]);
 
   useEffect(() => {
     if (!scene.environmentRotation) {
@@ -128,7 +239,10 @@ function PipelineRig({ dof }: { dof: React.RefObject<DepthOfFieldEffect | null> 
     if (orbit) focus.current.set(0, orbit.target.y, 0.06);
     const d = camera.position.distanceTo(focus.current);
     effect.cocMaterial.focusDistance = d;
-    effect.cocMaterial.focusRange = Math.max(0.10, 0.28 * d);
+    // When close up on face (<1.2m), maintain shallow portrait bokeh on the background.
+    // When zoomed out (>1.2m), scale focus range up so the entire head-to-toe body stays sharp.
+    const rangeMult = d > 1.2 ? 1.4 : 0.28;
+    effect.cocMaterial.focusRange = Math.max(0.12, rangeMult * d);
   });
 
   return null;
@@ -138,29 +252,36 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
   const onReady = useCallback((_h: SceneHandles) => {}, []);
   const onDirty = useCallback(() => {}, []);
   const dof = useRef<DepthOfFieldEffect>(null);
-  const postFxMode = useCharacter((s) => s.postFxMode);
+  const enbEnabled = useCharacter((s) => s.enbEnabled);
+  const enbPreset = useCharacter((s) => s.enbPreset);
+  const fx = useCharacter((s) => s.fx);
+  const grade = useCharacter((s) => s.grade);
+  const lighting = useCharacter((s) => s.lighting);
+  const dirs = rigDirections(lighting);
   const hair = useCharacter((s) => s.primaryTab === 'HAIR');
   /* Pack mode's outfit runs to y ≈ −1.4, far outside the head framing. Only
      the BODY tab pulls back; every other tab (and legacy MO2) is unchanged. */
   const primaryTab = useCharacter((s) => s.primaryTab);
   const bodyFraming = manifest?.sourceLayout === 'pack' && primaryTab === 'BODY';
+  const backgroundMode = useCharacter((s) => s.backgroundMode);
+  const customBackgroundUrl = useCharacter((s) => s.customBackgroundUrl);
 
   return (
     <>
-      <color attach="background" args={['#07070a']} />
-      {/* The fog is atmosphere for the shoulders, not a dimmer on the face:
-          its near plane has to stay behind the head or it greys the skin.
-          Body framing stands 3.8 m back, so the fog moves behind the subject. */}
-      <fog
-        attach="fog"
-        args={
-          bodyFraming
-            ? ['#07070a', 4.5, 7]
-            : ['#07070a', hair ? 2.1 : 1.35, hair ? 3.65 : 2.9]
-        }
-      />
+      <BackgroundStage mode={backgroundMode} customUrl={customBackgroundUrl} />
+      {backgroundMode === 'void' && (
+        <fog
+          attach="fog"
+          args={
+            bodyFraming
+              ? ['#07070a', 4.5, 7]
+              : ['#07070a', hair ? 2.1 : 1.35, hair ? 3.65 : 2.9]
+          }
+        />
+      )}
       <CameraRig bodyFraming={bodyFraming} />
       <PipelineRig dof={dof} />
+      <StatsProbe />
 
       {/* Key from screen-right, fill from screen-left — the reference's cheeks
           measure [168,147,132] (viewer's right) and [130,110,90] (left).
@@ -173,10 +294,32 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
           cool fill three stops down, a rim to separate the hair, and a low
           ambient so the shadows keep shape. The environment map carries the
           specular. */}
-      <ambientLight intensity={0.30} color="#ffe8d8" />
-      <directionalLight position={[0.55, 0.75, 1.0]} intensity={2.2} color="#fff4e6" />
-      <directionalLight position={[-0.85, 0.10, 0.60]} intensity={0.55} color="#cfd8e8" />
-      <directionalLight position={[-0.25, 0.55, -0.85]} intensity={1.0} color="#8fd0c8" />
+      <ambientLight intensity={0.75 * (1 + grade.ambient / 10)} color="#fff2e6" />
+      {/* The key is the one shadow caster. A directional light's shadow camera
+          is an orthographic box around its target, and the character is a
+          ~0.3 m head inside a ~1.6 m body, so the box is tight: anything
+          larger loses the nose/lip-scale contact we are buying the shadow for.
+          A 1024 map over ±0.55 m is ~1 mm per texel, enough for the socket and
+          lip creases; `normalBias` is what stops the cheek from acne-ing on its
+          own normal map. */}
+      <directionalLight
+        position={dirs.key}
+        intensity={2.6 * lighting.intensity}
+        color={lighting.keyColor}
+        castShadow
+        shadow-mapSize={[1024, 1024]}
+        shadow-camera-left={-0.55}
+        shadow-camera-right={0.55}
+        shadow-camera-top={0.75}
+        shadow-camera-bottom={-0.75}
+        shadow-camera-near={0.1}
+        shadow-camera-far={3}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.012}
+      />
+      <directionalLight position={dirs.fill} intensity={1.35 * lighting.fill * lighting.intensity} color="#dce6f2" />
+      <directionalLight position={dirs.rim} intensity={1.4 * lighting.rim * lighting.intensity} color="#9ee0d8" />
+      <directionalLight position={dirs.bounce} intensity={0.85 * lighting.intensity} color="#faeee4" />
 
       {/* A white point source in front of the face, at eye height, 0.24 m off
           the nose (the head's front surface is at z ≈ +0.11). The directionals
@@ -195,7 +338,7 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
           rather than cancelling it — centred, it pulled the lit and shadow
           cheek within 2/255 of each other and the face went symmetrical.
           `distance={0}` means no cutoff: the falloff is the shaping. */}
-      <pointLight position={[0.06, 0.045, 0.35]} intensity={0.14} color="#ffffff" distance={0} decay={2} />
+      <pointLight position={[0.05, 0.05, 0.38]} intensity={0.38 * lighting.intensity} color="#ffffff" distance={0} decay={2} />
 
 
 
@@ -210,21 +353,9 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
         />
       </Suspense>
 
-      <OrbitControls
-        makeDefault
-        enablePan={false}
-        enableDamping
-        dampingFactor={0.06}
-        rotateSpeed={0.42}
-        zoomSpeed={0.55}
-        minDistance={hair ? 0.55 : 0.42}
-        maxDistance={bodyFraming ? 4.5 : hair ? 2.2 : 1.35}
-        minPolarAngle={Math.PI * 0.26}
-        maxPolarAngle={Math.PI * 0.7}
-        minAzimuthAngle={-Math.PI * 0.34}
-        maxAzimuthAngle={Math.PI * 0.34}
-        target={[0, CAM.y, 0]}
-      />
+      <GlbExportBridge />
+
+      <ViewControls />
 
       {/* Tone mapping happens exactly once, in the composer: three gates
           `renderer.toneMapping` on `currentRenderTarget === null`
@@ -235,46 +366,97 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
       <EffectComposer multisampling={4}>
         {/* World units, not normalised depth. `focusDistance`/`focusRange` are
             overwritten every frame by PipelineRig; these are only the values
-            used on the first frame. */}
-        <DepthOfField ref={dof} focusDistance={CAM.z} focusRange={0.22} bokehScale={0.55} height={480} />
+            used on the first frame. Unmounting is safe: PipelineRig guards on
+            a null ref, and the pass order is rebuilt on the next commit. */}
+        {fx.dof && (
+          <DepthOfField ref={dof} focusDistance={CAM.z} focusRange={0.22} bokehScale={0.55} height={720} />
+        )}
         {/* No N8AO. `n8ao@2.0.1` crashes three 0.187 inside
             `WebGLTextures.setupRenderTarget` — every frame throws and the
             viewport renders black. It was the only reason for
             `enableNormalPass`, so that goes too (it costs a full extra
             normal buffer). The socket/lip contact the AO would have given is
             replaced by the key/fill ratio below. */}
-        <Bloom
-          intensity={0.16}
-          luminanceThreshold={0.9}
-          luminanceSmoothing={0.18}
-          mipmapBlur
-          radius={0.45}
-        />
-        <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={0.055} />
+        {fx.bloom && (
+          <Bloom
+            intensity={0.16}
+            luminanceThreshold={0.9}
+            luminanceSmoothing={0.18}
+            mipmapBlur
+            radius={0.45}
+          />
+        )}
         {/* Unmounted while off: a pass with all mixes at 0 still costs a
             full-screen shader run plus the enbpalette texture fetch. */}
-        {postFxMode !== 'off' && <EnbReshadeEffect mode={postFxMode} />}
-        <Vignette eskil={false} offset={0.24} darkness={0.86} />
+        {enbEnabled && <EnbReshadeEffect mode={enbPreset} />}
+        {/* The grade pass is mounted only when it would change a pixel, so the
+            neutral state costs nothing and the default frame is untouched. It
+            sits before Vignette so the vignette darkens the graded image, as a
+            camera overlay would. */}
+        {!isGradeNeutral(grade) && <GradeEffect settings={grade} />}
+        {fx.vignette && <Vignette eskil={false} offset={0.34} darkness={0.48} />}
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+        {/* SMAA runs on clean edges before film grain to prevent false edge noise detection */}
+        {fx.smaa && <SMAA preset={SMAAPreset.HIGH} />}
+        {fx.grain && <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={0.045} />}
       </EffectComposer>
 
     </>
   );
 }
 
+function createCustomRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
+  try {
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: false,
+      powerPreference: 'default',
+      failIfMajorPerformanceCaveat: false,
+    });
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    return renderer;
+  } catch (err) {
+    console.warn('[CharacterScene] Primary WebGL renderer creation failed, attempting fallback...', err);
+  }
+
+  try {
+    const fallbackRenderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: false,
+      alpha: false,
+      powerPreference: 'default',
+      failIfMajorPerformanceCaveat: false,
+    });
+    fallbackRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+    return fallbackRenderer;
+  } catch (fatalErr) {
+    console.error('[CharacterScene] Fatal WebGL context creation failure:', fatalErr);
+    throw new Error(
+      'Could not allocate a WebGL context in your browser. ' +
+      'Please check chrome://settings/system (or edge://settings/system) and make sure "Use hardware acceleration when available" is turned ON, then relaunch the browser.'
+    );
+  }
+}
+
 export function CharacterScene({ manifest, onAssetsReady, onIssue }: CharacterSceneProps) {
   return (
     <Canvas
-      dpr={[1, 1.8]}
-      gl={{
-        antialias: true,
-        alpha: false,
-        powerPreference: 'high-performance',
-        toneMapping: THREE.ACESFilmicToneMapping,
-      }}
+      dpr={[1, 2]}
+      /* One shadow-casting key light (see the light block above). This is the
+         stand-in for the SSAO pass that cannot run here: without it the nose,
+         lip line and eye sockets receive no contact darkening at all, which is
+         a large part of why the face reads as an airbrushed mask. PCF soft
+         shadows are the default type and are enough at this map size. */
+      shadows
+      gl={(defaults) => createCustomRenderer(defaults.canvas as HTMLCanvasElement)}
       camera={{ fov: 27, near: 0.1, far: 8, position: [0, CAM.y, CAM.z] }}
       onCreated={({ gl }) => {
         gl.setClearColor('#07070a', 1);
+        /* The composer issues several internal renders per frame; with the
+           default auto-reset the counters would only describe the last one.
+           StatsProbe reads and resets them once per window instead. */
+        gl.info.autoReset = false;
       }}
       style={{ position: 'absolute', inset: 0 }}
     >
