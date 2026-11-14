@@ -9,6 +9,9 @@ import { AssetPanel } from '@/components/hud/AssetPanel';
 import { GraphicsPanel } from '@/components/hud/GraphicsPanel';
 import { CameraPanel } from '@/components/hud/CameraPanel';
 import { PosePanel } from '@/components/hud/PosePanel';
+import { BodyProperties } from '@/components/hud/BodyProperties';
+import { SettingsPanel } from '@/components/hud/SettingsPanel';
+import { WardrobeDrawer } from '@/components/hud/WardrobeDrawer';
 import { GizmoTooltip } from '@/components/hud/GizmoTooltip';
 import {
   IconAlbum,
@@ -58,7 +61,26 @@ export function Hud({ manifest }: HudProps) {
   const chrome = !previewMode;
   const primaryTab = useCharacter((s) => s.primaryTab);
   const subTab = useCharacter((s) => s.subTab);
-  const hasProperties = primaryTab === 'HAIR' || primaryTab === 'FACE SHAPE' || (primaryTab === 'FACE' && subTab === 'MAKEUP') || primaryTab === 'BODY';
+  const isDedicatedTab = primaryTab === 'EQUIPMENT' || primaryTab === 'BODY' || primaryTab === 'PRESET' || primaryTab === 'HAIR' || primaryTab === 'FACE';
+  const isRightDrawerActive = chrome && workspace !== 'edit';
+  const rightTitle =
+    workspace === 'camera'
+      ? 'CAMERA STUDIO'
+      : workspace === 'graphics'
+        ? 'GRAPHICS & SHADERS'
+        : workspace === 'poses'
+          ? 'POSES & ANIMATIONS'
+          : workspace === 'physics'
+            ? 'BODY WEIGHT & PHYSICS'
+            : workspace === 'sculpt'
+              ? '3D FACE SCULPT CONTROLLER'
+              : workspace === 'settings'
+                ? 'SETTINGS & MOD PREFERENCES'
+                : workspace === 'assets'
+                  ? `${subTab} ASSET BROWSER`
+                  : workspace === 'wardrobe'
+                    ? 'WARDROBE & EQUIPMENT BROWSER'
+                    : 'TOOL DRAWER';
 
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
@@ -86,29 +108,28 @@ export function Hud({ manifest }: HudProps) {
     return () => mq.removeEventListener('change', apply);
   }, []);
 
+  useEffect(() => {
+    if (workspace !== 'edit') {
+      setRightOpen(true);
+    }
+  }, [workspace]);
+
   /* Nonmodal drawers return focus to the workspace that opened them. Escape
      follows focus context first, so a drawer is closable from anywhere and is
      never a dead key when both rails happen to be open. */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      const active = document.activeElement;
       if (previewMode) {
         setPreviewMode(false);
-      } else if (active?.closest('#hud-right-rail')) {
+      } else if (workspace !== 'edit') {
+        setWorkspace('edit');
         setRightOpen(false);
-        requestAnimationFrame(() => rightTrigger.current?.focus());
-      } else if (leftOpen && workspace !== 'poses') {
-        setLeftOpen(false);
-        requestAnimationFrame(() => leftTrigger.current?.focus());
-      } else if (rightOpen && (hasProperties || workspace === 'poses')) {
-        setRightOpen(false);
-        requestAnimationFrame(() => rightTrigger.current?.focus());
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [previewMode, setPreviewMode, leftOpen, rightOpen, hasProperties, workspace]);
+  }, [previewMode, setPreviewMode, workspace, setWorkspace]);
 
   const openWorkspace = (id: Workspace) => {
     setWorkspace(id);
@@ -154,7 +175,7 @@ export function Hud({ manifest }: HudProps) {
       {/* ── left workspace dock ─────────────────────────────────────── */}
       <div className={cn(
         "pointer-events-auto fixed left-2 top-[112px] z-[60] flex flex-col gap-1 lg:top-[104px]",
-        (primaryTab === 'EQUIPMENT' || primaryTab === 'BODY' || primaryTab === 'PRESET') && 'opacity-0 pointer-events-none'
+        isDedicatedTab && 'opacity-0 pointer-events-none'
       )}>
         {chrome && WORKSPACES.map(({ id, label, Icon }) => {
           const active = workspace === id && leftOpen;
@@ -232,103 +253,65 @@ export function Hud({ manifest }: HudProps) {
         </button>
       </div>
 
-      {/* ── left rail: one workspace at a time, all four mounted ────── */}
+      {/* ── left rail: always shows LeftPanel flush-left ────── */}
       <aside
         id="hud-left-rail"
-        aria-label="Edit workspace"
-        aria-hidden={!leftOpen || !chrome || workspace === 'poses'}
-        inert={!leftOpen || !chrome || workspace === 'poses'}
+        aria-label="Creation workspace"
+        aria-hidden={!leftOpen || !chrome}
+        inert={!leftOpen || !chrome}
         className={cn(
           'pointer-events-auto fixed bottom-[96px] left-[60px] top-[108px] z-50 flex w-[min(calc(100vw-76px),340px)] select-none flex-col border-r border-[#d4b483]/25 bg-[#0a0907]/94 shadow-[0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-xl transition-transform duration-300 motion-reduce:transition-none',
           'lg:bottom-[72px] lg:left-[60px] lg:top-[96px] lg:z-30 lg:w-[290px] lg:border lg:border-[#d4b483]/22 lg:bg-[#0a0907]/82 lg:shadow-[0_14px_38px_rgba(0,0,0,0.42)]',
-          (primaryTab === 'EQUIPMENT' || primaryTab === 'BODY' || primaryTab === 'PRESET') && '!left-[16px] lg:!left-[24px]',
-          leftOpen && chrome && workspace !== 'poses' ? 'translate-x-0' : 'invisible -translate-x-[130%]',
+          isDedicatedTab && '!left-[16px] lg:!left-[24px]',
+          leftOpen && chrome ? 'translate-x-0' : 'invisible -translate-x-[130%]',
         )}
       >
-        {!(primaryTab === 'EQUIPMENT' || primaryTab === 'BODY' || primaryTab === 'PRESET') && (
-          <div className="flex shrink-0 items-center justify-between border-b border-[#d4b483]/18 px-[12px] py-[9px]">
-            <span className="text-[10px] tracking-[0.16em] text-[#d8c39c]">
-              {WORKSPACES.find((w) => w.id === workspace)?.label ?? 'EDIT'} WORKSPACE
-            </span>
-            <button
-              type="button"
-              onClick={closeLeft}
-              aria-label="Collapse left workspace"
-              title="Collapse workspace"
-              className="flex h-[22px] w-[22px] items-center justify-center border border-[#d4b483]/28 text-[#c3b698]/85 transition-colors hover:border-[#d4b483]/60 hover:text-[#f0e6d4] hud-focus"
-            >
-              <IconChevronLeft className="h-[10px] w-[10px]" />
-            </button>
-          </div>
-        )}
-
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div data-workspace="edit" className={cn('min-h-0 flex-1 overflow-y-auto thin-scroll', workspace !== 'edit' && 'hidden')}>
-            <LeftPanel manifest={manifest} />
-          </div>
-          <div data-workspace="assets" className={cn('min-h-0 flex-1 overflow-hidden', workspace !== 'assets' && 'hidden')}>
-            <AssetPanel manifest={manifest} active={workspace === 'assets' && leftOpen} />
-          </div>
-          <div data-workspace="camera" className={cn('min-h-0 flex-1 overflow-y-auto thin-scroll', workspace !== 'camera' && 'hidden')}>
-            <CameraPanel />
-          </div>
-          <div data-workspace="graphics" className={cn('min-h-0 flex-1 overflow-y-auto thin-scroll', workspace !== 'graphics' && 'hidden')}>
-            <GraphicsPanel />
-          </div>
+        <div className="min-h-0 flex-1 overflow-y-auto thin-scroll">
+          <LeftPanel manifest={manifest} />
         </div>
       </aside>
 
-      {(hasProperties || workspace === 'poses') && (
+      {/* ── right studio drawer: opens on demand for tools like Pose, Camera, Graphics, Physics, Sculpt ────── */}
+      {chrome && (
         <aside
           id="hud-right-rail"
-          aria-label={workspace === 'poses' ? 'Poses' : 'Properties'}
-          aria-hidden={!rightOpen || !chrome}
-          inert={!rightOpen || !chrome}
+          aria-label={rightTitle}
+          aria-hidden={!rightOpen || !isRightDrawerActive}
+          inert={!rightOpen || !isRightDrawerActive}
           className={cn(
             'pointer-events-auto fixed bottom-[96px] right-2 top-[108px] z-50 flex select-none flex-col border-l border-[#d4b483]/25 bg-[#0a0907]/94 shadow-[0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-xl transition-all duration-300 motion-reduce:transition-none',
-            workspace === 'poses'
-              ? 'w-[min(calc(100vw-76px),380px)] lg:bottom-[72px] lg:top-[96px] lg:z-30 lg:w-[380px] lg:border lg:border-[#d4b483]/22 lg:bg-[#0a0907]/88 lg:shadow-[0_14px_38px_rgba(0,0,0,0.42)]'
-              : 'w-[min(calc(100vw-76px),340px)] lg:bottom-[72px] lg:top-[96px] lg:z-30 lg:w-[274px] lg:border lg:border-[#d4b483]/22 lg:bg-[#0a0907]/82 lg:shadow-[0_14px_38px_rgba(0,0,0,0.42)]',
-            rightOpen && chrome ? 'translate-x-0' : 'invisible translate-x-[110%]',
+            'w-[min(calc(100vw-76px),380px)] lg:bottom-[72px] lg:top-[96px] lg:z-30 lg:w-[360px] lg:border lg:border-[#d4b483]/22 lg:bg-[#0a0907]/88 lg:shadow-[0_14px_38px_rgba(0,0,0,0.42)]',
+            rightOpen && isRightDrawerActive ? 'translate-x-0' : 'invisible translate-x-[110%]',
           )}
         >
           <div className="flex shrink-0 items-center justify-between border-b border-[#d4b483]/18 px-[12px] py-[9px]">
-            <span className="text-[10px] tracking-[0.16em] text-[#d8c39c]">
-              {workspace === 'poses' ? 'POSES' : 'PROPERTIES'}
+            <span className="text-[10px] tracking-[0.16em] text-[#d8c39c] font-mono uppercase">
+              {rightTitle}
             </span>
             <button
               type="button"
-              onClick={closeRight}
-              aria-label={workspace === 'poses' ? 'Collapse poses rail' : 'Collapse properties rail'}
-              title={workspace === 'poses' ? 'Collapse poses' : 'Collapse properties'}
+              onClick={() => {
+                setRightOpen(false);
+                setWorkspace('edit');
+              }}
+              aria-label="Collapse drawer"
+              title="Close drawer (Esc)"
               className="flex h-[22px] w-[22px] items-center justify-center border border-[#d4b483]/28 text-[#c3b698]/85 transition-colors hover:border-[#d4b483]/60 hover:text-[#f0e6d4] hud-focus"
             >
               <IconChevronLeft className="h-[10px] w-[10px] rotate-180" />
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto thin-scroll">
-            {workspace === 'poses' ? <PosePanel /> : <RightPanel manifest={manifest} />}
+            {workspace === 'poses' && <PosePanel />}
+            {workspace === 'camera' && <CameraPanel />}
+            {workspace === 'graphics' && <GraphicsPanel />}
+            {workspace === 'physics' && <BodyProperties manifest={manifest} />}
+            {workspace === 'sculpt' && <RightPanel manifest={manifest} />}
+            {workspace === 'settings' && <SettingsPanel />}
+            {workspace === 'assets' && <AssetPanel manifest={manifest} active={true} />}
+            {workspace === 'wardrobe' && <WardrobeDrawer manifest={manifest} />}
           </div>
         </aside>
-      )}
-
-      {/* Reopen the properties / poses rail. Sits at the edge so it never competes
-          with the viewport while the rail is open. */}
-      {chrome && (hasProperties || workspace === 'poses') && !rightOpen && (
-        <button
-          ref={rightTrigger}
-          type="button"
-          onClick={openRight}
-          aria-expanded={rightOpen}
-          aria-controls="hud-right-rail"
-          aria-label={workspace === 'poses' ? 'Open poses rail' : 'Open properties rail'}
-          title={workspace === 'poses' ? 'Poses' : 'Properties'}
-          className="pointer-events-auto fixed right-0 top-1/2 z-40 flex h-[92px] w-[26px] -translate-y-1/2 items-center justify-center border border-r-0 border-[#d4b483]/38 bg-black/52 text-[#e2cba0]/85 backdrop-blur-[6px] transition-colors hover:border-[#d4b483]/70 hover:text-[#f4e8cc] hud-focus"
-        >
-          <span className="rotate-180 text-[10px] tracking-[0.16em] [writing-mode:vertical-rl]">
-            {workspace === 'poses' ? 'POSES' : 'PROPERTIES'}
-          </span>
-        </button>
       )}
 
       {chrome && <Footer manifest={manifest} />}

@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useCharacter, type OverlayLayer } from '@/lib/store';
+import { useCharacter, type OverlayLayer, type OverlayBlend } from '@/lib/store';
 import { convertUrl, fetchCatalogue, matchesQuery } from '@/lib/mo2/client';
 import type { CatalogueEntry } from '@/lib/mo2/types';
 import { cn } from '@/lib/cn';
-import { IconCheck, IconEye, IconSparkle } from '@/components/hud/Icons';
+import { IconEye, IconSparkle } from '@/components/hud/Icons';
 
 const CATEGORIES = ['ALL', 'LIPS', 'BLUSH', 'EYELINER', 'EYESHADOW', 'OVERLAYS'] as const;
 export type MakeupCategory = (typeof CATEGORIES)[number];
@@ -68,7 +68,6 @@ function MakeupSwatch({ entry, color }: { entry: CatalogueEntry; color: string }
   const src = convertUrl({ kind: 'makeup', id: entry.id, mode: 'alpha' });
   return (
     <span className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-full border border-[#d4b483]/20 bg-[radial-gradient(ellipse_at_center,#4a3f32_0%,#221d17_62%,#0f0d0b_100%)] p-[3px] transition-transform duration-200 group-hover:scale-105">
-      {/* Lazy image gates the CSS mask; otherwise CSS fetches all masks at once. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
@@ -108,9 +107,16 @@ export function MakeupPicker({ onDirty }: { onDirty?: () => void }) {
   const overlayLayers = useCharacter((s) => s.overlayLayers);
   const toggleOverlay = useCharacter((s) => s.toggleOverlay);
   const setOverlayOpacity = useCharacter((s) => s.setOverlayOpacity);
+  const setOverlayColor = useCharacter((s) => s.setOverlayColor);
+  const setOverlayBlend = useCharacter((s) => s.setOverlayBlend);
+  const setOverlayCoverage = useCharacter((s) => s.setOverlayCoverage);
   const clearOverlays = useCharacter((s) => s.clearOverlays);
   const activeOverlay = useCharacter((s) => s.activeOverlay);
   const setActiveOverlay = useCharacter((s) => s.setActiveOverlay);
+  const setColor = setOverlayColor;
+  const setOpacity = setOverlayOpacity;
+  const setBlend = setOverlayBlend;
+  const setCoverage = setOverlayCoverage;
 
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<MakeupCategory>('ALL');
@@ -150,6 +156,8 @@ export function MakeupPicker({ onDirty }: { onDirty?: () => void }) {
   const byId = new Map(layers.map((layer) => [layer.id, layer]));
   const selected = layers.find((layer) => `makeup:${layer.id}` === activeOverlay) ?? layers[0];
   const selectedKey = selected ? `makeup:${selected.id}` : null;
+  const selectedEntry = selected ? entries.find((e) => e.id === selected.id) : null;
+  const selectedSubtype = selectedEntry ? detectSubtype(selectedEntry) : 'OVERLAYS';
 
   const remove = (layer: OverlayLayer) => {
     toggleOverlay(layer);
@@ -174,38 +182,41 @@ export function MakeupPicker({ onDirty }: { onDirty?: () => void }) {
   };
 
   return (
-    <section
-      aria-label="Makeup workspace"
-      className="flex max-h-[calc(var(--hud-h,572px)-151px)] flex-col gap-[8px] text-[#e6e1d8] select-none"
-    >
-      {/* ── Active Layers Stack ────────────────────────────────────── */}
-      <div className="shrink-0 rounded-xs border border-[#d4b483]/30 bg-[#15130f]/85 shadow-[0_8px_24px_#08070566] backdrop-blur-md">
-        <div className="flex items-center justify-between border-b border-[#d4b483]/20 bg-[linear-gradient(100deg,#6d573338,transparent)] px-[9px] py-[6px]">
-          <h2 className="text-[11px] font-normal tracking-[0.02em] text-[#e8d4af]">
-            APPLIED LAYERS <span className="num">({layers.length}/8)</span>
-          </h2>
-          {layers.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                clearOverlays('makeup');
-                setActiveOverlay(null);
-                onDirty?.();
-              }}
-              className={cn(
-                'text-[10px] tracking-[0.08em] text-[#b9a88a] transition-colors hover:text-[#f0dfbe]',
-                focus,
-              )}
-            >
-              CLEAR ALL
-            </button>
-          )}
-        </div>
-        <div className="p-[6px]">
-          <div className="thin-scroll max-h-[96px] space-y-[4px] overflow-y-auto">
+    <div className="relative flex w-full flex-col select-none">
+      <div className="flex flex-col gap-3 rounded-xs border border-[#d4b483]/22 bg-black/45 p-3.5 backdrop-blur-md">
+        {/* Top Header: MAKEUP & TINTS */}
+        <h2 className="text-[11px] font-medium tracking-[0.05em] text-[#efece6] uppercase">
+          MAKEUP &amp; TINTS
+        </h2>
+
+        {/* ── 1. ACTIVE LAYERS STACK ─────────────────────────────────── */}
+        <div className="flex flex-col gap-1.5 pt-0.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#c4b595]">
+              APPLIED LAYERS ({layers.length}/8)
+            </span>
+            {layers.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  clearOverlays('makeup');
+                  setActiveOverlay(null);
+                  onDirty?.();
+                }}
+                className={cn(
+                  'text-[9px] font-mono tracking-[0.08em] text-[#b9a88a] transition-colors hover:text-[#f0dfbe]',
+                  focus,
+                )}
+              >
+                [CLEAR ALL]
+              </button>
+            )}
+          </div>
+
+          <div className="thin-scroll max-h-[85px] space-y-[3px] overflow-y-auto">
             {layers.length === 0 && (
-              <p className="px-[3px] py-[6px] text-[10px] leading-relaxed text-[#b5ab99]/70">
-                No makeup applied. Select presets below to stack layers.
+              <p className="border border-[#d4b483]/15 bg-black/30 px-2 py-2 text-center text-[9.5px] font-mono leading-relaxed text-[#b5ab99]/70">
+                No makeup applied. Pick styles below to stack.
               </p>
             )}
             {layers.map((layer, index) => {
@@ -216,10 +227,10 @@ export function MakeupPicker({ onDirty }: { onDirty?: () => void }) {
                 <div
                   key={layer.id}
                   className={cn(
-                    'flex items-center gap-[5px] rounded-xs border px-[6px] py-[4px] transition-colors',
+                    'flex items-center gap-[5px] rounded-xs border px-[6px] py-[3px] transition-colors',
                     active
-                      ? 'border-[#d8b273]/75 bg-[#d4b483]/15 shadow-[inset_0_0_9px_#d4b4830c]'
-                      : 'border-[#d4b483]/20 bg-black/25',
+                      ? 'border-[#eac87f] bg-[#d4b483]/15 shadow-[0_0_8px_rgba(234,200,127,0.3)]'
+                      : 'border-[#d4b483]/20 bg-black/30 hover:border-[#d4b483]/40',
                   )}
                 >
                   <button
@@ -230,13 +241,13 @@ export function MakeupPicker({ onDirty }: { onDirty?: () => void }) {
                     className={cn('flex min-w-0 flex-1 items-center gap-[6px] text-left', focus)}
                   >
                     <span
-                      className="h-[7px] w-[7px] shrink-0 rounded-full border border-[#d4b483]/50 shadow-[0_0_4px_rgba(212,180,131,0.3)]"
+                      className="h-[8px] w-[8px] shrink-0 rounded-full border border-[#d4b483]/60 shadow-[0_0_4px_rgba(212,180,131,0.4)]"
                       style={{ backgroundColor: layer.color }}
                     />
-                    <span className="min-w-0 flex-1 truncate text-[10px] text-[#ddceb5]">
+                    <span className="min-w-0 flex-1 truncate text-[9.5px] font-mono text-[#ddceb5]">
                       L{index + 1} · {label}
                     </span>
-                    <span className="num shrink-0 text-[10px] text-[#c5b595]">
+                    <span className="num shrink-0 text-[9.5px] font-mono text-[#c5b595]">
                       {Math.round(layer.opacity * 100)}%
                     </span>
                   </button>
@@ -272,149 +283,267 @@ export function MakeupPicker({ onDirty }: { onDirty?: () => void }) {
             })}
           </div>
         </div>
-      </div>
 
-      {/* ── Sub-category Segmented Filters ─────────────────────────── */}
-      <div className="flex shrink-0 items-stretch border border-[#d4b483]/22 bg-black/40 text-[9.5px] tracking-[0.06em]">
-        {CATEGORIES.map((cat, idx) => {
-          const count = cat === 'ALL' ? classified.length : classified.filter((e) => e.subtype === cat).length;
-          const isActive = category === cat;
-          return (
-            <button
-              key={cat}
-              type="button"
-              aria-pressed={isActive}
-              onClick={() => setCategory(cat)}
-              className={cn(
-                'flex-1 py-[4px] text-center transition-colors',
-                idx > 0 && 'border-l border-[#d4b483]/22',
-                isActive
-                  ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
-                  : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
-                focus,
-              )}
-            >
-              {cat} ({count})
-            </button>
-          );
-        })}
-      </div>
+        {/* ── 2. ACTIVE LAYER TUNING (COLOR, OPACITY, BLEND, SPREAD) ── */}
+        {selected && (
+          <div className="flex flex-col gap-2 rounded-xs border border-[#d4b483]/22 bg-black/40 p-2.5">
+            <div className="flex items-center justify-between text-[9.5px] font-mono">
+              <span className="text-[#c4b595] uppercase font-medium truncate max-w-[170px]">
+                L{layers.indexOf(selected) + 1}: {selectedEntry ? makeupLabel(selectedEntry) : selected.id}
+              </span>
+              <span className="text-[#8f8778] uppercase text-[9px]">[{selectedSubtype}]</span>
+            </div>
 
-      {/* ── Search Input with Clear Button ──────────────────────────── */}
-      <div className="relative shrink-0">
-        <input
-          ref={search}
-          type="text"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search makeup styles…"
-          aria-label="Search makeup styles"
-          className="w-full border border-[#d4b483]/26 bg-black/48 px-[7px] py-[4px] text-[10px] tracking-[0.06em] text-[#e2d8c6] placeholder-[#8f8778]/55 outline-none transition-colors focus:border-[#d4b483]/60"
-        />
-        {query && (
-          <button
-            type="button"
-            aria-label="Clear search"
-            onClick={() => {
-              setQuery('');
-              search.current?.focus();
-            }}
-            className={cn(
-              'absolute right-[6px] top-1/2 -translate-y-1/2 text-[10px] text-[#8f8778] hover:text-[#e2d8c6]',
-              focus,
-            )}
-          >
-            ×
-          </button>
-        )}
-      </div>
+            {/* Color Swatch & Palette */}
+            <div className="flex flex-col gap-1.5 pt-0.5">
+              <div className="flex items-center justify-between text-[9.5px] font-mono">
+                <span className="text-[#c4b595] uppercase">COLOR</span>
+                <span className="text-[#d8c39c] uppercase font-mono">[{selected.color}]</span>
+              </div>
 
-      {/* ── Grid of Available Styles ─────────────────────────────────── */}
-      <div
-        className="thin-scroll min-h-0 flex-1 overflow-y-auto pr-[2px]"
-        aria-label="Makeup styles"
-        aria-busy={loading}
-      >
-        {loading ? (
-          <div className="grid grid-cols-4 gap-[6px]">
-            {Array.from({ length: 8 }, (_, i) => (
-              <div
-                key={i}
-                className="aspect-square animate-pulse rounded-full border border-[#d4b483]/15 bg-[#d4b483]/5 motion-reduce:animate-none"
+              <div className="flex items-center gap-2">
+                <label
+                  className="relative aspect-square w-[34px] shrink-0 cursor-pointer overflow-hidden rounded-xs border border-[#d4b483]/50 shadow-[0_0_6px_rgba(0,0,0,0.5)] transition-transform hover:scale-105"
+                  style={{ backgroundColor: selected.color }}
+                  title="Click to open color picker"
+                >
+                  <input
+                    type="color"
+                    value={selected.color}
+                    onChange={(e) => setColor('makeup', selected.id, e.target.value)}
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  />
+                  <span className="pointer-events-none absolute inset-0 border border-white/20" />
+                </label>
+
+                <div className="grid grid-cols-8 gap-[2.5px] flex-1">
+                  {(BEAUTY_SWATCHES[selectedSubtype] || BEAUTY_SWATCHES.OVERLAYS).map((swatch) => {
+                    const isMatch = selected.color.toLowerCase() === swatch.hex.toLowerCase();
+                    return (
+                      <button
+                        key={swatch.hex}
+                        type="button"
+                        onClick={() => setColor('makeup', selected.id, swatch.hex)}
+                        title={`${swatch.name} (${swatch.hex})`}
+                        className={cn(
+                          'h-[14px] w-[14px] rounded-[1px] border transition-all duration-100',
+                          isMatch
+                            ? 'scale-110 border-[#eac87f] ring-1 ring-[#eac87f] shadow-[0_0_6px_rgba(234,200,127,0.6)]'
+                            : 'border-black/50 hover:scale-110 hover:border-white/60',
+                        )}
+                        style={{ backgroundColor: swatch.hex }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Opacity Slider */}
+            <div className="flex flex-col gap-1 pt-1">
+              <div className="flex items-center justify-between text-[9.5px] font-mono tracking-wider">
+                <span className="text-[#c4b595] uppercase">OPACITY</span>
+                <span className="text-[#d8c39c]">[{Math.round(selected.opacity * 100)}%]</span>
+              </div>
+              <input
+                type="range"
+                min={0.02}
+                max={1}
+                step={0.01}
+                value={selected.opacity}
+                onChange={(e) => setOpacity('makeup', selected.id, parseFloat(e.target.value))}
+                className="h-1 w-full cursor-pointer appearance-none rounded-full bg-[#201d18] accent-[#d4b483]"
               />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <p className="border border-[#d4b483]/20 bg-black/30 px-[10px] py-[16px] text-center text-[10px] leading-relaxed text-[#c5b595]">
-            {entries.length
-              ? 'No matching styles. Try another search or category.'
-              : 'No makeup styles available in pack.'}
-          </p>
-        ) : (
-          <div className="grid grid-cols-4 gap-[7px]">
-            {filtered.map(({ entry, subtype }, i) => {
-              const layer = byId.get(entry.id);
-              const label = makeupLabel(entry);
-              const isSelected = !!layer;
+            </div>
 
+            {/* Blend Mode & Coverage (Spread) */}
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#d4b483]/14">
+              <div className="flex items-center gap-1.5 text-[9.5px] font-mono">
+                <span className="text-[#c4b595] uppercase">BLEND:</span>
+                <select
+                  value={selected.blend ?? 'normal'}
+                  onChange={(e) => setBlend('makeup', selected.id, e.target.value as OverlayBlend)}
+                  className="rounded-xs border border-[#d4b483]/30 bg-black/60 px-1 py-0.5 text-[9px] font-mono text-[#e8d4af] outline-none focus:border-[#eac87f]"
+                >
+                  {['normal', 'multiply', 'screen', 'overlay'].map((b) => (
+                    <option key={b} value={b} className="bg-[#12100d] text-[#e8d4af]">
+                      {b.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-[9.5px] font-mono flex-1 justify-end">
+                <span className="text-[#c4b595] uppercase">SPREAD:</span>
+                <input
+                  type="range"
+                  min={0.05}
+                  max={1}
+                  step={0.01}
+                  value={selected.coverage ?? 1}
+                  onChange={(e) => setCoverage('makeup', selected.id, parseFloat(e.target.value))}
+                  className="h-1 w-14 cursor-pointer appearance-none rounded-full bg-[#201d18] accent-[#d4b483]"
+                  title={`Coverage: ${Math.round((selected.coverage ?? 1) * 100)}%`}
+                />
+                <span className="text-[#d8c39c] text-[8.5px]">[{Math.round((selected.coverage ?? 1) * 100)}%]</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── 3. PRESET SELECTOR & CATALOGUE ──────────────────────────── */}
+        <div className="flex flex-col gap-2 border-t border-[#d4b483]/18 pt-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#c4b595]">
+              PRESET STYLES
+            </span>
+            <span className="text-[9.5px] font-mono tracking-tight text-[#8f8778]">
+              {loading ? 'LOADING…' : `${filtered.length} STYLES`}
+            </span>
+          </div>
+
+          {/* Sub-category Segmented Filters */}
+          <div className="flex items-stretch border border-[#d4b483]/22 bg-black/40 text-[9px] tracking-[0.06em]">
+            {CATEGORIES.map((cat, idx) => {
+              const count = cat === 'ALL' ? classified.length : classified.filter((e) => e.subtype === cat).length;
+              const isActive = category === cat;
               return (
                 <button
+                  key={cat}
                   type="button"
-                  key={entry.id}
-                  title={`${label}\nType: ${subtype}\nFile: ${entry.file}`}
-                  aria-label={`${layer ? 'Remove' : 'Add'} ${label}`}
-                  aria-pressed={isSelected}
-                  onClick={() => pick(entry, subtype)}
-                  className="group relative flex min-w-0 flex-col items-center text-left"
+                  aria-pressed={isActive}
+                  onClick={() => setCategory(cat)}
+                  className={cn(
+                    'flex-1 py-[3px] text-center transition-colors',
+                    idx > 0 && 'border-l border-[#d4b483]/22',
+                    isActive
+                      ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
+                      : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
+                    focus,
+                  )}
                 >
-                  {/* Circular Preview Disc */}
-                  <span
-                    className={cn(
-                      'relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-full border p-[2px] transition-all duration-200',
-                      isSelected
-                        ? 'border-[#eac87f] bg-[#eac87f]/16 shadow-[0_0_12px_rgba(234,200,127,0.45)]'
-                        : 'border-[#d4b483]/25 bg-[#0b0a08]/80 group-hover:border-[#d4b483]/60 group-hover:bg-[#16120e]',
-                    )}
-                  >
-                    <MakeupSwatch entry={entry} color={layer?.color ?? defaultColor(subtype)} />
-
-                    {/* Monospace Number Badge */}
-                    <span className="pointer-events-none absolute bottom-[1px] right-[2px] text-[9.5px] font-mono tracking-tight text-[#eadcc0]/75">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-
-                    {/* Selected Active Glow Pip */}
-                    {isSelected && (
-                      <span className="pointer-events-none absolute -top-[1px] h-[3px] w-[3px] rounded-full bg-[#f2dfbe] shadow-[0_0_5px_rgba(242,223,190,0.9)]" />
-                    )}
-                  </span>
-
-                  {/* Clean Label */}
-                  <span
-                    className={cn(
-                      'mt-[3px] w-full truncate text-center text-[10px] tracking-[0.05em] transition-colors',
-                      isSelected
-                        ? 'font-medium text-[#f0e2ca]'
-                        : 'text-[#a9a192]/70 group-hover:text-[#d5ccbb]',
-                    )}
-                  >
-                    {label}
-                  </span>
+                  {cat} ({count})
                 </button>
               );
             })}
           </div>
-        )}
-      </div>
 
-      {/* ── Status Footer ─────────────────────────────────────────── */}
-      <div className="mt-[4px] flex shrink-0 items-center justify-between text-[10px] tracking-[0.11em] text-[#8b8375]/50">
-        <div className="flex items-center gap-[4px]">
-          <IconSparkle className="h-[6px] w-[6px] text-[#c9b184]/50" />
-          <span>SDZ21 · UBE 4K ATLAS MASKS</span>
+          {/* Search Input */}
+          <div className="relative">
+            <input
+              ref={search}
+              type="text"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search makeup styles…"
+              aria-label="Search makeup styles"
+              className="w-full border border-[#d4b483]/26 bg-black/48 px-[7px] py-[3px] text-[10px] tracking-[0.06em] text-[#e2d8c6] placeholder-[#8f8778]/55 outline-none transition-colors focus:border-[#d4b483]/60"
+            />
+            {query && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => {
+                  setQuery('');
+                  search.current?.focus();
+                }}
+                className={cn(
+                  'absolute right-[6px] top-1/2 -translate-y-1/2 text-[10px] text-[#8f8778] hover:text-[#e2d8c6]',
+                  focus,
+                )}
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {/* Makeup Discs Grid */}
+          <div className="thin-scroll max-h-[160px] overflow-y-auto pr-[2px]">
+            {loading ? (
+              <div className="grid grid-cols-4 gap-[6px]">
+                {Array.from({ length: 8 }, (_, i) => (
+                  <div
+                    key={i}
+                    className="aspect-square animate-pulse rounded-full border border-[#d4b483]/15 bg-[#d4b483]/5 motion-reduce:animate-none"
+                  />
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
+              <p className="border border-[#d4b483]/20 bg-black/30 px-[10px] py-[16px] text-center text-[10px] leading-relaxed text-[#c5b595]">
+                {entries.length
+                  ? 'No matching styles. Try another search or category.'
+                  : 'No makeup styles available in pack.'}
+              </p>
+            ) : (
+              <div className="grid grid-cols-4 gap-[6px]">
+                {filtered.map(({ entry, subtype }, i) => {
+                  const layer = byId.get(entry.id);
+                  const label = makeupLabel(entry);
+                  const isSelected = !!layer;
+
+                  return (
+                    <button
+                      type="button"
+                      key={entry.id}
+                      title={`${label}\nType: ${subtype}\nFile: ${entry.file}`}
+                      aria-label={`${layer ? 'Remove' : 'Add'} ${label}`}
+                      aria-pressed={isSelected}
+                      onClick={() => pick(entry, subtype)}
+                      className="group relative flex min-w-0 flex-col items-center text-left"
+                    >
+                      <span
+                        className={cn(
+                          'relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-full border p-[2px] transition-all duration-200',
+                          isSelected
+                            ? 'border-[#eac87f] bg-[#eac87f]/16 shadow-[0_0_10px_rgba(234,200,127,0.45)]'
+                            : 'border-[#d4b483]/25 bg-[#0b0a08]/80 group-hover:border-[#d4b483]/60 group-hover:bg-[#16120e]',
+                        )}
+                      >
+                        <MakeupSwatch entry={entry} color={layer?.color ?? defaultColor(subtype)} />
+
+                        <span className="pointer-events-none absolute bottom-[1px] right-[2px] text-[8.5px] font-mono tracking-tight text-[#eadcc0]/75">
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
+
+                        {isSelected && (
+                          <span className="pointer-events-none absolute -top-[1px] h-[3px] w-[3px] rounded-full bg-[#f2dfbe] shadow-[0_0_5px_rgba(242,223,190,0.9)]" />
+                        )}
+                      </span>
+
+                      <span
+                        className={cn(
+                          'mt-[2px] w-full truncate text-center text-[9px] tracking-[0.04em] transition-colors',
+                          isSelected
+                            ? 'font-medium text-[#f0e2ca]'
+                            : 'text-[#a9a192]/70 group-hover:text-[#d5ccbb]',
+                        )}
+                      >
+                        {label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-        <span>{filtered.length} SHOWN</span>
+
+        {/* ── 4. Status Footer & Arc ─────────────────────────────────── */}
+        <div className="flex items-center justify-between border-t border-[#d4b483]/18 pt-2 text-[9.5px] tracking-[0.11em] text-[#8b8375]/60">
+          <div className="flex items-center gap-[4px]">
+            <IconSparkle className="h-[6px] w-[6px] text-[#c9b184]/50" />
+            <span>SDZ21 · UBE 4K ATLAS MASKS</span>
+          </div>
+          <span>{filtered.length} SHOWN</span>
+        </div>
+
+        <div className="flex justify-center pt-1">
+          <svg className="h-5 w-14 text-[#d4b483]/30" viewBox="0 0 100 40" fill="none" stroke="currentColor" strokeWidth="1">
+            <path d="M 10 38 Q 50 5 90 38" />
+            <path d="M 50 5 L 50 0" />
+          </svg>
+        </div>
       </div>
-    </section>
+    </div>
   );
 }

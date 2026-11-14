@@ -109,5 +109,24 @@ function load(file) {
     assert.equal(mesh.skinWeight.length, mesh.vertexCount * 4);
     assert.ok(mesh.materials.every((m) => m.role === 'skin' && m.texture?.includes('kind=body')));
   }
-  console.log('pack server: source, metadata, whitelist, containment and conversion ok');
+  const clothes = await server.readCatalogue('clothingMesh');
+  const texturedGarment = clothes.find((e) => e.authored && e.decodable !== false && !e.untextured);
+  assert.ok(texturedGarment, 'at least one authored clothing mesh with textures exists');
+  const garmentResp = await route.GET(new Request(`http://localhost/api/mo2/convert?${new URLSearchParams({ kind: 'clothingMesh', id: texturedGarment.id, mode: 'mesh' })}`));
+  assert.equal(garmentResp.status, 200, 'clothing conversion failed');
+  const garmentMesh = await garmentResp.json();
+  assert.ok(garmentMesh.authored, true);
+  assert.ok(garmentMesh.materials?.length > 0);
+  const garmentMat = garmentMesh.materials.find((m) => m.role === 'clothing' || m.role === 'accessory');
+  if (garmentMat) {
+    assert.ok(garmentMat.texture, 'garment material has albedo URL');
+    assert.ok(garmentMat.texture.includes('kind=clothing'), 'albedo URL routes to clothing texture');
+    const albedoResp = await route.GET(new Request(`http://localhost${garmentMat.texture}`));
+    assert.equal(albedoResp.status, 200, 'albedo texture resolves');
+  }
+  const embeddedSkin = garmentMesh.materials.find((m) => m.role === 'skin');
+  if (embeddedSkin && embeddedSkin.texture) {
+    assert.ok(embeddedSkin.texture.includes('kind=body'), 'embedded skin uses body texture');
+  }
+  console.log('pack server: source, metadata, whitelist, containment, conversion and clothing texture delivery ok');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

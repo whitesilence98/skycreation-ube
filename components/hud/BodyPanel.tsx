@@ -1,0 +1,254 @@
+'use client';
+
+import { useCharacter } from '@/lib/store';
+import { HudSlider } from '@/components/hud/HudSlider';
+import { IconSparkle } from '@/components/hud/Icons';
+import { cn } from '@/lib/cn';
+import type { Mo2Manifest } from '@/lib/head/faceTexture';
+
+interface BodyPanelProps {
+  manifest?: Mo2Manifest | null;
+}
+
+export function BodyPanel({ manifest = null }: BodyPanelProps) {
+  const weight = useCharacter((s) => s.weight);
+  const setWeight = useCharacter((s) => s.setWeight);
+  const linkFaceToWeight = useCharacter((s) => s.linkFaceToWeight);
+  const setLinkFaceToWeight = useCharacter((s) => s.setLinkFaceToWeight);
+  const garmentVisible = useCharacter((s) => s.garmentVisible);
+  const setGarmentVisible = useCharacter((s) => s.setGarmentVisible);
+  const skinGloss = useCharacter((s) => s.skinGloss);
+  const setSkinGloss = useCharacter((s) => s.setSkinGloss);
+  const skinSss = useCharacter((s) => s.skinSss);
+  const setSkinSss = useCharacter((s) => s.setSkinSss);
+  const bodyPhysicsEnabled = useCharacter((s) => s.bodyPhysicsEnabled);
+  const triggerPhysicsImpulse = useCharacter((s) => s.triggerPhysicsImpulse);
+  const workspace = useCharacter((s) => s.workspace);
+  const setWorkspace = useCharacter((s) => s.setWorkspace);
+
+  const hasBodyPair = Boolean(
+    (manifest?.assets?.bodyMesh as Array<{ weightVariants?: unknown }> | undefined)
+      ?.some((row) => row.weightVariants),
+  );
+
+  return (
+    <div className="select-none text-[#e6e1d8] hud-fade">
+      {/* ── Title Bar ─────────────────────────────────────────────── */}
+      <div className="mb-[8px] flex items-baseline justify-between border-b border-[#d4b483]/18 pb-[5px]">
+        <h2 className="text-[11px] font-medium tracking-[0.05em] text-[#efece6] uppercase">
+          BODY ANATOMY & PHYSIQUE
+        </h2>
+        <span className="font-mono text-[9.5px] text-[#eac87f]">
+          {Math.round(weight * 100)}% WEIGHT
+        </span>
+      </div>
+
+      {/* ── 1. Body Weight Slider (0–100% lerp) ────────────────────── */}
+      <div className="rounded-xs border border-[#d4b483]/22 bg-black/45 p-[9px] backdrop-blur-md">
+        <HudSlider
+          label="BODY WEIGHT"
+          suffix={hasBodyPair ? undefined : '(SINGLE MESH)'}
+          min={0}
+          max={1}
+          step={0.01}
+          value={weight}
+          display={`${Math.round(weight * 100)}% (${weight.toFixed(2)})`}
+          onChange={(v) => {
+            if (hasBodyPair) setWeight(v);
+          }}
+          bracketed
+        />
+
+        {/* Quick Weight Preset Buttons */}
+        <div className="mt-2 flex items-center justify-between gap-1.5 text-[9px] font-mono">
+          <button
+            type="button"
+            onClick={() => setWeight(0)}
+            className={cn(
+              'flex-1 rounded-xs border py-1 tracking-wider transition-all',
+              weight === 0
+                ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
+                : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
+            )}
+          >
+            SLIM [0%]
+          </button>
+          <button
+            type="button"
+            onClick={() => setWeight(0.5)}
+            className={cn(
+              'flex-1 rounded-xs border py-1 tracking-wider transition-all',
+              Math.abs(weight - 0.5) < 0.02
+                ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
+                : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
+            )}
+          >
+            MEDIUM [50%]
+          </button>
+          <button
+            type="button"
+            onClick={() => setWeight(1)}
+            className={cn(
+              'flex-1 rounded-xs border py-1 tracking-wider transition-all',
+              weight === 1
+                ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
+                : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
+            )}
+          >
+            FULL [100%]
+          </button>
+        </div>
+
+        {/* Link Face to Weight */}
+        <button
+          type="button"
+          onClick={() => setLinkFaceToWeight(!linkFaceToWeight)}
+          title="FaceGen fullness and neck perimeter scale with body weight (Skyrim Creation Engine parity)"
+          className={cn(
+            'mt-2.5 flex w-full items-center justify-between border px-2 py-1.5 text-[9.5px] font-mono tracking-wider transition-colors',
+            linkFaceToWeight
+              ? 'border-[#eac87f] bg-[#d4b483]/16 text-[#f2dfbe] font-medium shadow-[0_0_8px_rgba(212,180,131,0.2)]'
+              : 'border-[#8c8477]/30 bg-black/30 text-[#a8a294]/70 hover:border-[#d4b483]/50 hover:text-[#d5cdbd]',
+          )}
+        >
+          <span className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                'inline-block h-1.5 w-1.5 rounded-full transition-colors',
+                linkFaceToWeight ? 'bg-[#eac87f] shadow-[0_0_5px_#eac87f]' : 'bg-[#8c8477]/40',
+              )}
+            />
+            LINK FACE TO WEIGHT
+          </span>
+          <span className="text-[9px] uppercase text-[#c9b184]">
+            {linkFaceToWeight ? 'ACTIVE' : 'OFF'}
+          </span>
+        </button>
+      </div>
+
+      {/* ── 2. Garment Layer Toggle (Anatomy vs Clothing) ─────────── */}
+      <div className="my-[6px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[8px]">
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="font-mono text-[9.5px] font-semibold text-[#efece6] uppercase">
+              GARMENT LAYER
+            </span>
+            <span className="text-[8.5px] text-[#8f8778]">
+              {garmentVisible ? 'Outfits visible on model' : 'Hiding clothes for anatomy inspection'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setGarmentVisible(!garmentVisible)}
+            className={cn(
+              'flex items-center gap-1.5 rounded-xs border px-2.5 py-1 text-[9px] font-mono tracking-wider transition-all',
+              garmentVisible
+                ? 'border-[#eac87f] bg-[#d4b483]/20 text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
+                : 'border-[#d09e88]/50 bg-[#d09e88]/15 text-[#e0a898]',
+            )}
+          >
+            <span
+              className={cn(
+                'h-1.5 w-1.5 rounded-full',
+                garmentVisible ? 'bg-[#eac87f] shadow-[0_0_4px_#eac87f]' : 'bg-[#e0a898]',
+              )}
+            />
+            <span>{garmentVisible ? 'OUTFIT ON' : 'ANATOMY ONLY'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── 3. Skin Material Gloss & SSS ─────────────────────────── */}
+      <div className="my-[6px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[8px]">
+        <div className="mb-2 flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+          <span className="font-mono text-[9.5px] font-semibold text-[#efece6] uppercase">
+            SKIN SHADER METRICS
+          </span>
+          <span className="font-mono text-[8.5px] text-[#8f8778]">SSS / GLOSS</span>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <div>
+            <div className="mb-0.5 flex justify-between text-[9px] font-mono">
+              <span className="text-[#a9a192]">SKIN GLOSS</span>
+              <span className="text-[#eac87f]">{Math.round(skinGloss * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={skinGloss}
+              onChange={(e) => setSkinGloss(parseFloat(e.target.value))}
+              className="h-1 w-full cursor-pointer appearance-none rounded-full bg-[#201d18] accent-[#eac87f]"
+            />
+          </div>
+
+          <div>
+            <div className="mb-0.5 flex justify-between text-[9px] font-mono">
+              <span className="text-[#a9a192]">SUBSURFACE SCATTERING</span>
+              <span className="text-[#eac87f]">{Math.round(skinSss * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={skinSss}
+              onChange={(e) => setSkinSss(parseFloat(e.target.value))}
+              className="h-1 w-full cursor-pointer appearance-none rounded-full bg-[#201d18] accent-[#eac87f]"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ── 4. CBPC Physics Launcher Card ─────────────────────────── */}
+      <div className="my-[6px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[8px]">
+        <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-[9.5px] font-semibold text-[#efece6] uppercase">
+              CBPC SOFT-BODY PHYSICS
+            </span>
+          </div>
+          <span className={cn('font-mono text-[8.5px]', bodyPhysicsEnabled ? 'text-[#eac87f]' : 'text-[#8f8778]')}>
+            {bodyPhysicsEnabled ? 'ENABLED' : 'OFF'}
+          </span>
+        </div>
+
+        <div className="mt-2 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={triggerPhysicsImpulse}
+            title="Trigger a momentary impulse to preview physics bounce"
+            className="flex-1 rounded-xs border border-[#d4b483]/30 bg-black/40 py-1.5 font-mono text-[9px] tracking-wider text-[#d8c9ad] transition-all hover:border-[#eac87f] hover:text-[#fff0d4]"
+          >
+            TEST BOUNCE
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setWorkspace(workspace === 'physics' ? 'edit' : 'physics')}
+            className={cn(
+              'flex-1 rounded-xs border py-1.5 font-mono text-[9px] tracking-wider transition-all',
+              workspace === 'physics'
+                ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_8px_rgba(234,200,127,0.35)]'
+                : 'border-[#d4b483]/35 bg-[#d4b483]/12 text-[#e8c98e] hover:border-[#eac87f] hover:bg-[#d4b483]/22 hover:text-[#fff0d4]',
+            )}
+          >
+            <span>{workspace === 'physics' ? 'CLOSE [ESC]' : 'PHYSICS STUDIO →'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── Footer ────────────────────────────────────────────────── */}
+      <div className="mt-[4px] flex items-center justify-between border-t border-[#d4b483]/14 pt-[3px] text-[8.5px] tracking-[0.08em] text-[#8b8375]/70">
+        <div className="flex items-center gap-[4px]">
+          <IconSparkle className="h-[6px] w-[6px] text-[#c9b184]/50" />
+          <span>DUAL-WEIGHT MESH BLENDING</span>
+        </div>
+        <span className="font-mono text-[#c9b184]/80">UBE 2.0</span>
+      </div>
+    </div>
+  );
+}

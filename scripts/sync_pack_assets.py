@@ -681,12 +681,16 @@ EQUIP_SLOTS = (
 _EQUIP_NEEDLES: tuple[tuple[str, str], ...] = (
     ("shoulder", "accessories"), ("pauldron", "accessories"), ("spaulder", "accessories"),
     ("sleeve", "accessories"), ("sleaves", "accessories"), ("mantle", "accessories"),
-    ("gauntlet", "hands"), ("bracer", "hands"), ("glove", "hands"),
-    ("trouser", "bottom"), ("greave", "bottom"), ("skirt", "bottom"),
+    ("cape", "accessories"), ("cloak", "accessories"), ("crown", "accessories"), ("halo", "accessories"),
+    ("necklace", "accessories"), ("choker", "accessories"), ("collar", "accessories"),
+    ("gorget", "accessories"), ("ellbowguard", "accessories"), ("elbowguard", "accessories"),
+    ("gauntlet", "hands"), ("bracer", "hands"), ("glove", "hands"), ("vambrace", "hands"), ("wristguard", "hands"),
+    ("trouser", "bottom"), ("greave", "feet"), ("skirt", "bottom"), ("miniskirt", "bottom"), ("cuisses", "bottom"),
+    ("shorts", "bottom"), ("short", "bottom"),
     ("circlet", "accessories"), ("helmet", "accessories"), ("diadem", "accessories"),
     ("breast", "bra"), ("bikini", "bra"), ("cuirass", "top"),
     ("corset", "top"), ("armour", "top"), ("armor", "top"),
-    ("sandal", "feet"), ("boot", "feet"), ("shoe", "feet"), ("foot", "feet"),
+    ("sabaton", "feet"), ("sandal", "feet"), ("boot", "feet"), ("shoe", "feet"), ("foot", "feet"),
     ("helm", "accessories"), ("hood", "accessories"), ("mask", "accessories"), ("tiara", "accessories"),
     ("shirt", "top"), ("vest", "top"), ("robe", "outfit"),
     ("waist", "accessories"), ("belt", "accessories"), ("chest", "top"),
@@ -703,18 +707,13 @@ _WEIGHT_SUFFIX = re.compile(r"_([01])$")
 
 
 def equip_slot_for(rel: str, stem: str, has_body: bool = False, paired: bool = False) -> str:
-    """Which paper-doll slot a clothing NIF belongs to."""
-    parts = rel.replace("/", "\\").split("\\")
-    if len(parts) >= 2 and parts[0].lower() == "clothing":
-        slot = parts[1].lower()
-        if slot in EQUIP_SLOTS:
-            return slot
-    if has_body and not paired:
-        return "outfit"
+    """Which paper-doll slot a clothing NIF belongs to (inferred dynamically by name)."""
     name = _WEIGHT_SUFFIX.sub("", stem.lower())
     for needle, slot in _EQUIP_NEEDLES:
         if needle in name:
             return slot
+    if has_body and not paired:
+        return "outfit"
     return "top"
 
 
@@ -800,6 +799,15 @@ def _validate_authored(
     unavailable now, but the row stays so that adding the DDS files and
     resyncing re-enables it — no hardcoded unavailable state.
     """
+    if entry.get("kind") == "clothingMesh":
+        half = _WEIGHT_SUFFIX.search(Path(entry["file"]).stem.lower())
+        entry["equipSlot"] = equip_slot_for(
+            entry.get("rel", ""),
+            Path(entry["file"]).stem,
+            False,
+            paired=bool(half),
+        )
+
     try:
         decoded = authored_decode(path)
     except Exception as exc:  # noqa: BLE001 — one bad mesh must not stop the walk

@@ -72,12 +72,22 @@ export type EnbPreset = 'all' | 'enb' | 'pure';
 
 /** Left workspace dock. The panels stay mounted; only the active one is
  *  visible, so switching never drops filters, scroll position or local state. */
-export type Workspace = 'edit' | 'assets' | 'camera' | 'graphics' | 'poses';
+export type Workspace = 'edit' | 'assets' | 'camera' | 'graphics' | 'poses' | 'physics' | 'sculpt' | 'settings' | 'wardrobe';
 
 export type PoseCategory = 'IDLE' | 'ACTION' | 'EXPRESSIONS' | 'FAVORITES';
 
 /** Colour grade presets. Implemented in `GradeEffect`, not a LUT texture. */
 export type FilterPreset = 'vanilla' | 'dramatic' | 'cinematic' | 'fantasy';
+
+/** Display transform applied after the linear composer.
+ *
+ *  `neutral` is Khronos PBR Neutral: hue-preserving and highlight-soft rather
+ *  than filmic, which is the right default for a character creator where the
+ *  skin tone the user picked has to survive to the screen. The others are the
+ *  looks postprocessing ships; they are picked, not invented. */
+export type ToneMappingId = 'neutral' | 'agx' | 'aces' | 'cineon';
+
+const TONE_MAPPING_IDS: readonly ToneMappingId[] = ['neutral', 'agx', 'aces', 'cineon'];
 
 /** One tinted luminance band. `amount` is signed −100..100. */
 export interface ColorOverlay {
@@ -178,6 +188,12 @@ export interface CharacterState {
   /** Speed multiplier for pose transitions and physical motions [0.2..2.0]. */
   animationSpeed: number;
   setAnimationSpeed: (v: number) => void;
+  animationId: 'idle' | 'rest';
+  setAnimationId: (id: 'idle' | 'rest') => void;
+  animationPlaying: boolean;
+  setAnimationPlaying: (v: boolean) => void;
+  autoRigUnskinned: boolean;
+  setAutoRigUnskinned: (v: boolean) => void;
   /** Active category tab in the Poses panel. */
   poseCategory: PoseCategory;
   setPoseCategory: (cat: PoseCategory) => void;
@@ -256,8 +272,15 @@ export interface CharacterState {
   /** SSS strength multiplier on top of the gloss-derived parameters [0..1].
    *  1 reproduces the gloss-only mapping this app has always used. */
   skinSss: number;
+  /** Additional synthetic pore detail [0..1]; 0 retains authored normals only. */
+  skinDetail: number;
+  /** Specular sheen strength [0..1]. Independent of `skinGloss`, which drives
+   *  roughness: this is the broad fabric-like highlight on top of it. */
+  skinSheen: number;
   /** Skin tone color tint `#rrggbb`. '#ffffff' = untinted raw diffuse. */
   skinColor: string;
+  /** Display transform applied after the linear composer. */
+  toneMapping: ToneMappingId;
   /** Whether the graphics workspace is the active left dock panel. */
   graphicsOpen: boolean;
   /** Whether the camera workspace is the active left dock panel. */
@@ -311,6 +334,13 @@ export interface CharacterState {
   cameraFraming: CameraFraming;
   /** Nonce request for programmatic camera angle / framing transitions. */
   cameraPoseRequest: CameraPoseRequest | null;
+  /** When true, slot naming restrictions are ignored so any clothing or accessory can be equipped into any slot. */
+  unrestrictedSlots: boolean;
+  setUnrestrictedSlots: (val: boolean) => void;
+  toggleUnrestrictedSlots: () => void;
+  /** When true, static _GND.nif meshes are included in the equipment list. */
+  showGroundMeshes: boolean;
+  setShowGroundMeshes: (val: boolean) => void;
 
   setActiveRegion: (id: RegionId) => void;
   setPrimaryTab: (t: string) => void;
@@ -330,7 +360,11 @@ export interface CharacterState {
   setEnvRotation: (rotation: number) => void;
   setSkinGloss: (v: number) => void;
   setSkinSss: (v: number) => void;
+  setSkinDetail: (v: number) => void;
+  setSkinSheen: (v: number) => void;
   setSkinColor: (v: string) => void;
+  /** Unknown tone-mapping ids are ignored rather than stored. */
+  setToneMapping: (id: ToneMappingId) => void;
   setGraphicsOpen: (open: boolean) => void;
   setCameraOpen: (open: boolean) => void;
   setWorkspace: (workspace: Workspace) => void;
@@ -412,7 +446,13 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   poseIntensity: 1.0,
   setPoseIntensity: (poseIntensity) => set({ poseIntensity: Math.min(1.5, Math.max(0, poseIntensity)) }),
   animationSpeed: 1.0,
-  setAnimationSpeed: (animationSpeed) => set({ animationSpeed: Math.min(2.0, Math.max(0.2, animationSpeed)) }),
+  setAnimationSpeed: (animationSpeed) => { if (Number.isFinite(animationSpeed)) set({ animationSpeed: Math.min(2.0, Math.max(0.2, animationSpeed)) }); },
+  animationId: 'idle',
+  setAnimationId: (animationId) => { if (animationId === 'idle' || animationId === 'rest') set({ animationId }); },
+  animationPlaying: true,
+  setAnimationPlaying: (animationPlaying) => set({ animationPlaying }),
+  autoRigUnskinned: true,
+  setAutoRigUnskinned: (autoRigUnskinned) => set({ autoRigUnskinned }),
   poseCategory: 'IDLE',
   setPoseCategory: (poseCategory) => set({ poseCategory }),
   favoritePoses: ['rest', 'relaxed', 'hands-on-hips', 'greeting-wave', 'victory'],
@@ -488,7 +528,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
       { color: '#d8c39c', amount: 0, enabled: false },
     ],
   },
-  envMode: 'off',
+  envMode: 'studio',
   envRotation: 0,
   envIntensity: 1,
   backgroundMode: 'void',
@@ -497,7 +537,10 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   cameraRotateSpeed: CAMERA_ROTATE_SPEED_DEFAULT,
   skinGloss: 0.52,
   skinSss: 1,
+  skinDetail: 0.45,
+  skinSheen: 0.2,
   skinColor: '#ffffff',
+  toneMapping: 'neutral',
   graphicsOpen: false,
   cameraOpen: false,
   workspace: 'edit',
@@ -505,8 +548,13 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   cameraFov: CAMERA_FOV_DEFAULT,
   cameraFraming: 'auto',
   cameraPoseRequest: null,
+  unrestrictedSlots: false,
+  setUnrestrictedSlots: (unrestrictedSlots) => set({ unrestrictedSlots }),
+  toggleUnrestrictedSlots: () => set((s) => ({ unrestrictedSlots: !s.unrestrictedSlots })),
+  showGroundMeshes: false,
+  setShowGroundMeshes: (showGroundMeshes) => set({ showGroundMeshes }),
 
-  sliders: buildSliderBank(),
+  sliders: presetSliderBank(PRESETS[0]),
   poses: buildPoseBank(),
   preset: PRESETS[0].id,
   utils: {
@@ -578,7 +626,14 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   setCameraRotateSpeed: (value) => set((s) => ({ cameraRotateSpeed: bounded(value, s.cameraRotateSpeed, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPEED_MAX) })),
   setSkinGloss: (skinGloss) => set({ skinGloss }),
   setSkinSss: (v) => set({ skinSss: Math.min(1, Math.max(0, v)) }),
+  /* Detail and sheen ignore a non-finite value rather than clamping it to 0,
+     so a NaN from a slider cannot silently zero a setting. */
+  setSkinDetail: (v) => { if (Number.isFinite(v)) set({ skinDetail: Math.min(1, Math.max(0, v)) }); },
+  setSkinSheen: (v) => { if (Number.isFinite(v)) set({ skinSheen: Math.min(1, Math.max(0, v)) }); },
   setSkinColor: (skinColor) => set({ skinColor }),
+  setToneMapping: (toneMapping) => {
+    if ((TONE_MAPPING_IDS as readonly string[]).includes(toneMapping)) set({ toneMapping });
+  },
   setWorkspace: (workspace) => set({
     workspace,
     graphicsOpen: workspace === 'graphics',
@@ -643,11 +698,19 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
          defaults and only change the `preset` id, so all four rendered one
          identical head — every tile measured 0.0 % of face pixels changed. */
       const def = PRESETS.find((p) => p.id === id);
+      const assetSelection = { ...s.assetSelection };
+      if (def?.headMeshId) {
+        assetSelection.headMesh = def.headMeshId;
+      } else {
+        delete assetSelection.headMesh;
+      }
       return {
         preset: def ? def.id : PRESETS[0].id,
         presetNonce: s.presetNonce + 1,
         sliders: def ? presetSliderBank(def) : buildSliderBank(),
         poses: buildPoseBank(),
+        assetSelection,
+        ...(def?.weight !== undefined ? { weight: def.weight } : {}),
       };
     }),
 

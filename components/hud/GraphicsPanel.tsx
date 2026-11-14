@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useCharacter, type EnbPreset, type FilterPreset } from '@/lib/store';
+import { useCharacter, type EnbPreset, type FilterPreset, type ToneMappingId } from '@/lib/store';
 import { FILTER_PRESETS } from '@/lib/graphics';
 import { useRenderStats } from '@/lib/perf';
 import { IconCamera, IconEye, IconGear } from '@/components/hud/Icons';
@@ -24,6 +24,15 @@ const ENB_OPTIONS: Array<{ id: EnbPreset; label: string }> = [
   { id: 'enb', label: 'ENB PALETTE' },
   { id: 'pure', label: 'PURE RESHADE' },
   { id: 'all', label: 'ENB + PURE' },
+];
+
+/** The display transforms the scene can apply, in the order they are listed.
+ *  Kept here as labels only — `CharacterScene` owns the id → mode mapping. */
+const TONE_MAPPING_OPTIONS: Array<{ id: ToneMappingId; label: string }> = [
+  { id: 'neutral', label: 'NEUTRAL (PBR)' },
+  { id: 'agx', label: 'AGX' },
+  { id: 'aces', label: 'ACES FILMIC' },
+  { id: 'cineon', label: 'CINEON' },
 ];
 
 const FX_CHIPS: Array<{ key: 'smaa' | 'bloom' | 'dof' | 'vignette' | 'grain'; label: string }> = [
@@ -89,6 +98,12 @@ export function GraphicsPanel() {
   const setSkinSss = useCharacter((s) => s.setSkinSss);
   const skinGloss = useCharacter((s) => s.skinGloss);
   const setSkinGloss = useCharacter((s) => s.setSkinGloss);
+  const skinDetail = useCharacter((s) => s.skinDetail);
+  const setSkinDetail = useCharacter((s) => s.setSkinDetail);
+  const skinSheen = useCharacter((s) => s.skinSheen);
+  const setSkinSheen = useCharacter((s) => s.setSkinSheen);
+  const toneMapping = useCharacter((s) => s.toneMapping);
+  const setToneMapping = useCharacter((s) => s.setToneMapping);
 
   const perf = useRenderStats();
 
@@ -212,6 +227,26 @@ export function GraphicsPanel() {
                 </button>
               </div>
 
+              {/* Native <select> on purpose: the tone-mapping list is the one
+                  control here a screen reader has to announce as a real choice,
+                  and the HUD's custom listbox would have to re-implement
+                  arrow-key roving and typeahead to match it. */}
+              <label className="mt-[5px] flex items-center gap-[6px]">
+                <span className="w-[132px] shrink-0 text-[10px] tracking-[0.1em] text-[#cfc6b4]/88">
+                  TONE MAPPING
+                </span>
+                <select
+                  value={toneMapping}
+                  onChange={(e) => setToneMapping(e.target.value as ToneMappingId)}
+                  aria-label="Tone mapping"
+                  className="h-[18px] min-w-0 flex-1 border border-[#d4b483]/40 bg-black/36 px-[4px] text-[10px] tracking-[0.08em] text-[#e8dcc2] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]/80"
+                >
+                  {TONE_MAPPING_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+
               <div className="mt-[3px] flex flex-col">
                 <SliderRow
                   label="CONTRAST"
@@ -245,6 +280,26 @@ export function GraphicsPanel() {
                   step={0.01}
                   onChange={setSkinGloss}
                   ariaLabel="Skin gloss"
+                  format={(v) => v.toFixed(2)}
+                />
+                <SliderRow
+                  label="SKIN DETAIL"
+                  value={skinDetail}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={setSkinDetail}
+                  ariaLabel="Skin detail"
+                  format={(v) => v.toFixed(2)}
+                />
+                <SliderRow
+                  label="SKIN SHEEN"
+                  value={skinSheen}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={setSkinSheen}
+                  ariaLabel="Skin sheen"
                   format={(v) => v.toFixed(2)}
                 />
                 <button

@@ -12,6 +12,8 @@ import { PosePanel } from '@/components/hud/PosePanel';
 import { EquipmentPanel } from '@/components/hud/EquipmentPanel';
 import { PresetIO } from '@/components/hud/PresetIO';
 import { PresetPanel } from '@/components/hud/PresetPanel';
+import { AssetPanel } from '@/components/hud/AssetPanel';
+import { BodyPanel } from '@/components/hud/BodyPanel';
 import {
   IconAlbum,
   IconCamera,
@@ -88,9 +90,9 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
   const applyPreset = useCharacter((s) => s.applyPreset);
   const cameraOpen = useCharacter((s) => s.cameraOpen);
   const setCameraOpen = useCharacter((s) => s.setCameraOpen);
-  const showUtilities = primaryTab !== 'HAIR' && primaryTab !== 'EQUIPMENT' && primaryTab !== 'BODY' && primaryTab !== 'PRESET'
-    && !(primaryTab === 'FACE' && subTab === 'MAKEUP')
-    && !(primaryTab === 'FACE' && subTab === 'SKIN');
+  const workspace = useCharacter((s) => s.workspace);
+  const setWorkspace = useCharacter((s) => s.setWorkspace);
+  const showUtilities = false;
 
   return (
     /* Docked rail body. The old absolutely-positioned 222 px column was tied to
@@ -209,8 +211,15 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
         </div>
       )}
 
+      {/* ── body controls / physique & weight ───────────────────────── */}
+      {primaryTab === 'BODY' && (
+        <div className="mt-[3px]">
+          <BodyPanel manifest={manifest} />
+        </div>
+      )}
+
       {/* ── skin controls / picker ───────────────────────────────────── */}
-      {((primaryTab === 'FACE' && subTab === 'SKIN') || primaryTab === 'BODY') && (
+      {primaryTab === 'FACE' && subTab === 'SKIN' && (
         <div className="mt-[3px]">
           <SkinPicker manifest={manifest} />
         </div>
@@ -227,6 +236,35 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
       {primaryTab === 'FACE' && subTab === 'MAKEUP' && (
         <div className="mt-[3px]">
           <MakeupPicker />
+        </div>
+      )}
+
+      {/* ── other face sub-tabs (lashes, brows, mouth, tattoo, wrinkle) ── */}
+      {primaryTab === 'FACE' && subTab !== 'SKIN' && subTab !== 'EYES' && subTab !== 'MAKEUP' && (
+        <div className="mt-[3px]">
+          <div className="flex flex-col gap-2 rounded-xs border border-[#d4b483]/22 bg-black/45 p-3 backdrop-blur-md">
+            <div className="flex items-center justify-between border-b border-[#d4b483]/18 pb-1.5">
+              <h2 className="text-[11px] font-medium tracking-[0.05em] text-[#efece6] uppercase">
+                {subTab} ASSETS
+              </h2>
+              <span className="font-mono text-[9px] text-[#eac87f]">STUDIO</span>
+            </div>
+            <p className="text-[9.5px] leading-relaxed text-[#c4b9a3]">
+              Browse available {subTab.toLowerCase()} meshes, presets, and authored textures in the right studio drawer.
+            </p>
+            <button
+              type="button"
+              onClick={() => setWorkspace(workspace === 'assets' ? 'edit' : 'assets')}
+              className={cn(
+                'mt-1 flex w-full items-center justify-center gap-1.5 border py-2 text-[10px] font-mono tracking-widest transition-all',
+                workspace === 'assets'
+                  ? 'border-[#eac87f] bg-[#d4b483]/25 text-[#f2dfbe] shadow-[0_0_8px_rgba(234,200,127,0.35)]'
+                  : 'border-[#d4b483]/35 bg-[#d4b483]/12 text-[#e8c98e] hover:border-[#eac87f] hover:bg-[#d4b483]/22 hover:text-[#fff0d4]',
+              )}
+            >
+              <span>{workspace === 'assets' ? 'CLOSE STUDIO [ESC]' : `BROWSE ${subTab} →`}</span>
+            </button>
+          </div>
         </div>
       )}
 

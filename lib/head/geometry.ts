@@ -3,7 +3,10 @@ import {
   NECK_DELTA_INDICES,
   NECK_DELTA_POSITIONS,
   NECK_SPINE2_WEIGHTS,
+  NECK_SEAM_HEAD_INDICES,
+  NECK_SEAM_BODY_INDICES,
 } from '@/lib/head/neckDeltas';
+import type { SkeletonRegistry } from '@/lib/character/skeleton';
 
 /**
  * Procedural female head, lofted from anatomical cross-sections.
@@ -659,17 +662,41 @@ export function headSurfaceZ(x: number, y: number, inflate = 0): number {
 
 export { smoothstep, clamp };
 
+export interface NeckBodyContext {
+  bodyGeometry: THREE.BufferGeometry;
+  bones: { name: string }[];
+  skeletonRegistry: SkeletonRegistry;
+  followHead: THREE.Matrix4;
+}
+
+const scratchV = new THREE.Vector3();
+const scratchVSpine = new THREE.Vector3();
+const scratchBLocal = new THREE.Vector3();
+const scratchBWorld = new THREE.Vector3();
+const scratchTempV = new THREE.Vector3();
+const scratchBNormLocal = new THREE.Vector3();
+const scratchBNormWorld = new THREE.Vector3();
+const scratchTempN = new THREE.Vector3();
+const scratchInvFollowHead = new THREE.Matrix4();
+const scratchInvFollowRot = new THREE.Matrix3();
+
+const scratchBoneMats: THREE.Matrix4[] = [];
+const scratchRotMats: THREE.Matrix3[] = [];
+
 /**
- * FaceGen & BSFaceGenNiNodeSkinned neck alignment.
+ * Creation Engine BSFaceGenNiNodeSkinned runtime neck delta applier.
  *
- * 1. Weight contraction (FaceGen NeckDelta):
- *    Contracts the neck circumference by `(1 - weight) * delta` so the head collar
- *    matches the body mesh across all weights down to 0.014 mm.
+ * 1. FaceGen Weight Blending (0.0 .. 1.0):
+ *    Interpolates the harmonic Laplacian deformation field on the 420 neck vertices.
  *
- * 2. Posing dual-bone blend (BSFaceGenNiNodeSkinned):
+ * 2. Torso Dual-Bone Posing Blend:
  *    Blends the lower neck vertices with `relativeTransform` (inv(followHead) * followSpine2)
- *    using the body's exact Spine2 skin weights so the neck collar flexes in 1:1 lockstep
- *    with the torso, guaranteeing 0.000 mm seam gap under any pose.
+ *    using the body's exact Spine2 skin weights so the neck column flexes smoothly.
+ *
+ * 3. Exact 1:1 Boundary Collar Closure:
+ *    Snaps the 83 boundary seam vertices and their vertex normals to the body's exact GPU skinning
+ *    coordinates (M_bone * v_rest mapped into head space via inv(followHead)), guaranteeing
+ *    airtight 0.000 mm gap and seamless lighting across all built-in and external HKX poses.
  */
 export function applyNeckDelta(
   geometry: THREE.BufferGeometry,
@@ -679,6 +706,7 @@ export function applyNeckDelta(
   baseNormals?: Float32Array,
   enabled: boolean = true,
   baseWeight: number = 1.0,
+  bodyContext?: NeckBodyContext | null,
 ): void {
   const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
   if (!posAttr || posAttr.count < 11498) return;
@@ -691,6 +719,18 @@ export function applyNeckDelta(
     current.set(basePositions);
   }
 
+  const normAttr = geometry.getAttribute('normal') as THREE.BufferAttribute | undefined;
+  let currentNorm: Float32Array | null = null;
+  if (normAttr && baseNormals) {
+    if (normAttr.array === baseNormals) {
+      currentNorm = new Float32Array(baseNormals);
+      normAttr.array = currentNorm;
+    } else {
+      currentNorm = normAttr.array as Float32Array;
+      currentNorm.set(baseNormals);
+    }
+  }
+
   if (enabled) {
     const targetWeight = Math.max(0, Math.min(1, weight));
     const factor = baseWeight - targetWeight;
@@ -698,9 +738,6 @@ export function applyNeckDelta(
     const hasPosingBlend = Boolean(relativeTransform);
 
     if (hasWeightDelta || hasPosingBlend) {
-      const v = new THREE.Vector3();
-      const vSpine = new THREE.Vector3();
-
       for (let i = 0; i < NECK_DELTA_INDICES.length; i++) {
         const idx = NECK_DELTA_INDICES[i];
         let vx = current[idx * 3];
@@ -718,11 +755,11 @@ export function applyNeckDelta(
         if (hasPosingBlend && relativeTransform) {
           const alpha = NECK_SPINE2_WEIGHTS[i];
           if (alpha > 0.001) {
-            v.set(vx, vy, vz);
-            vSpine.copy(v).applyMatrix4(relativeTransform);
-            vx = (1 - alpha) * v.x + alpha * vSpine.x;
-            vy = (1 - alpha) * v.y + alpha * vSpine.y;
-            vz = (1 - alpha) * v.z + alpha * vSpine.z;
+            scratchV.set(vx, vy, vz);
+            scratchVSpine.copy(scratchV).applyMatrix4(relativeTransform);
+            vx = (1 - alpha) * scratchV.x + alpha * scratchVSpine.x;
+            vy = (1 - alpha) * scratchV.y + alpha * scratchVSpine.y;
+            vz = (1 - alpha) * scratchV.z + alpha * scratchVSpine.z;
           }
         }
 
@@ -731,12 +768,92 @@ export function applyNeckDelta(
         current[idx * 3 + 2] = vz;
       }
     }
+
+    // 3. Exact 1:1 Boundary Collar Closure (Airtight 0.000 mm gap under any pose)
+    if (bodyContext && bodyContext.bones.length > 0) {
+      const { bodyGeometry, bones, skeletonRegistry, followHead } = bodyContext;
+      const bPosAttr = bodyGeometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+      const bSkinIdxAttr = bodyGeometry.getAttribute('skinIndex') as THREE.BufferAttribute | undefined;
+      const bSkinWgtAttr = bodyGeometry.getAttribute('skinWeight') as THREE.BufferAttribute | undefined;
+      const bNormAttr = bodyGeometry.getAttribute('normal') as THREE.BufferAttribute | undefined;
+
+      if (bPosAttr && bSkinIdxAttr && bSkinWgtAttr) {
+        const pBody = bPosAttr.array;
+        const sIdx = bSkinIdxAttr.array;
+        const sWgt = bSkinWgtAttr.array;
+        const nBody = bNormAttr ? bNormAttr.array : null;
+
+        // Ensure scratch bone matrices capacity
+        while (scratchBoneMats.length < bones.length) {
+          scratchBoneMats.push(new THREE.Matrix4());
+          scratchRotMats.push(new THREE.Matrix3());
+        }
+
+        // Precompute world-to-pose skin matrix for each bone: M_b = bone.matrixWorld * inv(restWorld)
+        for (let b = 0; b < bones.length; b++) {
+          const boneName = bones[b].name;
+          const bone = skeletonRegistry.byName.get(boneName);
+          const restWorld = skeletonRegistry.restWorld(boneName);
+          if (bone && restWorld) {
+            scratchBoneMats[b].copy(bone.matrixWorld).multiply(restWorld.invert());
+            if (nBody) {
+              scratchRotMats[b].setFromMatrix4(scratchBoneMats[b]);
+            }
+          } else {
+            scratchBoneMats[b].identity();
+            scratchRotMats[b].identity();
+          }
+        }
+
+        scratchInvFollowHead.copy(followHead).invert();
+        scratchInvFollowRot.setFromMatrix4(scratchInvFollowHead);
+
+        for (let i = 0; i < NECK_SEAM_HEAD_INDICES.length; i++) {
+          const hv = NECK_SEAM_HEAD_INDICES[i];
+          const bv = NECK_SEAM_BODY_INDICES[i];
+
+          scratchBLocal.set(pBody[bv * 3], pBody[bv * 3 + 1], pBody[bv * 3 + 2]);
+          scratchBWorld.set(0, 0, 0);
+
+          if (nBody && currentNorm) {
+            scratchBNormLocal.set(nBody[bv * 3], nBody[bv * 3 + 1], nBody[bv * 3 + 2]);
+            scratchBNormWorld.set(0, 0, 0);
+          }
+
+          for (let k = 0; k < 4; k++) {
+            const boneIndex = sIdx[bv * 4 + k];
+            const skinWeight = sWgt[bv * 4 + k];
+            if (skinWeight > 0 && boneIndex < bones.length) {
+              scratchTempV.copy(scratchBLocal).applyMatrix4(scratchBoneMats[boneIndex]).multiplyScalar(skinWeight);
+              scratchBWorld.add(scratchTempV);
+
+              if (nBody && currentNorm) {
+                scratchTempN.copy(scratchBNormLocal).applyMatrix3(scratchRotMats[boneIndex]).multiplyScalar(skinWeight);
+                scratchBNormWorld.add(scratchTempN);
+              }
+            }
+          }
+
+          // Transform exact world collar position back into head mesh local space
+          scratchBWorld.applyMatrix4(scratchInvFollowHead);
+          current[hv * 3] = scratchBWorld.x;
+          current[hv * 3 + 1] = scratchBWorld.y;
+          current[hv * 3 + 2] = scratchBWorld.z;
+
+          // Seamless normal continuity across the boundary seam
+          if (currentNorm && nBody) {
+            scratchBNormWorld.applyMatrix3(scratchInvFollowRot).normalize();
+            currentNorm[hv * 3] = scratchBNormWorld.x;
+            currentNorm[hv * 3 + 1] = scratchBNormWorld.y;
+            currentNorm[hv * 3 + 2] = scratchBNormWorld.z;
+          }
+        }
+      }
+    }
   }
 
   posAttr.needsUpdate = true;
-  const normAttr = geometry.getAttribute('normal') as THREE.BufferAttribute | undefined;
-  if (normAttr && baseNormals && normAttr.array !== baseNormals) {
-    (normAttr.array as Float32Array).set(baseNormals);
+  if (normAttr && currentNorm) {
     normAttr.needsUpdate = true;
   }
   geometry.computeBoundingSphere();

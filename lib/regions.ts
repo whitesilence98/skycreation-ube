@@ -280,13 +280,78 @@ export interface PresetDef {
   seed: number;
   /** Per-region morph bias applied on top of the slider defaults. */
   bias: Partial<Record<RegionId, number>>;
+  /** Direct slider values (e.g. from a real jslot preset). */
+  sliders?: Partial<Record<RegionId, Partial<SliderValues>>>;
+  /** Head mesh ID to equip (e.g. RaceMenu sculpted export). */
+  headMeshId?: string;
+  /** Actor weight (0.0 .. 1.0) from the preset profile. */
+  weight?: number;
 }
 
 export const PRESETS: PresetDef[] = [
-  { id: 'lyra', label: 'LYRA', seed: 0.12, bias: { nose: 0.0, jaw: -0.1 } },
-  { id: 'seraphine', label: 'SERAPHINE', seed: 0.38, bias: { nose: 0.2, lips: 0.15 } },
-  { id: 'isolde', label: 'ISOLDE', seed: 0.61, bias: { jaw: 0.25, cheeks: 0.18 } },
-  { id: 'miren', label: 'MIREN', seed: 0.84, bias: { forehead: -0.12, lips: -0.1 } },
+  {
+    id: 'lyra',
+    label: 'Default',
+    seed: 0.12,
+    bias: { nose: 0.0, jaw: -0.1 },
+    sliders: {
+      forehead: { length: 3, width: -5, depth: 2, height: 0.4, angle: 0.12, protrusion: 0.3 },
+      eyebrows: { length: -1, width: 6, depth: 3, height: 0.38, angle: 0.62, protrusion: 0.18 },
+      nose: { length: -3, width: 12, depth: -3, height: 0.55, angle: 0.18, protrusion: 0.22 },
+      cheeks: { length: 0, width: 0, depth: 2, height: 0.5, angle: 0.3, protrusion: 0.26 },
+      lips: { length: -1, width: 1, depth: 1, height: 0.52, angle: 0.28, protrusion: 0.51 },
+      jaw: { length: -2, width: 11, depth: 3, height: 0.46, angle: 0.22, protrusion: 0.2 },
+    },
+    weight: 0.0,
+  },
+  {
+    id: 'seraphine',
+    label: 'Frau',
+    seed: 0.38,
+    bias: { nose: 0.2, lips: 0.15 },
+    sliders: {
+      forehead: { length: 3, width: -5, depth: 2, height: 0.4, angle: 0.12, protrusion: 0.3 },
+      eyebrows: { length: -1, width: 6, depth: 3, height: 0.38, angle: 0.62, protrusion: 0.18 },
+      nose: { length: -3, width: 12, depth: -3, height: 0.55, angle: 0.18, protrusion: 0.22 },
+      cheeks: { length: 0, width: 0, depth: 2, height: 0.5, angle: 0.3, protrusion: 0.26 },
+      lips: { length: 0, width: 1, depth: 1, height: 0.52, angle: 0.28, protrusion: 0.51 },
+      jaw: { length: -2, width: 11, depth: 3, height: 0.46, angle: 0.22, protrusion: 0.2 },
+    },
+    headMeshId: 'headMesh-c04c95ffcadda4bb-face',
+    weight: 0.0,
+  },
+  {
+    id: 'isolde',
+    label: 'Iced Coffee',
+    seed: 0.61,
+    bias: { jaw: 0.25, cheeks: 0.18 },
+    sliders: {
+      forehead: { length: 3, width: -5, depth: 2, height: 0.4, angle: 0.12, protrusion: 0.3 },
+      eyebrows: { length: -1, width: 6, depth: 3, height: 0.38, angle: 0.62, protrusion: 0.18 },
+      nose: { length: -3, width: 12, depth: -3, height: 0.55, angle: 0.18, protrusion: 0.22 },
+      cheeks: { length: 0, width: 0, depth: 2, height: 0.5, angle: 0.3, protrusion: 0.26 },
+      lips: { length: -1, width: 1, depth: 1, height: 0.52, angle: 0.28, protrusion: 0.51 },
+      jaw: { length: -2, width: 11, depth: 3, height: 0.46, angle: 0.22, protrusion: 0.2 },
+    },
+    headMeshId: 'headMesh-52e201357614eaf7-face',
+    weight: 0.0,
+  },
+  {
+    id: 'miren',
+    label: 'Lan Xin',
+    seed: 0.84,
+    bias: { forehead: -0.12, lips: -0.1 },
+    sliders: {
+      forehead: { length: 0, width: 0, depth: 2, height: 0, angle: -0.05, protrusion: 0.01 },
+      eyebrows: { length: 5, width: 0, depth: 3, height: 0.22, angle: 0.62, protrusion: 0.21 },
+      nose: { length: 0, width: -1, depth: -1, height: 0.55, angle: 0.45, protrusion: 0.15 },
+      cheeks: { length: 0, width: -1, depth: 4, height: 0.5, angle: 0.3, protrusion: 0.26 },
+      lips: { length: -3, width: 2, depth: 1, height: -0.1, angle: 0.28, protrusion: 0.27 },
+      jaw: { length: 0, width: -1, depth: 3, height: -0.24, angle: 0.22, protrusion: 0.2 },
+    },
+    headMeshId: 'headMesh-442a63a518bda8a2-face',
+    weight: 0.25,
+  },
 ];
 
 /**
@@ -307,6 +372,10 @@ export function presetSliderBank(preset: PresetDef): Record<RegionId, SliderValu
     REGIONS.map((r) => [r.id, { ...r.defaults }]),
   ) as Record<RegionId, SliderValues>;
   for (const region of REGIONS) {
+    if (preset.sliders?.[region.id]) {
+      Object.assign(bank[region.id], preset.sliders[region.id]);
+      continue;
+    }
     const bias = preset.bias[region.id];
     if (!bias) continue;
     const values = bank[region.id];

@@ -5,7 +5,9 @@ import * as THREE from 'three';
 import type { LoadedMesh, MaterialRole, MeshMaterialSpec } from '@/components/scene/useMeshGeometry';
 import {
   applySkinGloss,
+  attachSkinCavity,
   skinRoughnessFromGloss,
+  updateSkinDetail,
   updateSkinGloss,
 } from '@/components/scene/SkinShader';
 import { useCharacter } from '@/lib/store';
@@ -40,10 +42,14 @@ export interface AuthoredPartProps {
   /** Per-role roughness map, e.g. the body's `_n.dds` alpha as a gloss mask. */
   fallbackRoughnessByRole?: Partial<Record<MaterialRole, string>>;
   hiddenRoles?: MaterialRole[];
-  /** Hair dye/gloss; only applied to `hair` materials. */
-  hair?: { tone: string; gloss: number };
+  /** Hair dye/gloss/alpha; only applied to `hair` materials. */
+  hair?: { tone: string; gloss: number; alpha?: number };
   /** Skin tone color tint `#rrggbb` applied to `skin` materials. */
   skinColor?: string;
+  /** Shared pore/relief tile owned by `HeadModel`, applied to `skin` slots. */
+  skinDetailMap?: THREE.Texture | null;
+  /** Detail strength [0..1]; slider-driven, never reloads the tile. */
+  skinDetail?: number;
 }
 
 interface Slot {
@@ -88,6 +94,8 @@ export function AuthoredPart({
   hiddenRoles = [],
   hair,
   skinColor,
+  skinDetailMap,
+  skinDetail,
 }: AuthoredPartProps) {
   const slots = useMemo(
     () => slotsFor({
@@ -106,6 +114,7 @@ export function AuthoredPart({
      so it takes the same SSS/specular patch and gloss-derived roughness. */
   const skinGloss = useCharacter((s) => s.skinGloss);
   const skinSss = useCharacter((s) => s.skinSss);
+  const skinSheen = useCharacter((s) => s.skinSheen);
 
   /* Two parallel material sets: the textured standard material each slot uses
      once its atlas lands, and the grey stand-in the same geometry draws with
@@ -114,23 +123,26 @@ export function AuthoredPart({
     const standard = slots.map(({ spec }) => {
       const skin = spec.role === 'skin';
       const isHair = spec.role === 'hair';
-      const material = new THREE.MeshStandardMaterial({
+      const hairAlpha = isHair && hair?.alpha !== undefined ? hair.alpha : 1.0;
+      const Material = skin ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
+      const material = new Material({
         color: skin && skinColor ? skinColor : (isHair && hair ? hair.tone : '#ffffff'),
         roughness: skin
           ? skinRoughnessFromGloss(skinGloss)
           : isHair && hair ? Math.max(0.12, 0.62 - hair.gloss * 0.46) : 0.55,
         metalness: isHair ? 0.05 : 0.0,
+        opacity: isHair ? hairAlpha : 1.0,
         transparent: isHair,
         /* The producer decodes the shader's authored cutout/2-sided flags;
            only fall back to the role defaults when it did not. */
-        alphaTest: spec.alphaTest ?? (isHair ? 0.35 : 0),
-        alphaToCoverage: isHair,
-        depthWrite: true,
+        alphaTest: spec.alphaTest ?? (isHair ? (hairAlpha < 0.95 ? 0.08 : 0.35) : 0),
+        alphaToCoverage: isHair && hairAlpha >= 0.99,
+        depthWrite: isHair ? (hairAlpha > 0.85) : true,
         side: (spec.doubleSided ?? isHair) ? THREE.DoubleSide : THREE.FrontSide,
         visible: true,
       });
       material.name = spec.name;
-      if (skin) applySkinGloss(material, skinGloss, skinSss);
+      if (skin) applySkinGloss(material, skinGloss, skinSss, skinSheen);
       return material;
     });
     const grey = slots.map(({ spec }) => new THREE.MeshBasicMaterial({
@@ -156,14 +168,20 @@ export function AuthoredPart({
     slots.forEach((slot, i) => {
       const material = standardMaterials[i];
       if (material && slot.spec.role === 'skin') {
-        updateSkinGloss(material, skinGloss, skinSss);
+        updateSkinGloss(material, skinGloss, skinSss, skinSheen);
+        updateSkinDetail(material, skinDetailMap ?? null, (skinDetail ?? 0.45) * 0.5, 32);
         if (skinColor) {
           material.color.set(skinColor);
           material.needsUpdate = true;
         }
       }
     });
-  }, [slots, standardMaterials, skinGloss, skinSss, skinColor]);
+  }, [slots, standardMaterials, skinGloss, skinSss, skinSheen, skinDetailMap, skinDetail, skinColor]);
+
+  /* One-ring cavity for the skin shader; harmless for non-skin slots. */
+  useEffect(() => {
+    attachSkinCavity(mesh.geometry);
+  }, [mesh.geometry]);
 
   useEffect(() => {
     if (!hair) return;
@@ -173,10 +191,15 @@ export function AuthoredPart({
       if (material) {
         material.color.set(hair.tone);
         material.roughness = Math.max(0.12, 0.62 - hair.gloss * 0.46);
+        const alpha = hair.alpha !== undefined ? hair.alpha : 1.0;
+        material.opacity = alpha;
+        material.depthWrite = alpha > 0.85;
+        material.alphaTest = alpha < 0.95 ? 0.08 : (slot.spec.alphaTest ?? 0.35);
+        material.alphaToCoverage = alpha >= 0.99;
         material.needsUpdate = true;
       }
     });
-  }, [slots, standardMaterials, hair?.tone, hair?.gloss]);
+  }, [slots, standardMaterials, hair?.tone, hair?.gloss, hair?.alpha]);
 
   /** Slots whose atlas has actually loaded or failed this mount. */
   const [loaded, setLoaded] = useState<ReadonlySet<number>>(() => new Set());
@@ -289,6 +312,11 @@ export function AuthoredPart({
       if (slot.spec.role === 'hair' && hair) {
         material.color.set(hair.tone);
         material.roughness = Math.max(0.12, 0.62 - hair.gloss * 0.46);
+        const alpha = hair.alpha !== undefined ? hair.alpha : 1.0;
+        material.opacity = alpha;
+        material.depthWrite = alpha > 0.85;
+        material.alphaTest = alpha < 0.95 ? 0.08 : (slot.spec.alphaTest ?? 0.35);
+        material.alphaToCoverage = alpha >= 0.99;
       }
       material.needsUpdate = true;
     });
@@ -301,7 +329,7 @@ export function AuthoredPart({
       for (let i = 0; i < slots.length; i++) clearSlot(i);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [standardMaterials, slots, hiddenKey, hair?.tone, hair?.gloss]);
+  }, [standardMaterials, slots, hiddenKey, hair?.tone, hair?.gloss, hair?.alpha]);
 
   useEffect(
     () => () => {

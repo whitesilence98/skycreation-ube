@@ -1,15 +1,22 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { LoadedMesh, MaterialRole, MeshMaterialSpec } from '@/components/scene/useMeshGeometry';
 import type { SkeletonRegistry } from '@/lib/character/skeleton';
 import {
   applySkinGloss,
+  attachSkinCavity,
   skinRoughnessFromGloss,
+  updateSkinDetail,
   updateSkinGloss,
 } from '@/components/scene/SkinShader';
 import { useCharacter } from '@/lib/store';
+import {
+  autoRigMesh,
+  disposeAutoRiggedMesh,
+  type AutoRigResult,
+} from '@/lib/character/autoRig';
 
 /**
  * Renders one authored pack mesh, skinned to the character's shared skeleton.
@@ -54,10 +61,20 @@ export interface SkinnedPartProps {
    */
   skinOverride?: { texture?: string; normalTexture?: string; roughnessTexture?: string };
   hiddenRoles?: MaterialRole[];
-  /** Hair dye/gloss; only applied to `hair` materials. */
-  hair?: { tone: string; gloss: number };
+  /** Hair dye/gloss/alpha; only applied to `hair` materials. */
+  hair?: { tone: string; gloss: number; alpha?: number };
   /** Skin tone color tint `#rrggbb` applied to `skin` materials. */
   skinColor?: string;
+  /** Shared pore/relief tile owned by `HeadModel`, applied to `skin` slots. */
+  skinDetailMap?: THREE.Texture | null;
+  /** Detail strength [0..1]; slider-driven, never reloads the tile. */
+  skinDetail?: number;
+  /**
+   * Body mesh whose skinning is transferred to a shape that cannot skin
+   * itself. Only consulted while `autoRigUnskinned` is on; the body's
+   * geometry is cloned per derived mesh and never mutated.
+   */
+  rigDonor?: LoadedMesh | null;
 }
 
 interface Slot {
@@ -172,7 +189,61 @@ export function SkinnedPart({
   hiddenRoles = [],
   hair,
   skinColor,
+  skinDetailMap,
+  skinDetail,
+  rigDonor,
 }: SkinnedPartProps) {
+  /* Opt-in auto-rig for a shape that cannot skin itself. The helper returns a
+     geometry clone plus a bone table; the loader's cached mesh is untouched,
+     and the clone is disposed by the effect below when this input changes or
+     the component unmounts. `null` means "draw the authored mesh as-is". */
+  const autoRigEnabled = useCharacter((s) => s.autoRigUnskinned);
+  const registeredBoneCount = registry.byName.size;
+  const derived = useMemo<AutoRigResult | null>(() => {
+    if (!autoRigEnabled) return null;
+    const donor = rigDonor && rigDonor !== mesh ? rigDonor : null;
+    return autoRigMesh(mesh, { donor, registry, defaultRole });
+  }, [autoRigEnabled, mesh, rigDonor, registry, registeredBoneCount, defaultRole]);
+  useEffect(() => () => disposeAutoRiggedMesh(derived), [derived]);
+
+  /* A weight-variant garment is blended *in place* on the loader's geometry
+     (`useWeightedMeshResource`), so the mesh identity never changes while the
+     slider moves. The derived clone owns its own buffers, so mirror the
+     source's current rest vertices into it — otherwise the rigged shape would
+     freeze at the body weight it was first derived at. Skin indices stay
+     valid: a `_0`/`_1` pair shares topology and bone set. */
+  const syncedVersion = useRef(-1);
+  useEffect(() => {
+    if (!derived) {
+      syncedVersion.current = -1;
+      return;
+    }
+    const source = mesh.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+    const target = derived.mesh.geometry.getAttribute('position');
+    if (!source || !target || source.array.length !== target.array.length) return;
+    /* `version` is bumped by `applyWeightedPositions` whenever it blends; it is
+       only typed on the concrete `BufferAttribute`, which is what the loader
+       always creates. */
+    if (syncedVersion.current === source.version) return;
+    syncedVersion.current = source.version;
+    (target.array as Float32Array).set(source.array as ArrayLike<number>);
+    target.needsUpdate = true;
+    const sourceNormal = mesh.geometry.getAttribute('normal');
+    const targetNormal = derived.mesh.geometry.getAttribute('normal');
+    if (sourceNormal && targetNormal && sourceNormal.array.length === targetNormal.array.length) {
+      (targetNormal.array as Float32Array).set(sourceNormal.array as ArrayLike<number>);
+      targetNormal.needsUpdate = true;
+    }
+    derived.mesh.geometry.computeBoundingSphere();
+    derived.mesh.geometry.computeBoundingBox();
+  });
+
+  /* Everything downstream reads the effective mesh so materials, draw ranges
+     and the bound object all describe the same geometry. The derived mesh
+     keeps `groups`/`materials` by reference and owns only its geometry, so
+     neither set of descriptors is ever mutated. */
+  const effectiveMesh = derived?.mesh ?? mesh;
+
   const slots = useMemo(
     () => slotsFor({
       mesh, registry, defaultRole, fallbackTexture, fallbackByRole, fallbackNormalByRole,
@@ -192,6 +263,7 @@ export function SkinnedPart({
      a hard line: warm glowing face, flat matte chest. */
   const skinGloss = useCharacter((s) => s.skinGloss);
   const skinSss = useCharacter((s) => s.skinSss);
+  const skinSheen = useCharacter((s) => s.skinSheen);
 
   /* Two parallel material sets: the textured standard material each slot uses
      once its atlas lands, and the grey stand-in the same geometry draws with
@@ -200,23 +272,26 @@ export function SkinnedPart({
     const standard = slots.map(({ spec }) => {
       const skin = spec.role === 'skin';
       const isHair = spec.role === 'hair';
-      const material = new THREE.MeshStandardMaterial({
+      const hairAlpha = isHair && hair?.alpha !== undefined ? hair.alpha : 1.0;
+      const Material = skin ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
+      const material = new Material({
         color: skin && skinColor ? skinColor : (isHair && hair ? hair.tone : '#ffffff'),
         roughness: skin
           ? skinRoughnessFromGloss(skinGloss)
           : isHair && hair ? Math.max(0.12, 0.62 - hair.gloss * 0.46) : 0.55,
         metalness: isHair ? 0.05 : 0.0,
+        opacity: isHair ? hairAlpha : 1.0,
         transparent: isHair,
         /* The producer decodes the shader's authored cutout/2-sided flags;
            only fall back to the role defaults when it did not. */
-        alphaTest: spec.alphaTest ?? (spec.role === 'hair' ? 0.35 : 0),
-        alphaToCoverage: isHair,
-        depthWrite: true,
+        alphaTest: spec.alphaTest ?? (isHair ? (hairAlpha < 0.95 ? 0.08 : 0.35) : 0),
+        alphaToCoverage: isHair && hairAlpha >= 0.99,
+        depthWrite: isHair ? (hairAlpha > 0.85) : true,
         side: (spec.doubleSided ?? spec.role === 'hair') ? THREE.DoubleSide : THREE.FrontSide,
         visible: true,
       });
       material.name = spec.name;
-      if (skin) applySkinGloss(material, skinGloss, skinSss);
+      if (skin) applySkinGloss(material, skinGloss, skinSss, skinSheen);
       return material;
     });
     const grey = slots.map(({ spec }) => new THREE.MeshBasicMaterial({
@@ -244,9 +319,20 @@ export function SkinnedPart({
     slots.forEach((slot, i) => {
       if (slot.spec.role !== 'skin') return;
       const material = standardMaterials[i];
-      if (material) updateSkinGloss(material, skinGloss, skinSss);
+      if (material) updateSkinGloss(material, skinGloss, skinSss, skinSheen);
     });
-  }, [slots, standardMaterials, skinGloss, skinSss]);
+  }, [slots, standardMaterials, skinGloss, skinSss, skinSheen]);
+
+  /* The shared pore tile from the head; a limb skin is the same character, so
+     it takes the same map (attenuated, since the tile is a cheek crop). The
+     tile is owned and disposed by `HeadModel`; this only points at it. */
+  useEffect(() => {
+    slots.forEach((slot, i) => {
+      if (slot.spec.role !== 'skin') return;
+      const material = standardMaterials[i];
+      if (material) updateSkinDetail(material, skinDetailMap ?? null, (skinDetail ?? 0.45) * 0.5, 32);
+    });
+  }, [slots, standardMaterials, skinDetailMap, skinDetail]);
 
   /* Live skinColor tint for skin slots (head/neck/body sync), without reloading textures. */
   useEffect(() => {
@@ -261,7 +347,7 @@ export function SkinnedPart({
     });
   }, [slots, standardMaterials, skinColor]);
 
-  /* Live hair tone/gloss updates for hair slots, without reloading textures. */
+  /* Live hair tone/gloss/alpha updates for hair slots, without reloading textures. */
   useEffect(() => {
     if (!hair) return;
     slots.forEach((slot, i) => {
@@ -270,10 +356,15 @@ export function SkinnedPart({
       if (material) {
         material.color.set(hair.tone);
         material.roughness = Math.max(0.12, 0.62 - hair.gloss * 0.46);
+        const alpha = hair.alpha !== undefined ? hair.alpha : 1.0;
+        material.opacity = alpha;
+        material.depthWrite = alpha > 0.85;
+        material.alphaTest = alpha < 0.95 ? 0.08 : (slot.spec.alphaTest ?? 0.35);
+        material.alphaToCoverage = alpha >= 0.99;
         material.needsUpdate = true;
       }
     });
-  }, [slots, standardMaterials, hair?.tone, hair?.gloss]);
+  }, [slots, standardMaterials, hair?.tone, hair?.gloss, hair?.alpha]);
 
   /** Slots whose atlas has actually loaded or failed this mount. */
   const [loaded, setLoaded] = useState<ReadonlySet<number>>(() => new Set());
@@ -390,6 +481,11 @@ export function SkinnedPart({
       if (slot.spec.role === 'hair' && hair) {
         material.color.set(hair.tone);
         material.roughness = Math.max(0.12, 0.62 - hair.gloss * 0.46);
+        const alpha = hair.alpha !== undefined ? hair.alpha : 1.0;
+        material.opacity = alpha;
+        material.depthWrite = alpha > 0.85;
+        material.alphaTest = alpha < 0.95 ? 0.08 : (slot.spec.alphaTest ?? 0.35);
+        material.alphaToCoverage = alpha >= 0.99;
       }
       material.needsUpdate = true;
     });
@@ -402,7 +498,7 @@ export function SkinnedPart({
       for (let i = 0; i < slots.length; i++) clearSlot(i);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [standardMaterials, slots, hiddenKey, hair?.tone, hair?.gloss]);
+  }, [standardMaterials, slots, hiddenKey, hair?.tone, hair?.gloss, hair?.alpha]);
 
   useEffect(
     () => () => {
@@ -424,13 +520,22 @@ export function SkinnedPart({
     [slots, hidden, standardMaterials, greyMaterials, failed],
   );
 
+  /* One-ring cavity for the skin shader. Attached to the whole geometry even
+     when only some slots are skin; non-skin materials never sample it. */
+  useEffect(() => {
+    attachSkinCavity(effectiveMesh.geometry);
+  }, [effectiveMesh.geometry]);
+
   const object = useMemo(
-    () => buildPart(mesh, registry, renderOrder, name, defaultRole),
+    () => buildPart(effectiveMesh, registry, renderOrder, name, defaultRole),
     // The registry is stable for the scene's lifetime. Materials are swapped
     // in below rather than passed here: rebuilding the object on every texture
-    // load would re-register the bones and re-bind mid-pose.
+    // load would re-register the bones and re-bind mid-pose. `effectiveMesh`
+    // is a dependency because toggling auto-rig swaps the rendered geometry
+    // (and may change a plain Mesh into a SkinnedMesh); the loader's own mesh
+    // object is never rebound in place.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mesh, renderOrder, name, defaultRole],
+    [effectiveMesh, renderOrder, name, defaultRole],
   );
 
   useEffect(() => {

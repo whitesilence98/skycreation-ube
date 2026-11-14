@@ -13,7 +13,7 @@ import {
 } from '@/lib/manifestSelect';
 import { payloadFromMorphs } from '@/lib/presetIO';
 import { cn } from '@/lib/cn';
-import { EQUIP_SLOT_LABEL } from '@/lib/equipment';
+import { EQUIP_SLOT_LABEL, equipSlotOf } from '@/lib/equipment';
 import { IconSparkle } from '@/components/hud/Icons';
 import type { Mo2AssetOption, Mo2Manifest } from '@/lib/head/faceTexture';
 import type { CatalogueEntry } from '@/lib/mo2/types';
@@ -105,6 +105,7 @@ export function AssetPanel({ manifest, active = false }: AssetPanelProps) {
   const panelMode = useCharacter((s) => s.panelMode);
   const setPanelMode = useCharacter((s) => s.setPanelMode);
 
+  const unrestrictedSlots = useCharacter((s) => s.unrestrictedSlots);
   const spec: CategorySpec = CATEGORY_MAP[activeCategory];
   /* EQUIPMENT is mesh-only: a garment's atlas lives inside its NIF, so there
      is no per-slot TEX list to show, and the stored `panelMode` from the last
@@ -186,15 +187,15 @@ export function AssetPanel({ manifest, active = false }: AssetPanelProps) {
        `_0` half would offer the same boots a second time; the whole-outfit row
        is `full` and belongs to BODY → OUTFIT. Neither is a worn-slot pick. */
     return equipMode
-      ? list.filter((r) => r.equipSlot === equipSlot && !(r.weightKey && !r.weightDefault))
+      ? list.filter((r) => (unrestrictedSlots || equipSlotOf(r) === equipSlot) && !(r.weightKey && !r.weightDefault))
       : list;
-  }, [manifest, activeKind, equipMode, equipSlot]);
+  }, [manifest, activeKind, equipMode, equipSlot, unrestrictedSlots]);
   const catalogue = useMemo(() => {
     const list = (assetCatalogues[activeKind] ?? []) as Entry[];
     return equipMode
-      ? list.filter((e) => e.equipSlot === equipSlot && !(e.weightKey && !e.weightDefault))
+      ? list.filter((e) => (unrestrictedSlots || equipSlotOf(e) === equipSlot) && !(e.weightKey && !e.weightDefault))
       : list;
-  }, [assetCatalogues, activeKind, equipMode, equipSlot]);
+  }, [assetCatalogues, activeKind, equipMode, equipSlot, unrestrictedSlots]);
   const textureCatalogue = useMemo(
     () => (textureKind ? ((assetCatalogues[textureKind] ?? []) as Entry[]) : []),
     [assetCatalogues, textureKind],

@@ -83,7 +83,8 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
     c += uTint1 * (uTintAmount1 * midW);
     c += uTint2 * (uTintAmount2 * highlightW);
 
-    outputColor = vec4(clamp(c, 0.0, 1.0), inputColor.a);
+    // Preserve HDR highlights for the trailing tone mapper.
+    outputColor = vec4(max(c, vec3(0.0)), inputColor.a);
 }
 `;
 

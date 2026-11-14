@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import {
   buildHeadGeometry,
@@ -15,6 +15,7 @@ import {
   buildDetailTexture,
   buildFaceTexture,
   buildProjectedNormal,
+  buildSkinDetailNormal,
   type FaceTextureResult,
   type Mo2Manifest,
 } from '@/lib/head/faceTexture';
@@ -29,7 +30,9 @@ import { SkinnedPart } from '@/components/scene/SkinnedPart';
 import { EquippedGarment } from '@/components/scene/EquippedGarment';
 import { SkeletonRegistry } from '@/lib/character/skeleton';
 import { BodyPhysics } from '@/components/scene/BodyPhysics';
-import { applyBodyPose, bodyPose, applyPoseById, BODY_POSES } from '@/lib/character/poses';
+import { AnimationDirector } from '@/components/scene/AnimationDirector';
+import { applyBodyPose, bodyPose, applyPoseTrack, fetchPoseTrack, BODY_POSES } from '@/lib/character/poses';
+import { buildPoseClip, setAuthoredPose } from '@/lib/character/animation';
 import {
   useMaterialTexture,
   useMeshGeometry,
@@ -40,7 +43,9 @@ import {
 } from '@/components/scene/useMeshGeometry';
 import {
   applySkinGloss,
+  attachSkinCavity,
   skinRoughnessFromGloss,
+  updateSkinDetail,
   updateSkinGloss,
 } from '@/components/scene/SkinShader';
 
@@ -195,7 +200,12 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const hairResource = useMeshResource(hairMeshUrl, 'hair mesh');
   const hairAuthored = hairResource.mesh;
   const clothingMeshUrl = parts?.clothing?.meshUrl;
-  const clothingResource = useMeshResource(clothingMeshUrl, 'clothing mesh');
+  const clothingResource = useWeightedMeshResource(
+    parts?.clothing?.weightVariants,
+    clothingMeshUrl,
+    'clothing mesh',
+    weight,
+  );
   /* Worn garments from the paper-doll. Each is its own NIF over its own
      authored atlases, so unlike the whole outfit they have no shared texture
      override — only the embedded-body fallback below applies. */
@@ -254,6 +264,16 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const neckGeo = useMemo(() => buildNeckGeometry(), []);
   const torsoGeo = useMemo(() => buildTorsoGeometry(), []);
 
+  /* The skin shader reads per-vertex `skinCavity`; the head rig attaches it to
+     the head itself. The raw meshes this component draws (procedural neck, real
+     mouth, unskinned fallback body) need it here; `SkinnedPart`/`AuthoredPart`
+     cover their own geometries. Idempotent, so a double attach is a no-op. */
+  useEffect(() => {
+    attachSkinCavity(neckGeo);
+    if (mouthGeo) attachSkinCavity(mouthGeo);
+    if (bodyGeo) attachSkinCavity(bodyGeo);
+  }, [neckGeo, mouthGeo, bodyGeo]);
+
   const rig = useMemo(() => createRig(headBuild.geometry), [headBuild.geometry]);
 
   /* ── the pack skeleton ────────────────────────────────────────────
@@ -264,6 +284,13 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const skeletonRegistry = useMemo(() => new SkeletonRegistry('head'), []);
   const bodyPoseId = useCharacter((s) => s.bodyPoseId);
   const poseIntensity = useCharacter((s) => s.poseIntensity);
+  /* Unweighted parts are routed through `SkinnedPart` (which auto-rigs them)
+     only while this toggle is on; otherwise they keep their authored bind. */
+  const autoRigUnskinned = useCharacter((s) => s.autoRigUnskinned);
+  /** Snapshot of the applied pose, handed to `AnimationDirector` as its base
+   *  clip. Built here (right after the pose writes the bones) so the director
+   *  never has to race the mixer to capture it. */
+  const [poseClip, setPoseClip] = useState<THREE.AnimationClip | null>(null);
 
   /* Applied over the rest pose on every change: presets are absolute, so
      switching from one to another must not inherit the previous rotations.
@@ -284,8 +311,52 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
      `useMemo` here would read an empty registry on the very render that
      delivered the mesh and never recompute. Effects run after children, which
      is exactly when the registry is complete. */
-  useEffect(() => {
-    const applyWithTransform = (relTransform: THREE.Matrix4 | null) => {
+  /**
+   * Read the animated head/spine world matrices and express the facial rig and
+   * neck seam against them.
+   *
+   * Split from the pose effect because it must run *every* frame: once
+   * `AnimationDirector` drives the bones, the head-follow transform is a
+   * per-frame function of the mixer output, not a one-shot pose result. It
+   * only reads bone matrices and rewrites the neck vertices — no texture bake,
+   * no full-geometry rebuild — so per-frame cost stays small.
+   */
+  const syncFollow = useCallback((): {
+    relTransform: THREE.Matrix4 | null;
+    followHead: THREE.Matrix4 | null;
+  } => {
+    const restHead = skeletonRegistry.restWorld('NPC Head [Head]');
+    const boneHead = skeletonRegistry.byName.get('NPC Head [Head]');
+    const restSpine2 = skeletonRegistry.restWorld('NPC Spine2 [Spn2]');
+    const boneSpine2 = skeletonRegistry.byName.get('NPC Spine2 [Spn2]');
+
+    if (restHead && boneHead) {
+      /* boneHead.matrixWorld is in scene space; the rig hangs off the character
+         group, so the skeleton group's own world matrix is removed first. Both
+         are identity in practice, but doing it properly keeps the rig correct
+         if the character is ever placed under a transformed node. */
+      const followHead = skeletonRegistry.group.matrixWorld.clone().invert();
+      followHead.multiply(boneHead.matrixWorld).multiply(restHead.clone().invert());
+      rig.root.matrixAutoUpdate = false;
+      rig.root.matrix.copy(followHead);
+      rig.root.updateMatrixWorld(true);
+
+      let relTransform: THREE.Matrix4 | null = null;
+      if (restSpine2 && boneSpine2) {
+        const followSpine2 = skeletonRegistry.group.matrixWorld.clone().invert();
+        followSpine2.multiply(boneSpine2.matrixWorld).multiply(restSpine2.clone().invert());
+        relTransform = followHead.clone().invert().multiply(followSpine2);
+      }
+      return { relTransform, followHead };
+    }
+    rig.root.matrixAutoUpdate = true;
+    rig.root.matrix.identity();
+    rig.root.updateMatrixWorld(true);
+    return { relTransform: null, followHead: null };
+  }, [skeletonRegistry, rig]);
+
+  const applyFollow = useCallback(
+    (relTransform: THREE.Matrix4 | null, followHead: THREE.Matrix4 | null) => {
       applyNeckDelta(
         headBuild.geometry,
         headBuild.basePositions,
@@ -294,66 +365,104 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         headBuild.baseNormals,
         true,
         headBuild.baseWeight ?? 1.0,
+        bodyMesh && followHead && skeletonRegistry.byName.size > 0
+          ? {
+              bodyGeometry: bodyMesh.geometry,
+              bones: bodyMesh.bones ?? [],
+              skeletonRegistry,
+              followHead,
+            }
+          : null,
       );
       onDirty();
-    };
+    },
+    [headBuild, weight, bodyMesh, skeletonRegistry, onDirty],
+  );
 
-    const computeTransforms = (): THREE.Matrix4 | null => {
-      const restHead = skeletonRegistry.restWorld('NPC Head [Head]');
-      const boneHead = skeletonRegistry.byName.get('NPC Head [Head]');
-      const restSpine2 = skeletonRegistry.restWorld('NPC Spine2 [Spn2]');
-      const boneSpine2 = skeletonRegistry.byName.get('NPC Spine2 [Spn2]');
+  /* Last head+spine world matrices the follow was computed from. Paused and
+     rest frames leave them identical, so the seam/facial-follow work is skipped
+     instead of rewriting 400+ neck vertices every frame for no change. */
+  const lastFollowRef = useRef<Float32Array | null>(null);
+  const followScratchRef = useRef(new Float32Array(32));
+  /** `AnimationDirector`'s post-mixer hook: follow whatever the mixer wrote. */
+  const followAnimatedFrame = useCallback(() => {
+    if (skeletonRegistry.byName.size === 0) return;
+    const head = skeletonRegistry.byName.get('NPC Head [Head]')?.matrixWorld.elements;
+    const spine2 = skeletonRegistry.byName.get('NPC Spine2 [Spn2]')?.matrixWorld.elements;
+    const next = followScratchRef.current;
+    if (head) next.set(head.slice(0, 16), 0);
+    if (spine2) next.set(spine2.slice(0, 16), 16);
 
-      if (restHead && boneHead) {
-        /* boneHead.matrixWorld is in scene space; the rig hangs off the character
-           group, so the skeleton group's own world matrix is removed first. Both
-           are identity in practice, but doing it properly keeps the rig correct
-           if the character is ever placed under a transformed node. */
-        const followHead = skeletonRegistry.group.matrixWorld.clone().invert();
-        followHead.multiply(boneHead.matrixWorld).multiply(restHead.clone().invert());
-        rig.root.matrixAutoUpdate = false;
-        rig.root.matrix.copy(followHead);
-        rig.root.updateMatrixWorld(true);
-
-        if (restSpine2 && boneSpine2) {
-          const followSpine2 = skeletonRegistry.group.matrixWorld.clone().invert();
-          followSpine2.multiply(boneSpine2.matrixWorld).multiply(restSpine2.clone().invert());
-          return followHead.clone().invert().multiply(followSpine2);
+    const prev = lastFollowRef.current;
+    let changed = !prev;
+    if (prev) {
+      for (let i = 0; i < 32; i++) {
+        if (Math.abs(prev[i] - next[i]) > 1e-6) {
+          changed = true;
+          break;
         }
-      } else {
-        rig.root.matrixAutoUpdate = true;
-        rig.root.matrix.identity();
-        rig.root.updateMatrixWorld(true);
       }
-      return null;
-    };
+    }
+    if (!changed) return;
+    /* Snapshot into a stable buffer so the next frame compares against this
+       frame's matrices rather than the shared scratch being overwritten. */
+    lastFollowRef.current = next.slice();
+    const { relTransform, followHead } = syncFollow();
+    applyFollow(relTransform, followHead);
+  }, [skeletonRegistry, syncFollow, applyFollow]);
+
+  /* The pose effect now applies the pose ONCE, snapshots it into `poseClip`,
+     and hands it to the director; the director takes over from there.
+     Re-running on mesh registration is what keeps the snapshot complete: a
+     newly mounted part adds bones (and re-applies the pose) so the next
+     snapshot includes them. */
+  useEffect(() => {
+    if (bodyMesh?.bones?.length) {
+      skeletonRegistry.register(bodyMesh.bones);
+    }
 
     if (skeletonRegistry.byName.size === 0) {
-      applyWithTransform(null);
+      applyFollow(null, null);
       return;
     }
+
+    const finish = () => {
+      /* Pose the facial rig / neck seam once for this commit; from the next
+         frame the director's `followAnimatedFrame` keeps them current. */
+      const { relTransform, followHead } = syncFollow();
+      applyFollow(relTransform, followHead);
+      /* Snapshot the authored pose now, while the bones are exactly at it, and
+         hand the clip to the director. `buildPoseClip` includes only bones this
+         registry knows, so a part that mounts later is picked up on the next
+         run of this effect (registration already re-triggers it). The same
+         snapshot is the export's honest pose (the live bones may be mid-breath
+         by the time an export runs). */
+      const clip = buildPoseClip(skeletonRegistry.byName.values(), `Pose_${bodyPoseId}`);
+      setAuthoredPose(bodyPoseId, clip);
+      setPoseClip(clip);
+    };
 
     // Built-in poses apply synchronously: no microtask delay, no unblended intermediate frames
     const builtin = BODY_POSES.find((p) => p.id === bodyPoseId);
     if (builtin) {
       applyBodyPose(skeletonRegistry, builtin, poseIntensity);
-      const relTransform = computeTransforms();
-      applyWithTransform(relTransform);
+      finish();
       return;
     }
 
     // External Skyrim HKX pose tracks load asynchronously
     let cancelled = false;
-    void applyPoseById(skeletonRegistry, bodyPoseId, poseIntensity).then(() => {
+    void fetchPoseTrack(bodyPoseId).then((track) => {
       if (cancelled) return;
-      const relTransform = computeTransforms();
-      applyWithTransform(relTransform);
+      if (track) applyPoseTrack(skeletonRegistry, track, poseIntensity);
+      else applyBodyPose(skeletonRegistry, BODY_POSES[0], poseIntensity);
+      finish();
     });
 
     return () => {
       cancelled = true;
     };
-  }, [skeletonRegistry, bodyPoseId, poseIntensity, rig, weight, headBuild, bodyMesh, handsMesh, feetMesh, clothingResource.mesh, hairResource.mesh, onDirty]);
+  }, [skeletonRegistry, bodyPoseId, poseIntensity, rig, weight, headBuild, bodyMesh, handsMesh, feetMesh, clothingResource.mesh, hairResource.mesh, onDirty, syncFollow, applyFollow]);
 
   /* Dev-only: the paired-bone naming bug left every eyebrow and cheek bone
      unresolvable for the entire life of this app and nothing logged. Cheap
@@ -418,8 +527,8 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
      case the material keeps its scalar roughness. */
   const skinRoughnessSrc = manifest?.textures?.skinRoughness;
   const eyeSrc =
-    manifest?.eye?.texture ??
     manifest?.textures?.eye ??
+    manifest?.eye?.texture ??
     (manifest?.assets?.eyes?.[0] as { texture?: string })?.texture ??
     '/assets/preset-pack/textures/eyes/eyes.webp';
   const atlasCx = manifest?.eye?.atlas?.cx;
@@ -469,9 +578,59 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     () => (faceTex && !skinNormal ? buildDetailTexture(faceTex.canvas) : null),
     [faceTex, skinNormal],
   );
+
+  /* One tiled pore/relief tile generated ONCE per skin URL from the base head
+     albedo. Deliberately not from the composited overlay or the body/mouth
+     atlas: the generator is a cheek crop, and those atlases carry fabric and
+     skin features that would tile as artefacts. Every skin material reuses
+     this one tile — slider changes only re-push strength, never rebuild it. */
+  const [skinDetailTex, setSkinDetailTex] = useState<THREE.CanvasTexture | null>(null);
+  const skinDetailRef = useRef<THREE.CanvasTexture | null>(null);
+  useEffect(() => () => {
+    skinDetailRef.current?.dispose();
+    skinDetailRef.current = null;
+  }, []);
+  const detailFit = manifest?.atlasFit;
+  useEffect(() => {
+    let cancelled = false;
+    const clearDetail = () => {
+      skinDetailRef.current?.dispose();
+      skinDetailRef.current = null;
+      setSkinDetailTex(null);
+    };
+    if (!skinSrc) {
+      clearDetail();
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      if (cancelled) return;
+      try {
+        const tex = buildSkinDetailNormal(img, detailFit);
+        skinDetailRef.current?.dispose();
+        skinDetailRef.current = tex;
+        setSkinDetailTex(tex);
+      } catch (err) {
+        clearDetail();
+        console.error('[HeadModel] failed to build skin detail normal:', err);
+      }
+    };
+    img.onerror = (err) => {
+      if (cancelled) return;
+      clearDetail();
+      console.error(`[HeadModel] failed to load skin detail source ${skinSrc}:`, err);
+    };
+    img.src = skinSrc;
+    return () => {
+      cancelled = true;
+    };
+  }, [skinSrc, detailFit?.cx, detailFit?.cy, detailFit?.kx, detailFit?.ky]);
   const hairSettings = useCharacter((s) => s.hair);
   const skinGloss = useCharacter((s) => s.skinGloss);
   const skinSss = useCharacter((s) => s.skinSss);
+  const skinDetail = useCharacter((s) => s.skinDetail);
+  const skinSheen = useCharacter((s) => s.skinSheen);
   const skinColor = useCharacter((s) => s.skinColor);
   const skinRoughness = skinRoughnessFromGloss(skinGloss);
 
@@ -497,15 +656,17 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   );
 
   const neckMaterial = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: skinColor, roughness: skinRoughness, metalness: 0 }),
+    () => new THREE.MeshPhysicalMaterial({ color: skinColor, roughness: skinRoughness, metalness: 0 }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
-  // Apply ENB-calibrated skin shader once per material instance
+  // Apply ENB-calibrated skin shader once per material instance. Head is the
+  // rig's own material (owned by the head rig); neck is ours and must be
+  // physical so the sheen/clearcoat half of `updateSkinGloss` applies.
   useEffect(() => {
-    applySkinGloss(headMaterial, skinGloss, skinSss);
-    applySkinGloss(neckMaterial, skinGloss, skinSss);
+    applySkinGloss(headMaterial, skinGloss, skinSss, skinSheen);
+    applySkinGloss(neckMaterial, skinGloss, skinSss, skinSheen);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- creation-time
     // only: the live effect further down pushes GLOSS/SSS without recompiling.
   }, [headMaterial, neckMaterial]);
@@ -515,7 +676,12 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     isReal ? skinSrc : undefined,
     { colorSpace: THREE.SRGBColorSpace },
   );
-  useMaterialTexture(headMaterial, 'normalMap', isReal ? skinNormalSrc : undefined, {});
+  const headNormalState = useMaterialTexture(
+    headMaterial,
+    'normalMap',
+    isReal ? skinNormalSrc : undefined,
+    {},
+  );
   /* The gloss mask is the reason a whole face no longer shares one scalar
      roughness. The neck borrows the head's atlas and therefore its UVs, so it
      takes the same map in the effect below. */
@@ -596,8 +762,12 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
       /* The neck borrows the head atlas the hook loaded; it is the same skin
          and the same draw, so it must never keep a stale legacy face bake.
          It also borrows the gloss mask, which is authored for the same UVs. */
+      /* The head effect runs first, so this reads the atlas/overlay it just
+         committed. Both the overlay identity and the normal's load state are
+         in the key, or a later normal arrival would never reach the neck. */
       neckMaterial.map = headMapState === 'loaded' ? headMaterial.map : null;
       neckMaterial.roughnessMap = skinRoughnessSrc ? headMaterial.roughnessMap : null;
+      neckMaterial.normalMap = headNormalState === 'loaded' ? headMaterial.normalMap : null;
       neckMaterial.color.set(skinColor);
       neckMaterial.needsUpdate = true;
       return;
@@ -605,15 +775,16 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     if (!faceTex) return;
     neckMaterial.map = faceTex.texture;
     neckMaterial.roughnessMap = null;
+    neckMaterial.normalMap = null;
     neckMaterial.color.set(skinColor);
     neckMaterial.needsUpdate = true;
-  }, [faceTex, neckMaterial, isReal, headMapState, headMaterial, skinRoughness, skinRoughnessSrc, skinColor]);
+  }, [faceTex, neckMaterial, isReal, headMapState, headNormalState, headMaterial, realOverlayTex, skinRoughness, skinRoughnessSrc, skinColor]);
 
-  // Live-update SSS uniforms when GLOSS or SSS changes (no recompile needed)
+  // Live-update SSS/sheen uniforms when GLOSS, SSS or SHEEN changes (no recompile needed)
   useEffect(() => {
-    updateSkinGloss(headMaterial, skinGloss, skinSss);
-    updateSkinGloss(neckMaterial, skinGloss, skinSss);
-  }, [skinGloss, skinSss, headMaterial, neckMaterial]);
+    updateSkinGloss(headMaterial, skinGloss, skinSss, skinSheen);
+    updateSkinGloss(neckMaterial, skinGloss, skinSss, skinSheen);
+  }, [skinGloss, skinSss, skinSheen, headMaterial, neckMaterial]);
 
   const torsoMaterial = useMemo(
     () =>
@@ -687,7 +858,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
      while the cheek beside them scatters, and the seam reads as a mask edge. */
   const mouthMaterial = useMemo(
     () =>
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         color: skinColor,
         roughness: skinRoughness,
         metalness: 0.0,
@@ -697,14 +868,14 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   );
 
   useEffect(() => {
-    applySkinGloss(mouthMaterial, skinGloss, skinSss);
+    applySkinGloss(mouthMaterial, skinGloss, skinSss, skinSheen);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- creation-time
     // only: the live effect below keeps the uniforms current.
   }, [mouthMaterial]);
 
   useEffect(() => {
-    updateSkinGloss(mouthMaterial, skinGloss, skinSss);
-  }, [mouthMaterial, skinGloss, skinSss]);
+    updateSkinGloss(mouthMaterial, skinGloss, skinSss, skinSheen);
+  }, [mouthMaterial, skinGloss, skinSss, skinSheen]);
 
   /* UBE's mouth UVs run u ≈ 4.0–5.0 and the brows span u ≈ −0.1–1.07, so both
      tile — with a clamp every out-of-range sample collapses to the atlas edge
@@ -751,7 +922,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
 
   const bodyMaterial = useMemo(
     () =>
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         color: skinColor,
         roughness: skinRoughness,
         metalness: 0.0,
@@ -765,14 +936,27 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
      neck in the live effect below — patching it here but updating it nowhere
      else would leave the chest on the first frame's gloss. */
   useEffect(() => {
-    applySkinGloss(bodyMaterial, skinGloss, skinSss);
+    applySkinGloss(bodyMaterial, skinGloss, skinSss, skinSheen);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- creation-time
     // only: the live effect below keeps the uniforms current.
   }, [bodyMaterial]);
 
   useEffect(() => {
-    updateSkinGloss(bodyMaterial, skinGloss, skinSss);
-  }, [bodyMaterial, skinGloss, skinSss]);
+    updateSkinGloss(bodyMaterial, skinGloss, skinSss, skinSheen);
+  }, [bodyMaterial, skinGloss, skinSss, skinSheen]);
+
+  /* One shared pore tile, pushed into every skin material. Slider moves only
+     rewrite strength/scale uniforms; the tile is keyed on the skin URL, so it
+     is generated once and disposed with that URL. The neck shares the head's
+     atlas, so it takes the tile full strength; mouth and body sit away from
+     the cheek crop and take it attenuated. */
+  useEffect(() => {
+    // ponytail: atlas-density estimates; use authored texel density for exact pore size.
+    updateSkinDetail(headMaterial, skinDetailTex, skinDetail, 8);
+    updateSkinDetail(neckMaterial, skinDetailTex, skinDetail, 32);
+    updateSkinDetail(mouthMaterial, skinDetailTex, skinDetail * 0.5, 8);
+    updateSkinDetail(bodyMaterial, skinDetailTex, skinDetail * 0.5, 32);
+  }, [skinDetailTex, skinDetail, headMaterial, neckMaterial, mouthMaterial, bodyMaterial]);
 
   useEffect(() => {
     headMaterial.color.set(skinColor);
@@ -982,6 +1166,14 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           frame as the head, so they have to ride the same head transform. At
           rest that transform is the identity, so nesting changes nothing. */}
       <primitive object={skeletonRegistry.group} />
+      {/* Must precede BodyPhysics: the director writes the pose (priority -1),
+          then BodyPhysics settles soft-body bones on top of it (priority 0). */}
+      <AnimationDirector
+        registry={skeletonRegistry}
+        poseClip={poseClip}
+        poseId={bodyPoseId}
+        onAfterFrame={followAnimatedFrame}
+      />
       <BodyPhysics registry={skeletonRegistry} />
       <primitive object={rig.root}>
         {mouthGeo && (
@@ -1015,12 +1207,13 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         )}
       </primitive>
       {bodyGeo && bodyMesh ? (
-        bodyMesh.bones?.length ? (
+        bodyMesh.bones?.length || autoRigUnskinned ? (
           <SkinnedPart
             key="body"
             name="Body"
             mesh={bodyMesh}
             registry={skeletonRegistry}
+            rigDonor={bodyMesh}
             /* The baked body JSON carries no material groups — it is one skin
                shape over the body atlas — so without an explicit role it would
                inherit `SkinnedPart`'s hair default and draw translucent with a
@@ -1031,6 +1224,8 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
             fallbackRoughnessByRole={bodyRoughnessFallback}
             skinOverride={bodySkinOverride}
             skinColor={skinColor}
+            skinDetailMap={skinDetailTex}
+            skinDetail={skinDetail}
             renderOrder={0}
           />
         ) : (
@@ -1059,12 +1254,15 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           name="Hands"
           mesh={handsMesh}
           registry={skeletonRegistry}
+          rigDonor={bodyMesh ?? undefined}
           defaultRole="skin"
           fallbackTexture={bodyTexUrl}
           fallbackNormalByRole={bodyNormalFallback}
           fallbackRoughnessByRole={bodyRoughnessFallback}
           skinOverride={bodySkinOverride}
           skinColor={skinColor}
+          skinDetailMap={skinDetailTex}
+          skinDetail={skinDetail}
           renderOrder={0}
         />
       )}
@@ -1074,29 +1272,35 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           name="Feet"
           mesh={feetMesh}
           registry={skeletonRegistry}
+          rigDonor={bodyMesh ?? undefined}
           defaultRole="skin"
           fallbackTexture={bodyTexUrl}
           fallbackNormalByRole={bodyNormalFallback}
           fallbackRoughnessByRole={bodyRoughnessFallback}
           skinOverride={bodySkinOverride}
           skinColor={skinColor}
+          skinDetailMap={skinDetailTex}
+          skinDetail={skinDetail}
           renderOrder={0}
         />
       )}
       {/* The outfit's embedded body is always drawn; only the garment shapes
           follow the toggle. Missing garment atlases hide just those shapes. */}
-      {clothingResource.mesh && (
-        clothingResource.mesh.bones?.length ? (
+      {clothingResource.mesh && !equipped.some((g) => g.slot === 'outfit') && (
+        clothingResource.mesh.bones?.length || autoRigUnskinned ? (
           <SkinnedPart
             key="clothing"
             name="Clothing"
             mesh={clothingResource.mesh}
             registry={skeletonRegistry}
+            rigDonor={bodyMesh ?? undefined}
             defaultRole="clothing"
             fallbackByRole={clothingFallback}
             fallbackNormalByRole={clothingNormalFallback}
             hiddenRoles={clothingHiddenRoles}
             skinColor={skinColor}
+            skinDetailMap={skinDetailTex}
+            skinDetail={skinDetail}
             renderOrder={0}
           />
         ) : (
@@ -1108,6 +1312,8 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
             fallbackByRole={clothingFallback}
             fallbackNormalByRole={clothingNormalFallback}
             skinColor={skinColor}
+            skinDetailMap={skinDetailTex}
+            skinDetail={skinDetail}
             hiddenRoles={clothingHiddenRoles}
             renderOrder={0}
           />
@@ -1124,12 +1330,15 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           key={`equip:${garment.slot || garment.label || garment.rel}`}
           part={garment}
           registry={skeletonRegistry}
+          rigDonor={bodyMesh ?? undefined}
           weight={weight}
           hiddenRoles={equipmentHiddenRoles}
           hideEmbeddedBody={Boolean(bodyGeo)}
           fallbackByRole={clothingFallback}
           fallbackNormalByRole={clothingNormalFallback}
           skinColor={skinColor}
+          skinDetailMap={skinDetailTex}
+          skinDetail={skinDetail}
           renderOrder={0}
         />
       ))}

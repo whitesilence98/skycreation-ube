@@ -24,6 +24,7 @@ SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 import asset_source  # noqa: E402
 import pack_paths  # noqa: E402
+from sync_pack_assets import EQUIP_SLOTS as PRODUCER_EQUIP_SLOTS  # noqa: E402
 
 ROOT = SCRIPTS.parent
 PUBLIC = ROOT / "public"
@@ -269,8 +270,6 @@ def main() -> int:
                 section = parts[0]
             elif parts[0] in ("hair", "clothing") and len(parts) > 1 and parts[1] == "meshes":
                 section = parts[0]
-            elif parts[0] == "clothing" and len(parts) > 2 and parts[1] in pack_paths.CLOTHING_SLOTS and parts[2] == "meshes":
-                section = parts[0]
             elif parts[0] == "meshes" and len(parts) > 1:
                 section = parts[1]
             else:
@@ -458,7 +457,7 @@ def main() -> int:
     # garment) and the manifest must list the `_1` half only (or the picker
     # would offer every garment twice). The classifier is what filters the
     # picker by slot; a garment without one would vanish from EQUIPMENT.
-    EQUIP_SLOTS = set(pack_paths.CLOTHING_SLOTS) | {"full"}
+    EQUIP_SLOTS = set(PRODUCER_EQUIP_SLOTS) | {"full"}
     for e in kinds.get("clothingMesh", []):
         if e.get("decodable") is False:
             continue

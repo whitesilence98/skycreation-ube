@@ -36,9 +36,6 @@ CATEGORIES = (
     "body", "brows", "clothing", "eyes", "hair", "head", "lashes",
     "mouth", "overlays", "presets", "shared", "skeleton",
 )
-CLOTHING_SLOTS = (
-    "outfit", "top", "bottom", "bra", "panties", "stockings", "hands", "feet", "accessories",
-)
 _DATA_SECTIONS = frozenset({"meshes", "textures", "skse"})
 
 # Old `meshes\!UBE\<part>` folders and the category each became.
@@ -88,11 +85,9 @@ def normalize_rel(rel: object) -> str | None:
 
 
 def is_physical(rel: str) -> bool:
-    """True for `category/meshes|textures|SKSE/...` or `clothing/<slot>/meshes|textures/...`."""
+    """True for `category/meshes|textures|SKSE/...`."""
     parts = rel.replace("/", "\\").split("\\")
     if len(parts) > 1 and parts[0].lower() in CATEGORIES and parts[1].lower() in _DATA_SECTIONS:
-        return True
-    if len(parts) > 2 and parts[0].lower() == "clothing" and parts[1].lower() in CLOTHING_SLOTS and parts[2].lower() in _DATA_SECTIONS:
         return True
     return False
 
@@ -104,10 +99,7 @@ def virtual_rel(rel: object) -> str:
         return str(rel).replace("/", "\\")
     parts = norm.split("\\")
     if is_physical(norm):
-        if parts[0].lower() == "clothing" and len(parts) > 2 and parts[1].lower() in CLOTHING_SLOTS:
-            parts = parts[2:]
-        else:
-            parts = parts[1:]
+        parts = parts[1:]
     return "\\".join(parts)
 
 
@@ -118,8 +110,6 @@ def pack_mod(rel: object) -> str:
         return "pack"
     parts = norm.split("\\")
     if is_physical(norm):
-        if parts[0].lower() == "clothing" and len(parts) > 2 and parts[1].lower() in CLOTHING_SLOTS:
-            return parts[2]
         return parts[1]
     return parts[0] if parts else "pack"
 
@@ -195,11 +185,7 @@ def pack_rel(root: Path, rel: str) -> Path | None:
     hits: dict[str, Path] = {}
     candidates = _legacy_candidates(norm)
     for category in CATEGORIES:
-        if category == "clothing":
-            for slot in CLOTHING_SLOTS:
-                candidates.append(f"clothing\\{slot}\\{norm}")
-        else:
-            candidates.append(f"{category}\\{norm}")
+        candidates.append(f"{category}\\{norm}")
     for candidate in candidates:
         path = asset_source.resolve_rel(root_real, candidate)
         if path is None:

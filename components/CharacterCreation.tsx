@@ -198,13 +198,15 @@ export function CharacterCreation() {
   const handleAssetsReady = useCallback((ready: boolean) => setAssetsReady(ready), []);
   const handleSceneIssue = useCallback((issue: string | null) => setSceneIssue(issue), []);
 
+  const unrestrictedSlots = useCharacter((s) => s.unrestrictedSlots);
+
   /* The panel's picks are applied here, once, so both the scene and the HUD
      see the same flattened manifest. `resolveManifest` returns the original
      object when nothing is selected, which keeps the identity stable and
      stops the face bake from re-running on every render. */
   const resolved = useMemo(
-    () => resolveManifest(manifest, assetSelection, catalogues, equipment),
-    [manifest, assetSelection, catalogues, equipment],
+    () => resolveManifest(manifest, assetSelection, catalogues, equipment, { unrestrictedSlots }),
+    [manifest, assetSelection, catalogues, equipment, unrestrictedSlots],
   );
 
   /**

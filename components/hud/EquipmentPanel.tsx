@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useCharacter } from '@/lib/store';
 import {
   EQUIP_SLOTS,
@@ -8,11 +8,9 @@ import {
   type EquipSlot,
 } from '@/lib/equipment';
 import { assetOptions } from '@/lib/manifestSelect';
-import { matchesQuery } from '@/lib/mo2/client';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
-import { IconCheck, IconHanger, IconSparkle } from '@/components/hud/Icons';
-import type { CatalogueEntry } from '@/lib/mo2/types';
+import { IconHanger, IconSparkle } from '@/components/hud/Icons';
 
 interface ClothingItem {
   id: string;
@@ -117,8 +115,11 @@ export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
   const setEquip = useCharacter((s) => s.setEquip);
   const setAssets = useCharacter((s) => s.setAssets);
   const catalogues = useCharacter((s) => s.assetCatalogues);
-
-  const [query, setQuery] = useState('');
+  const unrestrictedSlots = useCharacter((s) => s.unrestrictedSlots);
+  const toggleUnrestrictedSlots = useCharacter((s) => s.toggleUnrestrictedSlots);
+  const showGroundMeshes = useCharacter((s) => s.showGroundMeshes);
+  const workspace = useCharacter((s) => s.workspace);
+  const setWorkspace = useCharacter((s) => s.setWorkspace);
 
   const curated = useMemo(
     () => assetOptions(manifest, 'clothingMesh') as ClothingItem[],
@@ -137,8 +138,11 @@ export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
     const list: ClothingItem[] = [];
 
     const add = (item: ClothingItem) => {
+      // Skip static ground meshes unless explicitly enabled in settings
+      if (!showGroundMeshes && /_gnd\.nif$/i.test(item.file)) {
+        return;
+      }
       // If it is the non-default _0 half of a weight pair, drop it!
-      // (The _1 half represents the pair in the UI, and both are blended internally)
       if (item.weightVariants && item.weightVariants.w0 === item.id && item.weightVariants.w1 !== item.id) {
         return;
       }
@@ -149,7 +153,6 @@ export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
         return;
       }
 
-      // Group by canonical w1 pair id or weightKey so only one card exists
       const pairKey = item.weightVariants?.w1 ?? item.weightKey ?? item.id;
       if (seenWeightKeys.has(pairKey) || seen.has(item.id)) {
         return;
@@ -163,7 +166,7 @@ export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
     for (const a of archive) add(a);
 
     return list;
-  }, [curated, archive]);
+  }, [curated, archive, showGroundMeshes]);
 
   const nameFor = (id: string | undefined): string | undefined => {
     if (!id) return undefined;
@@ -176,14 +179,12 @@ export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
     return cleanGarmentName(found.label || found.file);
   };
 
-  const outfitId = equipment.outfit ?? useCharacter.getState().assetSelection.clothingMesh;
-
   const wornCount = EQUIP_SLOTS.filter((slot) => equipment[slot]).length;
-
   const currentSlot: EquipSlot = equipSlot ?? 'top';
 
   const selectSlot = (slot: EquipSlot) => {
     setEquipSlot(slot);
+    setWorkspace('wardrobe');
   };
 
   const unequipSlot = (slot: EquipSlot, e?: React.MouseEvent) => {
@@ -195,43 +196,19 @@ export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
     }
   };
 
-  // Garments available for current slot
-  const slotGarments = useMemo(() => {
-    return allClothing.filter((item) => {
-      const itemSlot = item.equipSlot?.toLowerCase();
-      if (itemSlot !== currentSlot) {
-        if (currentSlot === 'outfit' && (itemSlot === 'full' || !itemSlot)) {
-          // match outfit
-        } else {
-          return false;
-        }
-      }
-      if (!query.trim()) return true;
-      return matchesQuery(item as CatalogueEntry, query);
+  const clearAllGear = () => {
+    setEquip({
+      outfit: null,
+      top: null,
+      bottom: null,
+      bra: null,
+      panties: null,
+      stockings: null,
+      hands: null,
+      feet: null,
+      accessories: null,
     });
-  }, [allClothing, currentSlot, query]);
-
-  const isEquipped = (item: ClothingItem) => {
-    const worn = equipment[currentSlot];
-    if (!worn) return false;
-    if (worn === item.id) return true;
-    if (item.weightVariants) {
-      return worn === item.weightVariants.w0 || worn === item.weightVariants.w1;
-    }
-    return false;
-  };
-
-  const toggleGarment = (item: ClothingItem) => {
-    const isWorn = isEquipped(item);
-    if (isWorn) {
-      unequipSlot(currentSlot);
-    } else {
-      const targetId = item.weightVariants?.w1 ?? item.id;
-      setEquip({ [currentSlot]: targetId });
-      if (currentSlot === 'outfit') {
-        setAssets({ clothingMesh: targetId });
-      }
-    }
+    setAssets({ clothingMesh: null });
   };
 
   const activeWornId = equipment[currentSlot];
@@ -250,39 +227,39 @@ export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
       </div>
 
       {/* ── Visual Paper-Doll 3x4 Layout with Silhouette ──────────── */}
-      <div className="relative mx-auto my-[2px] w-full max-w-[276px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[9px] backdrop-blur-md">
+      <div className="relative mx-auto my-[1px] w-full max-w-[272px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[6px] backdrop-blur-md">
         {/* Subtle Anatomical Wireframe SVG */}
         <svg
-          viewBox="0 0 260 310"
+          viewBox="0 0 260 255"
           className="pointer-events-none absolute inset-0 h-full w-full opacity-20"
           fill="none"
           stroke="#d4b483"
           strokeWidth="0.85"
         >
           {/* Head & Cranium */}
-          <ellipse cx="130" cy="24" rx="13" ry="16" />
-          <path d="M125 40 L125 48 M135 40 L135 48" />
+          <ellipse cx="130" cy="22" rx="12" ry="14" />
+          <path d="M125 36 L125 43 M135 36 L135 43" />
           {/* Shoulders & Clavicle */}
-          <path d="M96 52 L130 48 L164 52" />
+          <path d="M96 46 L130 43 L164 46" />
           {/* Upper Arms to Forearms */}
-          <path d="M96 52 L68 100 L56 160 L48 220" />
-          <path d="M164 52 L192 100 L204 160 L212 220" />
+          <path d="M96 46 L70 85 L58 135 L50 185" />
+          <path d="M164 46 L190 85 L202 135 L210 185" />
           {/* Ribcage Contour */}
-          <path d="M100 66 Q130 72 160 66" />
-          <path d="M104 84 Q130 90 156 84" />
-          <path d="M108 102 Q130 108 152 102" />
+          <path d="M100 58 Q130 63 160 58" />
+          <path d="M104 74 Q130 79 156 74" />
+          <path d="M108 90 Q130 95 152 90" />
           {/* Spine Guide */}
-          <line x1="130" y1="48" x2="130" y2="155" strokeDasharray="3 3" />
+          <line x1="130" y1="43" x2="130" y2="130" strokeDasharray="3 3" />
           {/* Pelvis & Hip Contour */}
-          <path d="M110 120 Q130 123 150 120" />
-          <path d="M102 140 C102 165 120 175 130 175 C140 175 158 165 158 140" />
+          <path d="M110 105 Q130 108 150 105" />
+          <path d="M102 120 C102 140 120 148 130 148 C140 148 158 140 158 120" />
           {/* Legs to Feet */}
-          <path d="M116 175 L110 225 L108 265 L106 300" />
-          <path d="M144 175 L150 225 L152 265 L154 300" />
+          <path d="M116 148 L111 190 L109 222 L107 250" />
+          <path d="M144 148 L149 190 L151 222 L153 250" />
         </svg>
 
         {/* 3-Column Slot Cards Grid */}
-        <div className="relative z-10 grid grid-cols-3 gap-x-[10px] gap-y-[7px]">
+        <div className="relative z-10 grid grid-cols-3 gap-x-[8px] gap-y-[4px]">
           {/* ── Row 1: OUTFIT in center col ──────────────────────────── */}
           <div className="col-start-2">
             <SlotCard
@@ -370,125 +347,88 @@ export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
         </div>
       </div>
 
-      {/* ── Active Slot Header Bar ──────────────────────────────────── */}
-      <div className="my-[7px] flex items-center justify-between border-y border-[#d4b483]/18 bg-black/35 px-[7px] py-[4px]">
-        <div className="flex items-center gap-[6px] text-[10px]">
-          <span className="font-mono text-[#d4b483] tracking-widest font-semibold uppercase">
-            {EQUIP_SLOT_LABEL[currentSlot]}
-          </span>
-          <span className="text-[#8f8778]/60">·</span>
-          <span className="text-[#e2d8c6] truncate max-w-[130px] font-medium">
-            {activeWornName ?? 'None equipped'}
+      {/* ── Active Slot Status & Wardrobe Drawer Launcher Card ──────── */}
+      <div className="my-[6px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[7px]">
+        {/* Header row: slot name + equipped item name */}
+        <div className="flex items-center justify-between border-b border-[#d4b483]/16 pb-[5px]">
+          <div className="flex items-center gap-[5px]">
+            <SlotIcon slot={currentSlot} className="h-3.5 w-3.5 text-[#eac87f]" />
+            <span className="font-mono text-[10px] font-bold tracking-wider text-[#eac87f] uppercase">
+              {EQUIP_SLOT_LABEL[currentSlot]}
+            </span>
+          </div>
+          <span className="max-w-[130px] truncate text-[9px] font-medium text-[#e2d8c6]">
+            {activeWornName ?? 'Empty'}
           </span>
         </div>
-        {activeWornId && (
-          <button
-            type="button"
-            onClick={(e) => unequipSlot(currentSlot, e)}
-            className="text-[9px] font-mono tracking-wider text-[#d09e88] hover:text-[#f0a898] transition-colors"
-          >
-            UNEQUIP
-          </button>
-        )}
-      </div>
 
-      {/* ── Search Input ────────────────────────────────────────────── */}
-      <div className="relative mb-[6px]">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={`Search ${EQUIP_SLOT_LABEL[currentSlot].toLowerCase()} pieces…`}
-          aria-label="Search garments"
-          className="w-full border border-[#d4b483]/26 bg-black/48 px-[7px] py-[3.5px] text-[9.5px] tracking-[0.06em] text-[#e2d8c6] placeholder-[#8f8778]/55 outline-none transition-colors focus:border-[#d4b483]/60"
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery('')}
-            aria-label="Clear search"
-            className="absolute right-[6px] top-1/2 -translate-y-1/2 text-[10px] text-[#8f8778] hover:text-[#e2d8c6]"
-          >
-            ×
-          </button>
-        )}
-      </div>
+        {/* Primary Action Button: Open/Toggle Wardrobe Browser */}
+        <button
+          type="button"
+          onClick={() => setWorkspace(workspace === 'wardrobe' ? 'edit' : 'wardrobe')}
+          className={cn(
+            'mt-[6px] flex w-full items-center justify-center gap-[5px] border py-[5px] text-[9.5px] font-mono tracking-widest transition-all duration-150',
+            workspace === 'wardrobe'
+              ? 'border-[#eac87f] bg-[#d4b483]/25 text-[#f2dfbe] shadow-[0_0_10px_rgba(234,200,127,0.3)]'
+              : 'border-[#d4b483]/35 bg-[#d4b483]/12 text-[#e8c98e] hover:border-[#eac87f] hover:bg-[#d4b483]/22 hover:text-[#fff0d4]'
+          )}
+        >
+          <IconHanger className="h-3 w-3" />
+          <span>{workspace === 'wardrobe' ? 'CLOSE WARDROBE [ESC]' : 'BROWSE WARDROBE →'}</span>
+        </button>
 
-      {/* ── Garment Options Grid ────────────────────────────────────── */}
-      <div className="thin-scroll grid max-h-[170px] grid-cols-2 gap-[6px] overflow-y-auto pr-[2px]">
-        {slotGarments.length === 0 ? (
-          <div className="col-span-2 border border-[#d4b483]/18 bg-black/30 px-[10px] py-[14px] text-center text-[10px] leading-relaxed text-[#c5b595]">
-            <p>No {EQUIP_SLOT_LABEL[currentSlot].toLowerCase()} items available.</p>
-            <p className="mt-[2px] text-[8.5px] text-[#8f8778]/60">
-              Drop NIFs into <span className="font-mono text-[#d4b483]/80">clothing/{currentSlot}/meshes</span>
-            </p>
-          </div>
-        ) : (
-          slotGarments.map((item, i) => {
-            const isWorn = isEquipped(item);
-            const label = cleanGarmentName(item.label || item.file);
-            const isWeightPaired = Boolean(item.weightVariants);
-
-            return (
+        {/* Action utility row: Unequip, Clear All, Unrestricted Toggle */}
+        <div className="mt-[5px] flex items-center justify-between gap-1 text-[8.5px]">
+          <div className="flex items-center gap-1.5">
+            {activeWornId && (
               <button
-                key={item.id}
                 type="button"
-                onClick={() => toggleGarment(item)}
-                aria-pressed={isWorn}
-                title={`${label}\nSlot: ${EQUIP_SLOT_LABEL[currentSlot]}\n${isWeightPaired ? 'Weight Paired (_0 + _1 blended)' : 'Single Weight'}\nFile: ${item.file}`}
-                className={cn(
-                  'group relative flex min-w-0 flex-col items-center border p-[4px] text-left transition-all duration-150',
-                  isWorn
-                    ? 'border-[#eac87f] bg-[#eac87f]/16 shadow-[0_0_10px_rgba(234,200,127,0.35)]'
-                    : 'border-[#d4b483]/22 bg-black/35 hover:border-[#d4b483]/55 hover:bg-[#14120e]',
-                )}
+                onClick={(e) => unequipSlot(currentSlot, e)}
+                className="rounded-xs border border-[#d09e88]/40 bg-[#d09e88]/10 px-1.5 py-[1.5px] font-mono tracking-wider text-[#e0a898] hover:border-[#d09e88]/80 hover:text-[#f0b8a8]"
               >
-                {/* 4:5 Card Visual */}
-                <div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-black/40">
-                  <SlotIcon slot={currentSlot} className={cn('h-6 w-6 transition-transform group-hover:scale-110', isWorn ? 'text-[#f2dfbe]' : 'text-[#d4b483]/60')} />
-
-                  {/* Weight pair badge */}
-                  {isWeightPaired && (
-                    <span className="absolute top-[2px] left-[2px] rounded-[1px] bg-[#d4b483]/25 px-[3px] py-[0.5px] font-mono text-[7px] tracking-tight text-[#f2dfbe]">
-                      W0/W1
-                    </span>
-                  )}
-
-                  {/* Equipped Check */}
-                  {isWorn && (
-                    <span className="absolute top-[2px] right-[2px] flex h-[12px] w-[12px] items-center justify-center rounded-full bg-[#eac87f] text-black">
-                      <IconCheck className="h-2 w-2" />
-                    </span>
-                  )}
-
-                  {/* Monospace index */}
-                  <span className="pointer-events-none absolute bottom-[1px] right-[2px] font-mono text-[8.5px] tracking-tight text-[#eadcc0]/50">
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                </div>
-
-                {/* Label */}
-                <span
-                  className={cn(
-                    'mt-[3px] w-full truncate text-center text-[9.5px] tracking-[0.03em] transition-colors',
-                    isWorn ? 'font-medium text-[#f0e2ca]' : 'text-[#a9a192]/80 group-hover:text-[#d5ccbb]',
-                  )}
-                >
-                  {label}
-                </span>
+                UNEQUIP
               </button>
-            );
-          })
-        )}
+            )}
+
+            {wornCount > 0 && (
+              <button
+                type="button"
+                onClick={clearAllGear}
+                title="Unequip all worn garments and accessories"
+                className="rounded-xs border border-[#8f8778]/30 bg-black/40 px-1.5 py-[1.5px] font-mono tracking-wider text-[#8f8778] hover:border-[#d09e88]/50 hover:text-[#e0a898]"
+              >
+                CLEAR ALL
+              </button>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={toggleUnrestrictedSlots}
+            title={unrestrictedSlots ? 'Unrestricted Slots: Showing all items. Click to filter by current slot only.' : 'Strict Slots: Showing items matching this slot. Click to ignore naming and equip anything.'}
+            className={cn(
+              'flex items-center gap-1 rounded-xs border px-1.5 py-[1.5px] font-mono tracking-wider transition-all',
+              unrestrictedSlots
+                ? 'border-[#eac87f] bg-[#d4b483]/22 text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
+                : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/75 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]'
+            )}
+          >
+            <span className={cn(
+              'inline-block h-1.5 w-1.5 rounded-full',
+              unrestrictedSlots ? 'bg-[#eac87f] shadow-[0_0_5px_rgba(234,200,127,0.8)]' : 'bg-[#8f8778]/40'
+            )} />
+            <span>{unrestrictedSlots ? 'ALL ITEMS' : 'SLOT ONLY'}</span>
+          </button>
+        </div>
       </div>
 
       {/* ── Status Footer with Hotkey Hint ──────────────────────────── */}
-      <div className="mt-[6px] flex items-center justify-between border-t border-[#d4b483]/14 pt-[4px] text-[9px] tracking-[0.08em] text-[#8b8375]/60">
+      <div className="mt-[4px] flex items-center justify-between border-t border-[#d4b483]/14 pt-[3px] text-[8.5px] tracking-[0.08em] text-[#8b8375]/70">
         <div className="flex items-center gap-[4px]">
           <IconSparkle className="h-[6px] w-[6px] text-[#c9b184]/50" />
-          <span>LMB EQUIP · RMB UNEQUIP</span>
+          <span>CLICK TO BROWSE · RMB UNEQUIP</span>
         </div>
-        <span className="font-mono text-[#c9b184]/70">{slotGarments.length} OPTIONS</span>
+        <span className="font-mono text-[#c9b184]/80">{allClothing.length} TOTAL ITEMS</span>
       </div>
     </div>
   );
@@ -527,13 +467,13 @@ function SlotCard({
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') onSelect();
       }}
-      title={`${EQUIP_SLOT_LABEL[slot]}: ${itemName ?? 'None'}\nLeft-click to select, Right-click to unequip`}
+      title={`${EQUIP_SLOT_LABEL[slot]}: ${itemName ?? 'None'}\nClick to browse garments in Wardrobe Drawer\nRight-click to unequip`}
       className="group flex cursor-pointer flex-col items-center"
     >
       {/* Slot Label Above */}
       <span
         className={cn(
-          'text-[8.5px] font-mono tracking-[0.1em] text-center uppercase transition-colors mb-[2px]',
+          'text-[8px] font-mono tracking-wider text-center uppercase transition-colors mb-[1px]',
           isActive
             ? 'font-bold text-[#f2dfbe] drop-shadow-[0_0_5px_rgba(234,200,127,0.7)]'
             : isFilled
@@ -547,17 +487,22 @@ function SlotCard({
       {/* Square Slot Box Card */}
       <div
         className={cn(
-          'relative flex aspect-square w-full max-w-[66px] items-center justify-center rounded-xs transition-all duration-150',
+          'relative flex aspect-square w-full max-w-[54px] items-center justify-center rounded-xs transition-all duration-150',
           isActive
-            ? 'border-2 border-[#eac87f] bg-[#eac87f]/18 shadow-[0_0_12px_rgba(234,200,127,0.4)] ring-1 ring-[#eac87f]/60'
+            ? 'border-2 border-[#eac87f] bg-[#eac87f]/20 shadow-[0_0_10px_rgba(234,200,127,0.4)] ring-1 ring-[#eac87f]/70'
             : isFilled
-              ? 'border border-[#d4b483]/60 bg-[#14120e]/85 shadow-[0_0_6px_rgba(0,0,0,0.6)] group-hover:border-[#d4b483]/90'
+              ? 'border border-[#d4b483]/60 bg-[#16130e]/90 shadow-[0_0_6px_rgba(0,0,0,0.6)] group-hover:border-[#eac87f]/80'
               : 'border border-[#d4b483]/24 bg-black/40 group-hover:border-[#d4b483]/50 group-hover:bg-black/60',
         )}
       >
         {/* Active Corner Accent Glow */}
         {isActive && (
-          <span className="pointer-events-none absolute -top-[1.5px] -left-[1.5px] h-[3.5px] w-[3.5px] rounded-full bg-[#f2dfbe] shadow-[0_0_5px_#f2dfbe]" />
+          <span className="pointer-events-none absolute -top-[1.5px] -left-[1.5px] h-[3px] w-[3px] rounded-full bg-[#f2dfbe] shadow-[0_0_5px_#f2dfbe]" />
+        )}
+
+        {/* Filled amber indicator dot */}
+        {isFilled && !isActive && (
+          <span className="pointer-events-none absolute top-1 left-1 h-1 w-1 rounded-full bg-[#eac87f] shadow-[0_0_3px_rgba(234,200,127,0.8)]" />
         )}
 
         {/* Slot Icon inside Box */}
@@ -566,10 +511,10 @@ function SlotCard({
           className={cn(
             'transition-all duration-150',
             isActive
-              ? 'h-6 w-6 text-[#f2dfbe] drop-shadow-[0_0_6px_rgba(242,223,190,0.6)] scale-105'
+              ? 'h-5 w-5 text-[#f2dfbe] drop-shadow-[0_0_6px_rgba(242,223,190,0.6)] scale-105'
               : isFilled
-                ? 'h-5 w-5 text-[#e0cfab]'
-                : 'h-4 w-4 text-[#8f8778]/40 group-hover:text-[#d4b483]/60',
+                ? 'h-4 w-4 text-[#e0cfab]'
+                : 'h-3.5 w-3.5 text-[#8f8778]/40 group-hover:text-[#d4b483]/60',
           )}
         />
 
@@ -579,7 +524,7 @@ function SlotCard({
             type="button"
             onClick={onUnequip}
             title={`Unequip ${EQUIP_SLOT_LABEL[slot]}`}
-            className="absolute -top-[5px] -right-[5px] flex h-[14px] w-[14px] items-center justify-center rounded-full border border-[#d4b483]/40 bg-black/90 text-[10px] leading-none text-[#a89e8c] opacity-0 transition-opacity hover:border-[#e0a898] hover:text-[#e0a898] group-hover:opacity-100"
+            className="absolute -top-[4px] -right-[4px] flex h-[13px] w-[13px] items-center justify-center rounded-full border border-[#d4b483]/40 bg-black/90 text-[9px] leading-none text-[#a89e8c] opacity-0 transition-opacity hover:border-[#e0a898] hover:text-[#e0a898] group-hover:opacity-100"
           >
             ×
           </button>
@@ -589,7 +534,7 @@ function SlotCard({
       {/* Item Name in Brackets Below */}
       <span
         className={cn(
-          'mt-[2px] max-w-[70px] truncate text-center text-[8.5px] font-mono tracking-tight transition-colors',
+          'mt-[1px] max-w-[62px] truncate text-center text-[7.5px] font-mono tracking-tight transition-colors',
           isFilled
             ? 'font-medium text-[#e8ddc8]'
             : 'text-[#8f8778]/50 group-hover:text-[#8f8778]/80',

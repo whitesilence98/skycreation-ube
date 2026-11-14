@@ -28,7 +28,7 @@ let equipmentCache;
 /** `manifestSelect` imports the slot vocabulary as values, so the vm needs it. */
 const equipmentModule = () => (equipmentCache ??= loadModule('../lib/equipment.ts'));
 const { resolveManifest, assetOptions, CATEGORY_MAP } = loadModule('../lib/manifestSelect.ts');
-const { EQUIP_SLOTS, isEquipSelection } = equipmentModule();
+const { EQUIP_SLOTS, isEquipSelection, equipSlotOf, normalizeEquipSlot } = equipmentModule();
 
 const asset = (id, more = {}) => ({ id, mod: 'pack', file: id, rel: `pack/${id}`, ...more });
 const pack = {
@@ -271,11 +271,11 @@ const gear = {
     ...pack.assets,
     clothingMesh: [
       asset('top1', {
-        authored: true, onDemand: true, catalogueId: 'top1', equipSlot: 'chest',
+        authored: true, onDemand: true, catalogueId: 'top1', equipSlot: 'top',
         weightKey: 'gladiator top', weightDefault: 1, weightVariants: { w0: 'top0', w1: 'top1' },
       }),
       asset('arms1', { authored: true, onDemand: true, catalogueId: 'arms1', equipSlot: 'hands' }),
-      asset('legs1', { authored: true, onDemand: true, catalogueId: 'legs1', equipSlot: 'legs' }),
+      asset('legs1', { authored: true, onDemand: true, catalogueId: 'legs1', equipSlot: 'bottom' }),
       asset('outfit', { meshUrl: '/outfit.json', equipSlot: 'full' }),
     ],
   },
@@ -288,10 +288,10 @@ const gearCatalogue = {
   ],
 };
 
-assert.deepEqual([...EQUIP_SLOTS], ['head', 'shoulders', 'chest', 'hands', 'legs', 'feet']);
-assert.ok(isEquipSelection({ chest: 'top1' }), 'a slot map validates');
-assert.ok(!isEquipSelection({ chest: 'top1', elbows: 'x' }), 'an unknown slot is refused');
-assert.ok(!isEquipSelection({ chest: 3 }), 'a non-string id is refused');
+assert.deepEqual([...EQUIP_SLOTS], ['outfit', 'top', 'bottom', 'bra', 'panties', 'stockings', 'hands', 'feet', 'accessories']);
+assert.ok(isEquipSelection({ top: 'top1' }), 'a slot map validates');
+assert.ok(!isEquipSelection({ top: 'top1', elbows: 'x' }), 'an unknown slot is refused');
+assert.ok(!isEquipSelection({ top: 3 }), 'a non-string id is refused');
 assert.equal(CATEGORY_MAP.equipment.mesh, 'clothingMesh', 'EQUIPMENT lists clothing meshes');
 
 // Empty selection: no equipment parts, and the legacy outfit is untouched.
@@ -302,21 +302,21 @@ assert.equal(gear.assets.clothingMesh.find((r) => r.id === 'outfit').equipSlot, 
   'the whole outfit is the `full` pseudo-slot, not a worn slot');
 
 // Three slots filled at once, each its own part.
-resolved = resolveManifest(gear, {}, gearCatalogue, { chest: 'top1', hands: 'arms1', legs: 'legs1' });
+resolved = resolveManifest(gear, {}, gearCatalogue, { top: 'top1', hands: 'arms1', bottom: 'legs1' });
 assert.equal(resolved.parts.equipment.length, 3, 'one part per filled slot');
 /* Every resolved array comes out of the vm's own realm, so compare a copy. */
-assert.deepEqual([...resolved.parts.equipment.map((p) => p.slot)].sort(), ['chest', 'hands', 'legs']);
+assert.deepEqual([...resolved.parts.equipment.map((p) => p.slot)].sort(), ['bottom', 'hands', 'top']);
 for (const part of resolved.parts.equipment) {
   assert.ok(part.meshUrl?.includes('kind=clothingMesh'), `${part.slot} garment uses the clothingMesh route`);
 }
-const chest = resolved.parts.equipment.find((p) => p.slot === 'chest');
-assert.deepEqual(Object.keys(chest.weightVariants ?? {}), ['w0', 'w1'], 'a garment pair resolves its weight URLs');
-assert.ok(chest.weightVariants.w0.includes('kind=clothingMesh'), 'garment weight URLs keep the clothing mesh kind');
-assert.ok(chest.weightVariants.w0.includes('id=top0'));
+const topPart = resolved.parts.equipment.find((p) => p.slot === 'top');
+assert.deepEqual(Object.keys(topPart.weightVariants ?? {}), ['w0', 'w1'], 'a garment pair resolves its weight URLs');
+assert.ok(topPart.weightVariants.w0.includes('kind=clothingMesh'), 'garment weight URLs keep the clothing mesh kind');
+assert.ok(topPart.weightVariants.w0.includes('id=top0'));
 
 // A slot only wears its own garment: the wrong-slot id resolves nothing there.
 resolved = resolveManifest(gear, {}, gearCatalogue, { feet: 'top1' });
-assert.equal(resolved.parts.equipment, undefined, 'a chest garment does not fill the feet slot');
+assert.equal(resolved.parts.equipment, undefined, 'a top garment does not fill the feet slot');
 
 resolved = resolveManifest(gear, {}, gearCatalogue, { feet: 'boots1' });
 assert.equal(resolved.parts.equipment.length, 1);
@@ -329,5 +329,52 @@ resolved = resolveManifest(pack, {}, {
   clothingMesh: [asset('torn', { mapRole: 'mesh', decodable: false, reason: 'unsupported' })],
 }, { chest: 'torn' });
 assert.equal(resolved.parts.equipment, undefined, 'an undecodable garment is not drawn');
+
+// ── Extended selection checks ──────────────────────────────────────────────
+// 1. Shorts: inferred as bottom
+assert.equal(equipSlotOf({ file: 'Aokili_Shorts_1.nif' }), 'bottom');
+assert.equal(equipSlotOf({ file: 'Leather_Short_0.nif' }), 'bottom');
+
+// 2. Aliases normalization
+assert.equal(normalizeEquipSlot('full'), 'outfit');
+assert.equal(normalizeEquipSlot('chest'), 'top');
+assert.equal(normalizeEquipSlot('legs'), 'bottom');
+assert.equal(equipSlotOf({ equipSlot: 'full' }), 'outfit');
+assert.equal(equipSlotOf({ equipSlot: 'chest' }), 'top');
+assert.equal(equipSlotOf({ equipSlot: 'legs' }), 'bottom');
+
+// 3. Missing metadata uses filename inference
+assert.equal(equipSlotOf({ file: 'Iron_Gauntlets.nif' }), 'hands');
+assert.equal(equipSlotOf({ file: 'Steel_Boots.nif' }), 'feet');
+assert.equal(equipSlotOf({ file: 'Silk_Panties.nif' }), 'panties');
+
+// 4. Explicit metadata takes precedence over conflicting filename
+assert.equal(equipSlotOf({ file: 'Gloves_Dress.nif', equipSlot: 'top' }), 'top');
+assert.equal(equipSlotOf({ file: 'Boots_Crown.nif', equipSlot: 'accessories' }), 'accessories');
+
+// 5. Cross-slot rejection
+const testPack = {
+  ...pack,
+  assets: {
+    ...pack.assets,
+    clothingMesh: [
+      asset('shortsA', { authored: true, onDemand: true, file: 'Shorts_1.nif', equipSlot: 'bottom' }),
+      asset('shirtA', { authored: true, onDemand: true, file: 'Shirt_1.nif', equipSlot: 'top' }),
+    ],
+  },
+};
+// Placing shorts in top slot rejected
+resolved = resolveManifest(testPack, {}, {}, { top: 'shortsA' });
+assert.equal(resolved.parts.equipment, undefined, 'cross-slot rejected in strict mode');
+
+// Placing shorts in bottom slot accepted
+resolved = resolveManifest(testPack, {}, {}, { bottom: 'shortsA' });
+assert.equal(resolved.parts.equipment.length, 1);
+assert.equal(resolved.parts.equipment[0].slot, 'bottom');
+
+// 6. Unrestricted mode allows cross-slot placement
+resolved = resolveManifest(testPack, {}, {}, { top: 'shortsA' }, { unrestrictedSlots: true });
+assert.equal(resolved.parts.equipment.length, 1, 'cross-slot accepted in unrestricted mode');
+assert.equal(resolved.parts.equipment[0].slot, 'top');
 
 console.log('pack selection: ok');

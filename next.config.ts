@@ -2,6 +2,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  devIndicators: false,
   // three.js ships ESM-only submodules; transpiling keeps dev SSR happy.
   transpilePackages: ['three'],
   images: {

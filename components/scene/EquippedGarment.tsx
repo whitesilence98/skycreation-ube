@@ -1,8 +1,10 @@
 'use client';
 
 import { useMemo } from 'react';
+import type { Texture } from 'three';
 import type { Mo2PartOption } from '@/lib/head/faceTexture';
-import type { MaterialRole } from '@/components/scene/useMeshGeometry';
+import type { LoadedMesh, MaterialRole } from '@/components/scene/useMeshGeometry';
+import { useCharacter } from '@/lib/store';
 import { useWeightedMeshResource } from '@/components/scene/useMeshGeometry';
 import { SkinnedPart } from '@/components/scene/SkinnedPart';
 import { AuthoredPart } from '@/components/scene/AuthoredPart';
@@ -12,6 +14,7 @@ export interface EquippedGarmentProps {
   /** One resolved slot entry from `manifest.parts.equipment`. */
   part: Mo2PartOption & { slot?: string };
   registry: SkeletonRegistry;
+  rigDonor?: LoadedMesh;
   /** Body weight, 0–1 — the same value the torso and limbs blend with. */
   weight: number;
   /** Shapes to skip, e.g. the garment's own embedded body when one is drawn. */
@@ -21,6 +24,8 @@ export interface EquippedGarmentProps {
   fallbackByRole?: Partial<Record<MaterialRole, string>>;
   fallbackNormalByRole?: Partial<Record<MaterialRole, string>>;
   skinColor?: string;
+  skinDetailMap?: Texture | null;
+  skinDetail?: number;
   renderOrder?: number;
 }
 
@@ -40,12 +45,15 @@ export interface EquippedGarmentProps {
 export function EquippedGarment({
   part,
   registry,
+  rigDonor,
   weight,
   hiddenRoles,
   hideEmbeddedBody = false,
   fallbackByRole,
   fallbackNormalByRole,
   skinColor,
+  skinDetailMap,
+  skinDetail,
   renderOrder = 0,
 }: EquippedGarmentProps) {
   const resource = useWeightedMeshResource(
@@ -55,6 +63,7 @@ export function EquippedGarment({
     weight,
   );
   const mesh = resource.mesh;
+  const autoRigUnskinned = useCharacter((s) => s.autoRigUnskinned);
 
   /* Stable identities: both part components key their texture effect on these,
      and an inline object would reload every map on every parent render. */
@@ -76,16 +85,19 @@ export function EquippedGarment({
 
   if (!mesh) return null;
 
-  return mesh.bones?.length ? (
+  return mesh.bones?.length || autoRigUnskinned ? (
     <SkinnedPart
       name={part.label || part.slot || 'Garment'}
       mesh={mesh}
       registry={registry}
+      rigDonor={rigDonor}
       defaultRole="clothing"
       fallbackByRole={roleFallback}
       fallbackNormalByRole={normalFallback}
       hiddenRoles={hidden}
       skinColor={skinColor}
+      skinDetailMap={skinDetailMap}
+      skinDetail={skinDetail}
       renderOrder={renderOrder}
     />
   ) : (
@@ -96,6 +108,8 @@ export function EquippedGarment({
       fallbackByRole={roleFallback}
       fallbackNormalByRole={normalFallback}
       skinColor={skinColor}
+      skinDetailMap={skinDetailMap}
+      skinDetail={skinDetail}
       hiddenRoles={hidden}
       renderOrder={renderOrder}
     />

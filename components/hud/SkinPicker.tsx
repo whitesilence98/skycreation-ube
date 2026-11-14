@@ -241,7 +241,11 @@ const TEXTURE_PRESETS: TexturePreset[] = [
 /* ─────────────────────────────────────────────────────────────────────────────
    Main SkinPicker Component
    ───────────────────────────────────────────────────────────────────────────── */
-export function SkinPicker({ manifest: _manifest }: SkinPickerProps) {
+export function SkinPicker({ manifest = null }: SkinPickerProps) {
+  const weight = useCharacter((s) => s.weight);
+  const setWeight = useCharacter((s) => s.setWeight);
+  const linkFaceToWeight = useCharacter((s) => s.linkFaceToWeight);
+  const setLinkFaceToWeight = useCharacter((s) => s.setLinkFaceToWeight);
   const skinColor = useCharacter((s) => s.skinColor);
   const setSkinColor = useCharacter((s) => s.setSkinColor);
   const skinGloss = useCharacter((s) => s.skinGloss);
@@ -275,6 +279,9 @@ export function SkinPicker({ manifest: _manifest }: SkinPickerProps) {
   const activeTexture = useMemo(() => {
     return TEXTURE_PRESETS.find((t) => t.manifestId === activeSkinId) ?? TEXTURE_PRESETS[0];
   }, [activeSkinId]);
+
+  // Body Weight
+  const weightPercent = Math.round(weight * 100);
 
   // Gloss Rating
   const glossPercent = Math.round(skinGloss * 100);
@@ -360,8 +367,59 @@ export function SkinPicker({ manifest: _manifest }: SkinPickerProps) {
           BODY & SKIN
         </h2>
 
-        {/* ── 1. SKIN TEXTURE ────────────────────────────────────────── */}
-        <div className="flex flex-col items-center gap-1.5 pt-0.5">
+        {/* ── 1. BODY WEIGHT & STATURE ───────────────────────────────── */}
+        <div className="flex flex-col gap-1.5 pt-0.5">
+          <div className="flex items-center justify-between text-[10px] font-mono tracking-[0.08em]">
+            <span className="text-[#c4b595] uppercase">BODY WEIGHT</span>
+            <div className="flex items-center gap-1.5 text-[#8f8778]">
+              <span className="text-[#d8c39c]">[{weightPercent}%]</span>
+              <span>({weight.toFixed(2)})</span>
+            </div>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={weight}
+            onChange={(e) => setWeight(parseFloat(e.target.value))}
+            className="h-1 w-full cursor-pointer appearance-none rounded-full bg-[#201d18] accent-[#d4b483]"
+            aria-label="Body weight slider"
+          />
+          <div className="flex items-center justify-between text-[8.5px] font-mono text-[#8f8778]/70 px-0.5">
+            <span>Slim (_0)</span>
+            <span>Muscular (_1)</span>
+          </div>
+
+          {/* Link Face to Weight Toggle */}
+          <button
+            type="button"
+            onClick={() => setLinkFaceToWeight(!linkFaceToWeight)}
+            title="Link Face to Weight: FaceGen fullness and neck perimeter scale with body weight (Skyrim Creation Engine parity)"
+            className={cn(
+              'mt-0.5 flex w-full items-center justify-between border px-2 py-1 text-[9.5px] font-mono tracking-[0.08em] transition-colors',
+              linkFaceToWeight
+                ? 'border-[#d4b483]/70 bg-[#d4b483]/14 text-[#e8c691] font-medium shadow-[0_0_8px_rgba(212,180,131,0.15)]'
+                : 'border-[#8c8477]/30 bg-black/20 text-[#a8a294]/70 hover:border-[#d4b483]/45 hover:text-[#d5cdbd]',
+            )}
+          >
+            <span className="flex items-center gap-1.5">
+              <span
+                className={cn(
+                  'inline-block h-1.5 w-1.5 rounded-full transition-colors',
+                  linkFaceToWeight ? 'bg-[#d4b483] shadow-[0_0_5px_#d4b483]' : 'bg-[#8c8477]/40',
+                )}
+              />
+              LINK FACE TO WEIGHT
+            </span>
+            <span className="text-[9px] uppercase text-[#c9b184]/80">
+              {linkFaceToWeight ? 'ACTIVE' : 'OFF'}
+            </span>
+          </button>
+        </div>
+
+        {/* ── 2. SKIN TEXTURE ────────────────────────────────────────── */}
+        <div className="flex flex-col items-center gap-1.5 border-t border-[#d4b483]/18 pt-2">
           <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#c4b595]">
             SKIN TEXTURE
           </span>
@@ -383,8 +441,8 @@ export function SkinPicker({ manifest: _manifest }: SkinPickerProps) {
           </span>
         </div>
 
-        {/* ── 2. SKIN COLOR & 3x8 PALETTE GRID ───────────────────────── */}
-        <div className="flex flex-col items-center gap-1.5 pt-1">
+        {/* ── 3. SKIN COLOR & 3x8 PALETTE GRID ───────────────────────── */}
+        <div className="flex flex-col items-center gap-1.5 border-t border-[#d4b483]/18 pt-2">
           <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#c4b595]">
             SKIN COLOR
           </span>
@@ -430,8 +488,8 @@ export function SkinPicker({ manifest: _manifest }: SkinPickerProps) {
           </span>
         </div>
 
-        {/* ── 3. GLOSS SLIDER ────────────────────────────────────────── */}
-        <div className="flex flex-col gap-1 pt-1.5">
+        {/* ── 4. GLOSS SLIDER ────────────────────────────────────────── */}
+        <div className="flex flex-col gap-1 border-t border-[#d4b483]/18 pt-2">
           <div className="flex items-center justify-between text-[10px] font-mono tracking-[0.08em]">
             <span className="text-[#c4b595] uppercase">GLOSS</span>
             <div className="flex items-center gap-1.5 text-[#8f8778]">
@@ -450,7 +508,7 @@ export function SkinPicker({ manifest: _manifest }: SkinPickerProps) {
           />
         </div>
 
-        {/* ── 4. SUBSURFACE SLIDER ────────────────────────────────────── */}
+        {/* ── 5. SUBSURFACE SLIDER ────────────────────────────────────── */}
         <div className="flex flex-col gap-1 pt-1">
           <div className="flex items-center justify-between text-[10px] font-mono tracking-[0.08em]">
             <span className="text-[#c4b595] uppercase">SUBSURFACE</span>
@@ -470,7 +528,7 @@ export function SkinPicker({ manifest: _manifest }: SkinPickerProps) {
           />
         </div>
 
-        {/* ── 5. Bottom Decorative Waist Silhouette Accent ───────────── */}
+        {/* ── 6. Bottom Decorative Waist Silhouette Accent ───────────── */}
         <div className="flex justify-center pt-2 opacity-30">
           <svg viewBox="0 0 100 70" className="h-[48px] w-[70px]" fill="none" stroke="#d4b483" strokeWidth="0.9">
             <path d="M25 10 C38 25 46 35 46 45 C46 55 35 62 20 68" />

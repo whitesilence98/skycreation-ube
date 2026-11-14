@@ -62,6 +62,19 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
   const hairTab = useCharacter((s) => s.hairTab);
   const setHairTab = useCharacter((s) => s.setHairTab);
   const stats = useCharacter((s) => s.stats);
+  const previewMode = useCharacter((s) => s.previewMode);
+  const setPreviewMode = useCharacter((s) => s.setPreviewMode);
+  const workspace = useCharacter((s) => s.workspace);
+  const setWorkspace = useCharacter((s) => s.setWorkspace);
+  const triggerCameraPose = useCharacter((s) => s.triggerCameraPose);
+
+  const FRAMING_BY_TAB: Record<string, { distance: number; targetY: number }> = {
+    PRESET: { distance: 1.15, targetY: -0.05 },
+    HAIR: { distance: 1.15, targetY: -0.05 },
+    FACE: { distance: 0.70, targetY: 0.06 },
+    BODY: { distance: 3.2, targetY: -0.60 },
+    EQUIPMENT: { distance: 3.2, targetY: -0.60 },
+  };
 
   useEffect(() => {
     if (primaryTab === 'FACE SHAPE' || primaryTab === 'VOICE' || primaryTab === 'ZODIAC') {
@@ -103,6 +116,8 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                       setPrimaryTab(item);
                       const kind = PRIMARY_CATEGORY[item];
                       if (kind) setActiveCategory(kind);
+                      const pose = FRAMING_BY_TAB[item];
+                      if (pose) triggerCameraPose(pose);
                     }}
                     className={cn(
                       'group relative whitespace-nowrap text-[10px] tracking-[0.1em] transition-colors duration-200',
@@ -167,6 +182,16 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                     onClick={() => {
                       setSubTab(item);
                       setActiveCategory(SECONDARY_CATEGORY[item]);
+                      if (item !== 'SKIN' && item !== 'EYES' && item !== 'MAKEUP') {
+                        setWorkspace('assets');
+                      }
+                      if (item === 'EYES' || item === 'LASHES' || item === 'BROWS') {
+                        triggerCameraPose({ distance: 0.58, targetY: 0.08 });
+                      } else if (item === 'MOUTH') {
+                        triggerCameraPose({ distance: 0.58, targetY: 0.03 });
+                      } else {
+                        triggerCameraPose({ distance: 0.70, targetY: 0.06 });
+                      }
                     }}
                     className={cn(
                       'whitespace-nowrap text-[10px] tracking-[0.11em] transition-colors duration-200',
@@ -201,6 +226,7 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                   onClick={() => {
                     setPrimaryTab('EQUIPMENT');
                     setActiveCategory('equipment');
+                    triggerCameraPose({ distance: 3.2, targetY: -0.60 });
                   }}
                   className={cn(
                     'whitespace-nowrap text-[10px] tracking-[0.11em] transition-colors duration-200',
@@ -211,6 +237,7 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                 >
                   GEAR SLOTS{primaryTab === 'EQUIPMENT' ? ' [ACTIVE]' : ''}
                 </button>
+                <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
               </div>
 
               {/* BODY SKIN */}
@@ -223,6 +250,7 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                   onClick={() => {
                     setPrimaryTab('BODY');
                     setActiveCategory('body');
+                    triggerCameraPose({ distance: 3.2, targetY: -0.60 });
                   }}
                   className={cn(
                     'whitespace-nowrap text-[10px] tracking-[0.11em] transition-colors duration-200',
@@ -231,7 +259,7 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                       : 'font-light text-[#a8a294]/52 hover:text-[#d5cdbd]',
                   )}
                 >
-                  BODY SKIN{primaryTab === 'BODY' ? ' [ACTIVE]' : ''}
+                  PHYSIQUE & WEIGHT{primaryTab === 'BODY' ? ' [ACTIVE]' : ''}
                 </button>
                 <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
               </div>
@@ -302,6 +330,134 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
           {/* POST-FX / ENV / ROT / GLOSS live in the graphics panel on the
               left gutter now; the header carries only the readout and the
               name field. */}
+
+          <div className="flex items-center gap-[5px]">
+            {/* Camera Studio Drawer */}
+            <button
+              type="button"
+              onClick={() => setWorkspace(workspace === 'camera' ? 'edit' : 'camera')}
+              title="Camera Studio (FOV, Framing Presets, Studio Lighting)"
+              className={cn(
+                'flex h-[28px] items-center border px-[7px] text-[10px] font-mono tracking-[0.1em] backdrop-blur-[6px] transition-colors',
+                workspace === 'camera'
+                  ? 'border-[#eac87f] bg-[#d4b483]/22 text-[#f0dfb9] shadow-[0_0_8px_rgba(212,180,131,0.3)]'
+                  : 'border-[#d4b483]/30 bg-black/40 text-[#c3b698]/80 hover:border-[#d4b483]/60 hover:text-[#f0e6d4]'
+              )}
+            >
+              [CAMERA]
+            </button>
+
+            {/* Graphics & Shaders Drawer */}
+            <button
+              type="button"
+              onClick={() => setWorkspace(workspace === 'graphics' ? 'edit' : 'graphics')}
+              title="Graphics & Shaders (ENB, ReShade, Bloom, Post-FX)"
+              className={cn(
+                'flex h-[28px] items-center border px-[7px] text-[10px] font-mono tracking-[0.1em] backdrop-blur-[6px] transition-colors',
+                workspace === 'graphics'
+                  ? 'border-[#eac87f] bg-[#d4b483]/22 text-[#f0dfb9] shadow-[0_0_8px_rgba(212,180,131,0.3)]'
+                  : 'border-[#d4b483]/30 bg-black/40 text-[#c3b698]/80 hover:border-[#d4b483]/60 hover:text-[#f0e6d4]'
+              )}
+            >
+              [GRAPHICS]
+            </button>
+
+            {/* Poses & Animations Drawer */}
+            <button
+              type="button"
+              onClick={() => setWorkspace(workspace === 'poses' ? 'edit' : 'poses')}
+              title="Poses & Animations"
+              className={cn(
+                'flex h-[28px] items-center border px-[7px] text-[10px] font-mono tracking-[0.1em] backdrop-blur-[6px] transition-colors',
+                workspace === 'poses'
+                  ? 'border-[#eac87f] bg-[#d4b483]/22 text-[#f0dfb9] shadow-[0_0_8px_rgba(212,180,131,0.3)]'
+                  : 'border-[#d4b483]/30 bg-black/40 text-[#c3b698]/80 hover:border-[#d4b483]/60 hover:text-[#f0e6d4]'
+              )}
+            >
+              [POSES]
+            </button>
+
+            {/* Settings & Mod Preferences Drawer */}
+            <button
+              type="button"
+              onClick={() => setWorkspace(workspace === 'settings' ? 'edit' : 'settings')}
+              title="Settings & Mod Preferences (Ignore Naming, Unrestricted Slots, Visuals)"
+              className={cn(
+                'flex h-[28px] items-center border px-[7px] text-[10px] font-mono tracking-[0.1em] backdrop-blur-[6px] transition-colors',
+                workspace === 'settings'
+                  ? 'border-[#eac87f] bg-[#d4b483]/22 text-[#f0dfb9] shadow-[0_0_8px_rgba(212,180,131,0.3)]'
+                  : 'border-[#d4b483]/30 bg-black/40 text-[#c3b698]/80 hover:border-[#d4b483]/60 hover:text-[#f0e6d4]'
+              )}
+            >
+              [SETTINGS]
+            </button>
+
+            {/* Wardrobe Drawer (Contextual on EQUIPMENT) */}
+            {primaryTab === 'EQUIPMENT' && (
+              <button
+                type="button"
+                onClick={() => setWorkspace(workspace === 'wardrobe' ? 'edit' : 'wardrobe')}
+                title="Wardrobe & Equipment Browser (Full Garment Selector)"
+                className={cn(
+                  'flex h-[28px] items-center border px-[7px] text-[10px] font-mono tracking-[0.1em] backdrop-blur-[6px] transition-colors',
+                  workspace === 'wardrobe'
+                    ? 'border-[#eac87f] bg-[#d4b483]/22 text-[#f0dfb9] shadow-[0_0_8px_rgba(212,180,131,0.3)]'
+                    : 'border-[#d4b483]/30 bg-black/40 text-[#c3b698]/80 hover:border-[#d4b483]/60 hover:text-[#f0e6d4]'
+                )}
+              >
+                [WARDROBE]
+              </button>
+            )}
+
+            {/* Body Weight & Soft-Body Physics Drawer (Contextual on BODY) */}
+            {primaryTab === 'BODY' && (
+              <button
+                type="button"
+                onClick={() => setWorkspace(workspace === 'physics' ? 'edit' : 'physics')}
+                title="Body Weight & CBPC Soft-Body Physics"
+                className={cn(
+                  'flex h-[28px] items-center border px-[7px] text-[10px] font-mono tracking-[0.1em] backdrop-blur-[6px] transition-colors',
+                  workspace === 'physics'
+                    ? 'border-[#eac87f] bg-[#d4b483]/22 text-[#f0dfb9] shadow-[0_0_8px_rgba(212,180,131,0.3)]'
+                    : 'border-[#d4b483]/30 bg-black/40 text-[#c3b698]/80 hover:border-[#d4b483]/60 hover:text-[#f0e6d4]'
+                )}
+              >
+                [PHYSICS]
+              </button>
+            )}
+
+            {/* 3D Face Sculpting Drawer (Contextual on FACE) */}
+            {primaryTab === 'FACE' && (
+              <button
+                type="button"
+                onClick={() => setWorkspace(workspace === 'sculpt' ? 'edit' : 'sculpt')}
+                title="3D Face Sculpt Controller (Move, Rotate, Scale)"
+                className={cn(
+                  'flex h-[28px] items-center border px-[7px] text-[10px] font-mono tracking-[0.1em] backdrop-blur-[6px] transition-colors',
+                  workspace === 'sculpt'
+                    ? 'border-[#eac87f] bg-[#d4b483]/22 text-[#f0dfb9] shadow-[0_0_8px_rgba(212,180,131,0.3)]'
+                    : 'border-[#d4b483]/30 bg-black/40 text-[#c3b698]/80 hover:border-[#d4b483]/60 hover:text-[#f0e6d4]'
+                )}
+              >
+                [SCULPT]
+              </button>
+            )}
+
+            {/* Viewport Preview Toggle */}
+            <button
+              type="button"
+              onClick={() => setPreviewMode(!previewMode)}
+              title={previewMode ? 'Exit preview (Esc)' : 'Hide HUD preview'}
+              className={cn(
+                'flex h-[28px] items-center border px-[7px] text-[10px] font-mono tracking-[0.1em] backdrop-blur-[6px] transition-colors',
+                previewMode
+                  ? 'border-[#c9a86a] bg-[#c9a86a]/20 text-[#f0dfb9]'
+                  : 'border-[#d4b483]/30 bg-black/40 text-[#c3b698]/80 hover:border-[#d4b483]/60 hover:text-[#f0e6d4]'
+              )}
+            >
+              [VIEW]
+            </button>
+          </div>
 
           <label className="group flex h-[28px] w-[128px] items-center gap-[5px] border border-[#d4b483]/32 bg-black/34 px-[6px] backdrop-blur-[6px] transition-colors focus-within:border-[#d4b483]/62">
             <span className="shrink-0 text-[10px] tracking-[0.12em] text-[#b0a795]/78">NAME:</span>

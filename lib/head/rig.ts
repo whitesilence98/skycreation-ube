@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { attachSkinCavity } from '@/components/scene/SkinShader';
 import {
   REGIONS,
   REGIONS_BY_ID,
@@ -275,7 +276,8 @@ export function createRig(geometry: THREE.BufferGeometry): Rig {
   geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndex, 4));
   geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeight, 4));
 
-  const material = new THREE.MeshStandardMaterial({
+  attachSkinCavity(geometry);
+  const material = new THREE.MeshPhysicalMaterial({
     color: new THREE.Color('#e9d3c4'),
     roughness: 0.62,
     metalness: 0.0,

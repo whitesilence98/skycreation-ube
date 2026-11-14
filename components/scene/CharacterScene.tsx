@@ -25,7 +25,7 @@ import { isGradeNeutral } from '@/lib/graphics';
 import { cameraSpherical, FRAMING_SPECS } from '@/lib/camera';
 import { rigDirections } from '@/lib/lighting';
 import { useViewState } from '@/lib/viewState';
-import { useCharacter } from '@/lib/store';
+import { useCharacter, type ToneMappingId } from '@/lib/store';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { GlbExportBridge } from '@/lib/exportGlb';
 
@@ -48,6 +48,15 @@ interface CharacterSceneProps {
  *  sliver of frame at the bottom, as in the reference. */
 const CAM = { y: -0.036, z: 0.75 } as const;
 const ORBIT_MOUSE_BUTTONS = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+
+/** The store's display-transform vocabulary → the composer's enum. Typed as a
+ *  total map so adding an id without a mode fails the typecheck. */
+const TONE_MAPPING_MODE: Record<ToneMappingId, ToneMappingMode> = {
+  neutral: ToneMappingMode.NEUTRAL,
+  agx: ToneMappingMode.AGX,
+  aces: ToneMappingMode.ACES_FILMIC,
+  cineon: ToneMappingMode.CINEON,
+};
 
 function ViewControls() {
   const rotateSpeed = useCharacter((s) => s.cameraRotateSpeed);
@@ -254,6 +263,7 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
   const dof = useRef<DepthOfFieldEffect>(null);
   const enbEnabled = useCharacter((s) => s.enbEnabled);
   const enbPreset = useCharacter((s) => s.enbPreset);
+  const toneMapping = useCharacter((s) => s.toneMapping);
   const fx = useCharacter((s) => s.fx);
   const grade = useCharacter((s) => s.grade);
   const lighting = useCharacter((s) => s.lighting);
@@ -395,7 +405,7 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
             camera overlay would. */}
         {!isGradeNeutral(grade) && <GradeEffect settings={grade} />}
         {fx.vignette && <Vignette eskil={false} offset={0.34} darkness={0.48} />}
-        <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+        <ToneMapping mode={TONE_MAPPING_MODE[toneMapping]} />
         {/* SMAA runs on clean edges before film grain to prevent false edge noise detection */}
         {fx.smaa && <SMAA preset={SMAAPreset.HIGH} />}
         {fx.grain && <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={0.045} />}

@@ -1,5 +1,5 @@
 /**
- * ENB-calibrated skin shader patches for Three.js MeshStandardMaterial.
+ * ENB-inspired skin patches for Three.js standard and physical materials.
  *
  * Derived from D:\Games\Skyrim\Skyrim Special Edition\enbseries.ini:
  *
@@ -113,21 +113,23 @@ const SKIN_CHUNK = /* glsl */`
     float wrapped = saturate( ( NdotL + ${SKIN_WRAP} ) / ( 1.0 + ${SKIN_WRAP} ) );
     float fill    = wrapped - saturate( NdotL );
 
-    sss_accum += fill * Lcolor * shadow;
+    // ponytail: grazing angle is only a thickness proxy; use authored thickness maps for transmission.
+    float grazing = pow(1.0 - saturate(dot(nonPerturbedNormal, geometryViewDir)), 2.0);
+    vec3 tint = mix(vec3(1.0), uSSSColor, saturate(0.6 * (1.0 - saturate(NdotL)) + 0.4 * (1.0 - shadow)));
+    sss_accum += fill * Lcolor * shadow * tint;
 
-    // Thin-skin backlight (ears, nose rim): only where the surface turns
-    // away, and shaped by a fourth power so it stays a rim.
-    float back = saturate( dot( -geometryNormal, L ) );
-    sss_accum += pow( back, 4.0 ) * Lcolor * shadow * uSkinTranslucency * 0.12;
+    float back = saturate( dot( -nonPerturbedNormal, L ) );
+    sss_accum += pow(back, 4.0) * Lcolor * shadow * uSkinTranslucency * 0.12 * grazing * uSSSColor;
 
   }
   }
   #pragma unroll_loop_end
 
   reflectedLight.directDiffuse +=
-    sss_accum * material.diffuseColor * uSSSColor * uSSSAmount;
+    sss_accum * material.diffuseColor * uSSSAmount;
 }
 #endif
+reflectedLight.indirectDiffuse += ambientLightColor * material.diffuseColor * uSSSColor * uSSSAmount * 0.015;
 // ───────────────────────────────────────────────────────────────────────────
 `;
 
@@ -140,6 +142,7 @@ interface SkinMaterial extends THREE.MeshStandardMaterial {
   __skinUniforms?: Record<string, { value: unknown }> | null;
   /** The values a (re)compile seeds its uniforms from. Mutable on purpose. */
   __skinParams?: SkinShaderParams;
+  __skinDetail?: { texture: THREE.Texture | null; strength: number; scale: number };
 }
 
 export function applySkinShader(
@@ -154,13 +157,19 @@ export function applySkinShader(
      pushed since. `updateSkinUniforms` keeps this object current. */
   skin.__skinParams = { ...params, sssColor: params.sssColor.clone() };
   skin.__skinUniforms = null;
-  mat.customProgramCacheKey = () => 'enb_skin_shader';
+  mat.customProgramCacheKey = () => 'enb_skin_v2';
 
   mat.onBeforeCompile = (shader) => {
     const live = skin.__skinParams ?? params;
     shader.uniforms.uSSSAmount       = { value: live.sssAmount };
     shader.uniforms.uSkinTranslucency = { value: live.translucency };
     shader.uniforms.uSSSColor        = { value: live.sssColor.clone() };
+    shader.uniforms.uSkinDetailMap = { value: skin.__skinDetail?.texture ?? null };
+    shader.uniforms.uSkinDetailStrength = { value: skin.__skinDetail?.texture ? skin.__skinDetail.strength : 0 };
+    shader.uniforms.uSkinDetailScale = { value: skin.__skinDetail?.scale ?? 8 };
+
+    shader.vertexShader = 'attribute float skinCavity; varying float vSkinCavity; varying vec2 vSkinUv;\n' + shader.vertexShader;
+    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvSkinCavity = skinCavity; vSkinUv = uv;');
 
     skin.__skinUniforms = shader.uniforms;
 
@@ -169,8 +178,48 @@ export function applySkinShader(
 uniform float uSSSAmount;
 uniform float uSkinTranslucency;
 uniform vec3  uSSSColor;
+uniform sampler2D uSkinDetailMap;
+uniform float uSkinDetailStrength;
+uniform float uSkinDetailScale;
+varying float vSkinCavity;
+varying vec2 vSkinUv;
 `;
     shader.fragmentShader = decls + shader.fragmentShader;
+    shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', `
+#include <normal_fragment_maps>
+#if defined(USE_NORMALMAP_TANGENTSPACE)
+  if (uSkinDetailStrength > 0.0) {
+    vec3 baseN = texture2D(normalMap, vNormalMapUv).xyz * 2.0 - 1.0;
+    baseN.xy *= normalScale;
+    vec3 detailN = texture2D(uSkinDetailMap, vNormalMapUv * uSkinDetailScale).xyz * 2.0 - 1.0;
+    baseN.xy += detailN.xy * uSkinDetailStrength;
+    normal = normalize(tbn * normalize(baseN));
+  }
+#elif !defined(USE_NORMALMAP)
+  if (uSkinDetailStrength > 0.0) {
+    vec3 q0 = dFdx(-vViewPosition), q1 = dFdy(-vViewPosition);
+    vec2 st0 = dFdx(vSkinUv), st1 = dFdy(vSkinUv);
+    vec3 q1perp = cross(q1, normal), q0perp = cross(normal, q0);
+    vec3 T = q1perp * st0.x + q0perp * st1.x;
+    vec3 B = q1perp * st0.y + q0perp * st1.y;
+    #ifdef DOUBLE_SIDED
+      T *= faceDirection;
+      B *= faceDirection;
+    #endif
+    float det = max(dot(T, T), dot(B, B));
+    float frameScale = det > 0.0 ? inversesqrt(det) : 0.0;
+    vec3 detailN = texture2D(uSkinDetailMap, vSkinUv * uSkinDetailScale).xyz * 2.0 - 1.0;
+    detailN.xy *= uSkinDetailStrength;
+    normal = normalize(mat3(T * frameScale, B * frameScale, normal) * normalize(detailN));
+  }
+#endif
+`);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <aomap_fragment>', `
+#include <aomap_fragment>
+float cavity = 1.0 - clamp(vSkinCavity, 0.0, 1.0) * 0.22;
+reflectedLight.indirectDiffuse *= cavity;
+reflectedLight.indirectSpecular *= cavity;
+`);
 
     // Inject our skin chunk AFTER lights_fragment_end
     shader.fragmentShader = shader.fragmentShader.replace(
@@ -211,7 +260,7 @@ export function updateSkinUniforms(
  *  Head, neck and body all read this one function so a slider move cannot make
  *  one of them glossier than the others. */
 export function skinRoughnessFromGloss(skinGloss: number): number {
-  return Math.max(0.14, 0.65 - skinGloss * 0.46);
+  return Math.max(0.22, 0.74 - skinGloss * 0.40);
 }
 
 /** Map the GLOSS slider [0,1] → SkinShaderParams.
@@ -240,10 +289,11 @@ export function applySkinGloss(
   mat: THREE.MeshStandardMaterial,
   skinGloss: number,
   sssStrength = 1,
+  sheen = 0.2,
 ): void {
   const params = skinParamsFromGloss(skinGloss, sssStrength);
   applySkinShader(mat, params);
-  mat.roughness = skinRoughnessFromGloss(skinGloss);
+  updateSkinGloss(mat, skinGloss, sssStrength, sheen);
 }
 
 /** The live-update half of `applySkinGloss`: uniforms in place (no recompile)
@@ -252,7 +302,57 @@ export function updateSkinGloss(
   mat: THREE.MeshStandardMaterial,
   skinGloss: number,
   sssStrength = 1,
+  sheen = 0.2,
 ): void {
   updateSkinUniforms(mat, skinParamsFromGloss(skinGloss, sssStrength));
   mat.roughness = skinRoughnessFromGloss(skinGloss);
+  if (mat instanceof THREE.MeshPhysicalMaterial) {
+    mat.ior = 1.4;
+    mat.specularIntensity = 1;
+    mat.specularColor.set('#fff3ed');
+    mat.sheen = sheen;
+    mat.sheenColor.set('#ffd8c8');
+    mat.sheenRoughness = 0.7;
+    mat.clearcoat = 0.08;
+    mat.clearcoatRoughness = 0.5;
+  }
+}
+
+/** Detail is owned by the texture-loading effect, never by the material. */
+export function updateSkinDetail(mat: THREE.MeshStandardMaterial, texture: THREE.Texture | null, strength: number, scale = 8): void {
+  const skin = mat as SkinMaterial;
+  skin.__skinDetail = { texture, strength, scale };
+  const u = skin.__skinUniforms;
+  if (!u) return;
+  u.uSkinDetailMap.value = texture;
+  u.uSkinDetailStrength.value = texture ? strength : 0;
+  u.uSkinDetailScale.value = scale;
+}
+
+/** ponytail: one-ring cavity, not visibility AO; upgrade to an authored bake for cast occlusion. */
+export function attachSkinCavity(geometry: THREE.BufferGeometry): void {
+  if (geometry.hasAttribute('skinCavity')) return;
+  const p = geometry.getAttribute('position');
+  const n = geometry.getAttribute('normal');
+  const index = geometry.index;
+  if (!p || !n || !index) return;
+  const sums = new Float32Array(p.count);
+  const counts = new Uint32Array(p.count);
+  for (let i = 0; i < index.count; i += 3) {
+    const ids = [index.getX(i), index.getX(i + 1), index.getX(i + 2)];
+    for (let j = 0; j < 3; j++) {
+      const a = ids[j];
+      for (let k = 1; k <= 2; k++) {
+        const b = ids[(j + k) % 3];
+        const dx = p.getX(b) - p.getX(a), dy = p.getY(b) - p.getY(a), dz = p.getZ(b) - p.getZ(a);
+        const len = Math.hypot(dx, dy, dz);
+        if (len === 0) continue;
+        // Inward-facing folds have neighbors above their tangent plane.
+        sums[a] += (dx * n.getX(a) + dy * n.getY(a) + dz * n.getZ(a)) / len;
+        counts[a]++;
+      }
+    }
+  }
+  const cavity = Float32Array.from(sums, (sum, i) => Math.min(1, Math.max(0, sum / (counts[i] || 1) * 4)));
+  geometry.setAttribute('skinCavity', new THREE.Float32BufferAttribute(cavity, 1));
 }

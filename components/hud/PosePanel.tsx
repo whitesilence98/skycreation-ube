@@ -11,6 +11,7 @@ import {
 } from '@/lib/character/poses';
 import { cn } from '@/lib/cn';
 import { IconSparkle } from '@/components/hud/Icons';
+import { exportCharacterGlb } from '@/lib/exportGlb';
 
 /**
  * Dedicated POSES Workspace Panel matching the aesthetic reference:
@@ -27,6 +28,26 @@ export function PosePanel() {
   const setPoseIntensity = useCharacter((s) => s.setPoseIntensity);
   const animationSpeed = useCharacter((s) => s.animationSpeed);
   const setAnimationSpeed = useCharacter((s) => s.setAnimationSpeed);
+  const animationId = useCharacter((s) => s.animationId);
+  const setAnimationId = useCharacter((s) => s.setAnimationId);
+  const animationPlaying = useCharacter((s) => s.animationPlaying);
+  const setAnimationPlaying = useCharacter((s) => s.setAnimationPlaying);
+  const autoRigUnskinned = useCharacter((s) => s.autoRigUnskinned);
+  const setAutoRigUnskinned = useCharacter((s) => s.setAutoRigUnskinned);
+  const [exportStatus, setExportStatus] = useState('');
+  const [exportBusy, setExportBusy] = useState(false);
+  const exportGlb = async (animated: boolean) => {
+    setExportBusy(true);
+    setExportStatus('Exporting…');
+    try {
+      await exportCharacterGlb(undefined, { animated });
+      setExportStatus('GLB exported');
+    } catch (err) {
+      setExportStatus(err instanceof Error ? err.message : 'GLB export failed');
+    } finally {
+      setExportBusy(false);
+    }
+  };
   const poseCategory = useCharacter((s) => s.poseCategory);
   const setPoseCategory = useCharacter((s) => s.setPoseCategory);
   const favoritePoses = useCharacter((s) => s.favoritePoses);
@@ -124,6 +145,34 @@ export function PosePanel() {
         </button>
       </div>
 
+      <div className="flex flex-col gap-2 border-b border-[#d4b483]/20 pb-3 text-[10px]">
+        <label className="flex items-center justify-between gap-2">
+          ANIMATION
+          <select aria-label="Animation" value={animationId}
+            onChange={(e) => setAnimationId(e.target.value as 'idle' | 'rest')}
+            className="border border-[#d4b483]/40 bg-[#14100b] px-2 py-1 focus-visible:outline focus-visible:outline-[#eac87f]">
+            <option value="idle">Breathing idle</option>
+            <option value="rest">Static pose</option>
+          </select>
+        </label>
+        <button type="button" aria-label={animationPlaying ? 'Pause animation' : 'Play animation'}
+          onClick={() => setAnimationPlaying(!animationPlaying)}
+          className="border border-[#d4b483]/40 px-2 py-1 hover:bg-[#d4b483]/10 focus-visible:outline focus-visible:outline-[#eac87f]">
+          {animationPlaying ? 'PAUSE' : 'PLAY'}
+        </button>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={autoRigUnskinned} onChange={(e) => setAutoRigUnskinned(e.target.checked)} />
+          Auto-rig unweighted body / clothing
+        </label>
+        <div className="flex gap-2">
+          <button type="button" disabled={exportBusy} onClick={() => void exportGlb(true)}
+            className="border border-[#d4b483]/40 px-2 py-1 disabled:opacity-40 focus-visible:outline focus-visible:outline-[#eac87f]">EXPORT ANIMATED GLB</button>
+          <button type="button" disabled={exportBusy} onClick={() => void exportGlb(false)}
+            className="border border-[#d4b483]/40 px-2 py-1 disabled:opacity-40 focus-visible:outline focus-visible:outline-[#eac87f]">EXPORT STATIC GLB</button>
+        </div>
+        <span role="status">{exportStatus}</span>
+      </div>
+
       {/* ── Category Navigation Tabs ─────────────────────────────────── */}
       <div className="grid grid-cols-4 gap-1 rounded-md border border-[#d4b483]/18 bg-black/40 p-1">
         {(['IDLE', 'ACTION', 'EXPRESSIONS', 'FAVORITES'] as const).map((cat) => {
@@ -175,15 +224,15 @@ export function PosePanel() {
                 const isFav = favoritePoses.includes(pose.id);
 
                 return (
+                  <div key={pose.id} className="relative">
                   <button
-                    key={pose.id}
                     type="button"
                     onClick={() => handleSelectPose(pose.id)}
                     aria-pressed={active}
                     title={`${pose.label}\n${pose.note}`}
                     className={cn(
                       'group relative flex flex-col items-center justify-between rounded-md border p-2 transition-all duration-200',
-                      'h-[86px]',
+                      'h-[86px] w-full',
                       active
                         ? 'border-[#f0d59e] bg-[#f0d59e]/[0.13] shadow-[0_0_12px_rgba(240,213,158,0.28)]'
                         : 'border-white/10 bg-[#12141a]/85 hover:border-[#d4b483]/45 hover:bg-[#161a22]',
@@ -198,23 +247,7 @@ export function PosePanel() {
                         <span className="h-1.5 w-1.5 opacity-0" />
                       )}
 
-                      {/* Favorite Toggle Star */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleFavoritePose(pose.id);
-                        }}
-                        title={isFav ? 'Remove from favorites' : 'Add to favorites'}
-                        className={cn(
-                          'text-[11px] leading-none transition-transform hover:scale-125',
-                          isFav
-                            ? 'text-[#eac87f]'
-                            : 'text-[#a9a192]/40 opacity-0 group-hover:opacity-100 hover:text-[#eac87f]',
-                        )}
-                      >
-                        {isFav ? '★' : '☆'}
-                      </button>
+                      <span className="h-3 w-3" />
                     </div>
 
                     {/* Central Silhouette Glyph */}
@@ -234,6 +267,13 @@ export function PosePanel() {
                       {pose.label}
                     </span>
                   </button>
+                  <button type="button" onClick={() => toggleFavoritePose(pose.id)}
+                    aria-label={`${isFav ? 'Remove' : 'Add'} ${pose.label} ${isFav ? 'from' : 'to'} favorites`}
+                    aria-pressed={isFav}
+                    className="absolute right-1 top-1 p-1 text-[11px] text-[#eac87f] focus-visible:outline focus-visible:outline-[#eac87f]">
+                    {isFav ? '★' : '☆'}
+                  </button>
+                  </div>
                 );
               })}
             </div>

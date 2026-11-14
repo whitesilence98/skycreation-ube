@@ -49,6 +49,8 @@ def main() -> int:
         touch(root, r"hair\meshes\[Dint] BDOR_Hair UBE\Amelia.nif")
         touch(root, r"hair\textures\armor\[dint999]\02 Hair\H1.dds")
         touch(root, r"clothing\meshes\!UBE\Armor\Mu3B\outfit.nif")
+        touch(root, r"clothing\textures\clothes\FB_Aokili\Shorts_d.dds")
+        touch(root, r"clothing\textures\clothes\FB_Aokili\Shorts_n.dds")
         touch(root, r"shared\textures\cubemaps\mirror_e.dds")
         touch(root, r"presets\SKSE\Plugins\CharGen\Frau.nif")
         touch(root, r"overlays\textures\!UBE\Custom_Scars\1.dds")
@@ -86,6 +88,13 @@ def main() -> int:
              r"hair\textures\armor\[dint999]\02 Hair\H1.dds"),
             (r"meshes\!UBE\Armor\Mu3B\outfit.nif",
              r"clothing\meshes\!UBE\Armor\Mu3B\outfit.nif"),
+            (r"clothing\textures\clothes\FB_Aokili\Shorts_d.dds",
+             r"clothing\textures\clothes\FB_Aokili\Shorts_d.dds"),
+            (r"textures\clothes\FB_Aokili\Shorts_d.dds",
+             r"clothing\textures\clothes\FB_Aokili\Shorts_d.dds"),
+            (r"textures\clothes\FB_Aokili\Shorts_n.dds",
+             r"clothing\textures\clothes\FB_Aokili\Shorts_n.dds"),
+            (r"textures\clothes\FB_Aokili\missing.dds", ""),
             (r"textures\cubemaps\mirror_e.dds",
              r"shared\textures\cubemaps\mirror_e.dds"),
             (r"textures\Caenarvon\cubemap\x.dds", ""),
@@ -127,12 +136,19 @@ def main() -> int:
 
         check(pack_paths.virtual_rel(r"head\textures\!UBE\Head\a.dds")
               == r"textures\!UBE\Head\a.dds", "virtual_rel did not strip the category")
+        check(pack_paths.virtual_rel(r"clothing\textures\clothes\FB_Aokili\Shorts_d.dds")
+              == r"textures\clothes\FB_Aokili\Shorts_d.dds", "virtual_rel did not strip clothing category")
         check(pack_paths.virtual_rel(r"textures\!UBE\Head\a.dds")
               == r"textures\!UBE\Head\a.dds", "virtual_rel changed a Data path")
         check(pack_paths.pack_mod(r"hair\meshes\a.nif") == "meshes", "pack_mod on a mesh")
+        check(pack_paths.pack_mod(r"clothing\textures\a.dds") == "textures", "pack_mod on a clothing texture")
+        check(pack_paths.pack_mod(r"clothing\meshes\a.nif") == "meshes", "pack_mod on a clothing mesh")
         check(pack_paths.pack_mod(r"SKSE\Plugins\a.nif") == "SKSE", "pack_mod on a preset")
         check(pack_paths.is_physical(r"hair\meshes\a.nif"), "is_physical missed a category")
+        check(pack_paths.is_physical(r"clothing\textures\clothes\a.dds"), "is_physical missed clothing texture")
+        check(pack_paths.is_physical(r"clothing\meshes\a.nif"), "is_physical missed clothing mesh")
         check(not pack_paths.is_physical(r"meshes\hairs\a.nif"), "is_physical accepted a Data path")
+        check(not pack_paths.is_physical(r"textures\clothes\a.dds"), "is_physical accepted a Data clothing texture")
 
     if failures:
         for f in failures:

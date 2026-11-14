@@ -4,7 +4,7 @@ import type {
 } from '@/lib/head/faceTexture';
 import type { CatalogueEntry } from '@/lib/mo2/types';
 import { convertUrl } from '@/lib/mo2/client';
-import { EQUIP_SLOTS, isWholeOutfit, type EquipSelection, type EquipSlot } from '@/lib/equipment';
+import { EQUIP_SLOTS, isWholeOutfit, equipSlotOf, type EquipSelection, type EquipSlot } from '@/lib/equipment';
 
 export type PartMeshKind = 'headMesh' | 'eyeMesh' | 'lashesMesh' | 'browsMesh' | 'mouthMesh' | 'bodyMesh' | 'handsMesh' | 'feetMesh' | 'hairMesh' | 'clothingMesh';
 export type AssetKind = PartMeshKind | 'skin' | 'eyes' | 'lashes' | 'brows' | 'mouth' | 'body' | 'hair' | 'clothing'
@@ -154,6 +154,7 @@ export function resolveManifest(
   selection: AssetSelection,
   catalogues: AssetCatalogues = {},
   equipment: EquipSelection = {},
+  options?: { unrestrictedSlots?: boolean },
 ): Mo2Manifest | null {
   if (!manifest) return null;
   const resolveMeshUrl = (kind: string, option: PartOption | undefined): PartOption | undefined => {
@@ -335,7 +336,8 @@ export function resolveManifest(
       ?? (catalogues.clothingMesh?.find((e) => e.id === id && e.mapRole === 'mesh') as PartOption | undefined)
       ?? undefined;
     if (!row || !isRenderableMeshRow(row)) continue;
-    if (row.equipSlot && row.equipSlot !== slot) continue;
+    const unrestricted = options?.unrestrictedSlots ?? false;
+    if (!unrestricted && equipSlotOf(row) !== slot) continue;
     const resolved = resolveMeshUrl('clothingMesh', row);
     if (!resolved?.meshUrl) continue;
     const weightVariants = weightVariantsFor('clothingMesh', row);
@@ -371,6 +373,7 @@ export function resolveManifest(
       /* The eye is the one facial pair without a `parts` entry: its mesh and
          maps ride the `eyes` texture row, so the normal has to be lifted out
          of that row explicitly or the eyeball draws flat. */
+      texture: eye?.texture ?? manifest.eye?.texture,
       normalTexture: eye?.normalTexture ?? manifest.eye?.normalTexture,
       meshUrl: companionEyeMesh ?? eyeMesh?.meshUrl ?? eye?.meshUrl ?? manifest.eye?.meshUrl,
       lashesMeshUrl: companionLashesMesh ?? parts.lashes.meshUrl ?? manifest.eye?.lashesMeshUrl,

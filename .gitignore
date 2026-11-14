@@ -31,12 +31,17 @@ test-results/
 
 # local agent settings
 .claude/settings.local.json
+.claude/agent-memory/
+.claude/worktrees/
+CLAUDE.local.md
+project.local.yaml
+production/session-state/
+production/session-logs/
 
 # local scratch: ad-hoc inspection scripts and measurements
 /.scratch-weight/
 /tools/poser/*.exe
 /tools/poser/*.hkx
-.claude/
 .impeccable/
 
 # OS / editor

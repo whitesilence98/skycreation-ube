@@ -319,3 +319,13 @@ input[type='color']::-webkit-color-swatch {
     animation: none;
   }
 }
+
+/* Hide Next.js floating development indicator / portal badge */
+nextjs-portal,
+#nextjs-dev-indicator,
+[data-nextjs-dev-indicator],
+[data-nextjs-portal] {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

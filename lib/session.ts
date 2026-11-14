@@ -39,7 +39,7 @@ import { CAMERA_ROTATE_SPEED_DEFAULT, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPE
 import { createJSONStorage, type PersistStorage, type StateStorage } from 'zustand/middleware';
 import type {
   ActiveCategory, ColorOverlay, EnbPreset, FilterPreset, GizmoPose, GradeSettings,
-  OverlayLayer, UtilityToggles,
+  OverlayLayer, ToneMappingId, UtilityToggles,
 } from '@/lib/store';
 
 /**
@@ -47,8 +47,11 @@ import type {
  *
  * The version is in the key as well as the payload, so a bump starts a clean
  * session instead of migrating a payload the app has no UI to inspect.
+ *
+ * v2 intentionally starts fresh for the new rendering defaults (approved reset).
+ * The v1 key is left untouched; it is not automatically restored.
  */
-export const SESSION_VERSION = 1;
+export const SESSION_VERSION = 2;
 
 export const SESSION_KEY = `lyra.character-session.v${SESSION_VERSION}`;
 
@@ -85,6 +88,10 @@ export interface PersistedSession {
   showMesh: boolean;
   garmentVisible: boolean;
   bodyPoseId: string;
+  animationId?: 'idle' | 'rest';
+  animationPlaying?: boolean;
+  animationSpeed?: number;
+  autoRigUnskinned?: boolean;
   weight: number;
   bodyPhysicsEnabled?: boolean;
   bodyPhysicsBounciness?: number;
@@ -103,7 +110,10 @@ export interface PersistedSession {
   cameraRotateSpeed?: number;
   skinGloss: number;
   skinSss: number;
+  skinDetail: number;
+  skinSheen: number;
   skinColor: string;
+  toneMapping: ToneMappingId;
   sliders: Record<RegionId, SliderValues>;
   poses: Record<RegionId, GizmoPose>;
   preset: string;
@@ -123,6 +133,9 @@ export interface PersistedSession {
 const TRANSFORM_MODES: readonly TransformMode[] = ['translate', 'rotate', 'scale'];
 const ENB_PRESETS: readonly EnbPreset[] = ['all', 'enb', 'pure'];
 const FILTER_PRESETS: readonly FilterPreset[] = ['vanilla', 'dramatic', 'cinematic', 'fantasy'];
+/* Mirrors `TONE_MAPPING_IDS` in `lib/store.ts`. A value that is not one of
+   these has no `ToneMappingMode` to map onto in the scene. */
+const TONE_MAPPINGS: readonly ToneMappingId[] = ['neutral', 'agx', 'aces', 'cineon'];
 const FX_KEYS = ['smaa', 'bloom', 'dof', 'vignette', 'grain'] as const;
 const UTIL_KEYS: Array<keyof UtilityToggles> = [
   'camPreset', 'beautyAlbum', 'poseEdit', 'viewOutfit', 'cameraFocus', 'historyRevert',
@@ -231,6 +244,10 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     showMesh: bool(o.showMesh, defaults.showMesh),
     garmentVisible: bool(o.garmentVisible, defaults.garmentVisible),
     bodyPoseId: typeof o.bodyPoseId === 'string' ? o.bodyPoseId : defaults.bodyPoseId,
+    animationId: o.animationId === 'rest' || o.animationId === 'idle' ? o.animationId : (defaults.animationId ?? 'idle'),
+    animationPlaying: bool(o.animationPlaying, defaults.animationPlaying ?? true),
+    animationSpeed: bounded(o.animationSpeed, defaults.animationSpeed ?? 1, 0.2, 2),
+    autoRigUnskinned: bool(o.autoRigUnskinned, defaults.autoRigUnskinned ?? true),
     /* `coerceWeight` normalises 0–100 → 0–1 and refuses anything outside it;
        the fallback is the model's own 1.0, not the stored nonsense. */
     weight: coerceWeight(o.weight) ?? defaults.weight,
@@ -253,7 +270,10 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     cameraRotateSpeed: bounded(o.cameraRotateSpeed, defaults.cameraRotateSpeed ?? CAMERA_ROTATE_SPEED_DEFAULT, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPEED_MAX),
     skinGloss: clamp(finite(o.skinGloss, defaults.skinGloss), 0, 1),
     skinSss: clamp(finite(o.skinSss, defaults.skinSss), 0, 1),
+    skinDetail: clamp(finite(o.skinDetail, defaults.skinDetail), 0, 1),
+    skinSheen: clamp(finite(o.skinSheen, defaults.skinSheen), 0, 1),
     skinColor: typeof o.skinColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.skinColor) ? o.skinColor : (defaults.skinColor ?? '#ffffff'),
+    toneMapping: isOneOf(TONE_MAPPINGS, o.toneMapping) ? o.toneMapping : defaults.toneMapping,
     sliders,
     poses,
     preset: PRESETS.some((p) => p.id === o.preset) ? (o.preset as string) : defaults.preset,
@@ -290,6 +310,10 @@ export function pickSession(s: PersistedSession): PersistedSession {
     showMesh: s.showMesh,
     garmentVisible: s.garmentVisible,
     bodyPoseId: s.bodyPoseId,
+    animationId: s.animationId ?? 'idle',
+    animationPlaying: s.animationPlaying ?? true,
+    animationSpeed: s.animationSpeed ?? 1,
+    autoRigUnskinned: s.autoRigUnskinned ?? true,
     weight: s.weight,
     bodyPhysicsEnabled: s.bodyPhysicsEnabled ?? true,
     bodyPhysicsBounciness: s.bodyPhysicsBounciness ?? 0.5,
@@ -311,7 +335,10 @@ export function pickSession(s: PersistedSession): PersistedSession {
     cameraRotateSpeed: s.cameraRotateSpeed ?? CAMERA_ROTATE_SPEED_DEFAULT,
     skinGloss: s.skinGloss,
     skinSss: s.skinSss,
+    skinDetail: s.skinDetail,
+    skinSheen: s.skinSheen,
     skinColor: s.skinColor,
+    toneMapping: s.toneMapping,
     sliders: Object.fromEntries(
       Object.entries(s.sliders).map(([id, values]) => [id, { ...values }]),
     ) as Record<RegionId, SliderValues>,

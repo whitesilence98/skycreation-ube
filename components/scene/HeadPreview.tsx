@@ -187,9 +187,10 @@ export function HeadPreview() {
     };
   }, []);
 
+  const unrestrictedSlots = useCharacter((s) => s.unrestrictedSlots);
   const resolved = useMemo(
-    () => resolveManifest(manifest, selection, catalogues, equipment),
-    [manifest, selection, catalogues, equipment],
+    () => resolveManifest(manifest, selection, catalogues, equipment, { unrestrictedSlots }),
+    [manifest, selection, catalogues, equipment, unrestrictedSlots],
   );
   const overlayImages = useOverlayImages(overlayLayers);
 

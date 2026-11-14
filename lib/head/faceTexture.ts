@@ -1102,6 +1102,93 @@ export function buildDetailTexture(albedo: HTMLCanvasElement): THREE.CanvasTextu
   return t;
 }
 
+/**
+ * Small tileable tangent-space normal from a high-frequency cheek crop.
+ * ponytail: synthetic pore relief only — it cannot recover authored anatomy
+ * and must not stand in for a real `_n.dds`. Call once per albedo load (never
+ * per slider); throws on a sizeless source or missing 2D context for the caller.
+ */
+export function buildSkinDetailNormal(
+  source: HTMLImageElement | HTMLCanvasElement,
+  fit: Mo2AtlasFit = ATLAS_FIT,
+): THREE.CanvasTexture {
+  const w = source instanceof HTMLImageElement ? source.naturalWidth : source.width;
+  const h = source instanceof HTMLImageElement ? source.naturalHeight : source.height;
+  if (!w || !h) throw new Error('buildSkinDetailNormal: source has no intrinsic size');
+
+  const S = 256, R = 3, T = 16, strength = 2.5;
+  const sx = w / 1024, sy = h / 1024;
+  // Cheek in head-local metres → atlas pixels through the bake's own fit.
+  const cx = (fit.cx + fit.kx * 0.055) * sx;
+  const cy = (fit.cy + fit.ky * -0.048) * sy;
+  const half = Math.max(4, Math.round(41 * sx));
+  const x0 = Math.max(0, Math.min(Math.round(cx) - half, w - half * 2));
+  const y0 = Math.max(0, Math.min(Math.round(cy) - half, h - half * 2));
+
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('buildSkinDetailNormal: 2D context unavailable');
+  ctx.drawImage(source, x0, y0, half * 2, half * 2, 0, 0, S, S);
+  const px = ctx.getImageData(0, 0, S, S).data;
+
+  const lum = new Float32Array(S * S);
+  for (let i = 0, p = 0; p < lum.length; i += 4, p++)
+    lum[p] = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) / 255;
+
+  // Separable box blur; clamped edges — the taper below owns the seam.
+  const cl = (v: number) => (v < 0 ? 0 : v > S - 1 ? S - 1 : v);
+  const tmp = new Float32Array(S * S), blur = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    let s = 0;
+    for (let k = -R; k <= R; k++) s += lum[y * S + cl(x + k)];
+    tmp[y * S + x] = s / (2 * R + 1);
+  }
+  for (let x = 0; x < S; x++) for (let y = 0; y < S; y++) {
+    let s = 0;
+    for (let k = -R; k <= R; k++) s += tmp[cl(y + k) * S + x];
+    blur[y * S + x] = s / (2 * R + 1);
+  }
+
+  // High-pass tapered to zero over a T-px margin, so repeated tiles meet.
+  const hp = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) {
+    const wy = Math.min(1, Math.min(y, S - 1 - y) / T);
+    for (let x = 0; x < S; x++)
+      hp[y * S + x] = (lum[y * S + x] - blur[y * S + x]) * wy *
+        Math.min(1, Math.min(x, S - 1 - x) / T);
+  }
+
+  // Periodic Sobel → normal, so every repeat keeps one orientation.
+  const out = ctx.createImageData(S, S), od = out.data;
+  for (let y = 0; y < S; y++) {
+    const ym = (y + S - 1) % S, yp = (y + 1) % S;
+    for (let x = 0; x < S; x++) {
+      const xm = (x + S - 1) % S, xp = (x + 1) % S;
+      const gx = hp[ym * S + xm] + 2 * hp[y * S + xm] + hp[yp * S + xm] -
+        (hp[ym * S + xp] + 2 * hp[y * S + xp] + hp[yp * S + xp]);
+      const gy = hp[ym * S + xm] + 2 * hp[ym * S + x] + hp[ym * S + xp] -
+        (hp[yp * S + xm] + 2 * hp[yp * S + x] + hp[yp * S + xp]);
+      const nx = gx * strength, ny = gy * strength, len = Math.hypot(nx, ny, 1);
+      const o = (y * S + x) * 4;
+      od[o] = clamp255((nx / len * 0.5 + 0.5) * 255);
+      od[o + 1] = clamp255((ny / len * 0.5 + 0.5) * 255);
+      od[o + 2] = clamp255((1 / len * 0.5 + 0.5) * 255);
+      od[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.NoColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.generateMipmaps = true;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.magFilter = THREE.LinearFilter;
+  t.anisotropy = 8;
+  return t;
+}
+
 /** Hair atlas → alpha-matted texture (the source has black backing). */
 /**
  * Turns the HG Hairdos strand atlas into a *strand mask*: a neutral grey

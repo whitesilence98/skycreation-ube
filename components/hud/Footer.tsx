@@ -72,7 +72,7 @@ export function Footer({ manifest }: FooterProps) {
 
         {/* ── actions ────────────────────────────────────────────── */}
         <div className="pointer-events-auto relative flex flex-wrap items-center justify-end gap-x-3 gap-y-2 [&_button]:min-h-7">
-          {(primaryTab === 'EQUIPMENT' || primaryTab === 'BODY' || primaryTab === 'PRESET') && (
+          {(primaryTab === 'EQUIPMENT' || primaryTab === 'BODY' || primaryTab === 'PRESET' || primaryTab === 'HAIR' || primaryTab === 'FACE') && (
             <svg
               className="pointer-events-none absolute -top-10 right-4 h-7 w-7 text-[#d4b483]/45 drop-shadow-[0_0_8px_rgba(212,180,131,0.4)]"
               viewBox="0 0 24 24"

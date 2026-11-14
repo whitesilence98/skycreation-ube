@@ -106,164 +106,184 @@ export function EyePicker({ manifest }: { manifest: Mo2Manifest | null }) {
   );
   const ubeCount = allEyes.length - zhizhenCount;
 
+  const activeEntry = allEyes.find((e) => e.id === activeId);
+  const activeLabel = activeEntry ? (activeEntry.label || activeEntry.file.replace(/\.dds$/i, '')) : 'Default Eyes';
+
   return (
-    <div className="select-none">
-      {/* ── Title & Total Counter ──────────────────────────────────── */}
-      <div className="mb-[7px] flex items-baseline justify-between">
-        <h2 className="text-[11px] font-normal tracking-[0.02em] text-[#e2d8c6]/92">
-          EYE TEXTURES
+    <div className="relative flex w-full flex-col select-none">
+      <div className="flex flex-col gap-3 rounded-xs border border-[#d4b483]/22 bg-black/45 p-3.5 backdrop-blur-md">
+        {/* Top Header: EYES & GAZE */}
+        <h2 className="text-[11px] font-medium tracking-[0.05em] text-[#efece6] uppercase">
+          EYES &amp; GAZE
         </h2>
-        <span className="text-[10px] tracking-[0.06em] text-[#b6ad9c]/70">
-          {loading ? 'LOADING…' : `${allEyes.length} PRESETS`}
-        </span>
-      </div>
 
-      {/* ── Sub-brand Filters ─────────────────────────────────────── */}
-      <div className="mb-[8px] flex items-stretch border border-[#d4b483]/22 bg-black/40 text-[10px] tracking-[0.1em]">
-        <button
-          type="button"
-          onClick={() => setFilter('ALL')}
-          className={cn(
-            'flex-1 py-[4px] text-center transition-colors',
-            filter === 'ALL'
-              ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
-              : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
-          )}
-        >
-          ALL ({allEyes.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setFilter('ZHIZHEN')}
-          className={cn(
-            'flex-1 border-l border-[#d4b483]/22 py-[4px] text-center transition-colors',
-            filter === 'ZHIZHEN'
-              ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
-              : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
-          )}
-        >
-          ZHIZHEN ({zhizhenCount})
-        </button>
-        <button
-          type="button"
-          onClick={() => setFilter('UBE')}
-          className={cn(
-            'flex-1 border-l border-[#d4b483]/22 py-[4px] text-center transition-colors',
-            filter === 'UBE'
-              ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
-              : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
-          )}
-        >
-          UBE / !COR ({ubeCount})
-        </button>
-      </div>
+        {/* ── Sub-brand Filters ─────────────────────────────────────── */}
+        <div className="flex flex-col gap-2 pt-0.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#c4b595]">
+              IRIS PRESETS
+            </span>
+            <span className="text-[9.5px] font-mono tracking-tight text-[#8f8778]">
+              {loading ? 'LOADING…' : `${allEyes.length} PRESETS`}
+            </span>
+          </div>
 
-      {/* ── Search Input ───────────────────────────────────────────── */}
-      <div className="relative mb-[8px]">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search eyes by color or mod…"
-          aria-label="Search eyes"
-          className="w-full border border-[#d4b483]/26 bg-black/48 px-[7px] py-[4px] text-[10px] tracking-[0.06em] text-[#e2d8c6] placeholder-[#8f8778]/55 outline-none transition-colors focus:border-[#d4b483]/60"
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery('')}
-            className="absolute right-[6px] top-1/2 -translate-y-1/2 text-[10px] text-[#8f8778] hover:text-[#e2d8c6]"
-          >
-            ×
-          </button>
-        )}
-      </div>
-
-      {/* ── Eyes Grid ──────────────────────────────────────────────── */}
-      <div className="thin-scroll grid max-h-[310px] grid-cols-4 gap-[7px] overflow-y-auto pr-[2px]">
-        {filteredEyes.map((eye, i) => {
-          const isSelected = eye.id === activeId;
-          const isZhizhen =
-            eye.file.toLowerCase().includes('zhizhen') ||
-            (eye.rel && eye.rel.toLowerCase().includes('ddseyes'));
-          const isKoralina = !!eye.rel && eye.rel.toLowerCase().includes('koralina');
-          const sourceLabel = isKoralina
-            ? 'Even More Eyes by Koralina'
-            : isZhizhen
-              ? 'Zhizhen Eyes'
-              : 'UBE / !COR';
-          const cleanLabel = eye.label || eye.file.replace(/\.dds$/i, '');
-
-          return (
+          <div className="flex items-stretch border border-[#d4b483]/22 bg-black/40 text-[9.5px] tracking-[0.08em]">
             <button
-              key={eye.id}
               type="button"
-              onClick={() => setAssets({ eyes: eye.id })}
-              aria-label={cleanLabel}
-              aria-pressed={isSelected}
-              title={`${cleanLabel}\nMod: ${sourceLabel}\nFile: ${eye.file}`}
-              className="group relative flex min-w-0 flex-col items-center text-left"
+              onClick={() => setFilter('ALL')}
+              className={cn(
+                'flex-1 py-[3px] text-center transition-colors',
+                filter === 'ALL'
+                  ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
+                  : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
+              )}
             >
-              {/* Circular Iris Disc Preview */}
-              <span
-                className={cn(
-                  'relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-full border p-[2px] transition-all duration-200',
-                  isSelected
-                    ? 'border-[#eac87f] bg-[#eac87f]/16 shadow-[0_0_12px_rgba(234,200,127,0.45)]'
-                    : 'border-[#d4b483]/25 bg-[#0b0a08]/80 group-hover:border-[#d4b483]/60 group-hover:bg-[#16120e]',
-                )}
-              >
-                {/* Iris Disc Image */}
-                <img
-                  src={convertUrl({ kind: 'eyes', id: eye.id, mode: 'disc' })}
-                  alt=""
-                  loading="lazy"
-                  className={cn(
-                    'h-full w-full rounded-full object-cover transition-transform duration-200 group-hover:scale-105',
-                    isSelected ? 'opacity-100' : 'opacity-85 group-hover:opacity-100',
-                  )}
-                  onError={(e) => {
-                    // Fallback to thumbnail mode if disc mode fails
-                    const target = e.currentTarget;
-                    const thumbUrl = convertUrl({ kind: 'eyes', id: eye.id, mode: 'thumb' });
-                    if (target.src !== thumbUrl) {
-                      target.src = thumbUrl;
-                    }
-                  }}
-                />
-
-                {/* Number Badge */}
-                <span className="pointer-events-none absolute bottom-[1px] right-[2px] text-[10px] font-mono tracking-tight text-[#eadcc0]/75">
-                  {String(i + 1).padStart(2, '0')}
-                </span>
-
-                {/* Selected active glow pip */}
-                {isSelected && (
-                  <span className="pointer-events-none absolute -top-[1px] h-[3px] w-[3px] rounded-full bg-[#f2dfbe] shadow-[0_0_5px_rgba(242,223,190,0.9)]" />
-                )}
-              </span>
-
-              {/* Label */}
-              <span
-                className={cn(
-                  'mt-[3px] w-full truncate text-center text-[10px] tracking-[0.06em] transition-colors',
-                  isSelected ? 'font-medium text-[#f0e2ca]' : 'text-[#a9a192]/70 group-hover:text-[#d5ccbb]',
-                )}
-              >
-                {cleanLabel}
-              </span>
+              ALL
             </button>
-          );
-        })}
-      </div>
+            <button
+              type="button"
+              onClick={() => setFilter('ZHIZHEN')}
+              className={cn(
+                'flex-1 border-l border-[#d4b483]/22 py-[3px] text-center transition-colors',
+                filter === 'ZHIZHEN'
+                  ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
+                  : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
+              )}
+            >
+              ZHIZHEN ({zhizhenCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter('UBE')}
+              className={cn(
+                'flex-1 border-l border-[#d4b483]/22 py-[3px] text-center transition-colors',
+                filter === 'UBE'
+                  ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
+                  : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
+              )}
+            >
+              UBE ({ubeCount})
+            </button>
+          </div>
 
-      {/* ── Status Footer ─────────────────────────────────────────── */}
-      <div className="mt-[8px] flex items-center justify-between text-[10px] tracking-[0.11em] text-[#8b8375]/50">
-        <div className="flex items-center gap-[4px]">
-          <IconSparkle className="h-[6px] w-[6px] text-[#c9b184]/50" />
-          <span>ZHIZHEN · UBE · KORALINA</span>
+          {/* ── Search Input ───────────────────────────────────────────── */}
+          <div className="relative">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search eyes by color or mod…"
+              aria-label="Search eyes"
+              className="w-full border border-[#d4b483]/26 bg-black/48 px-[7px] py-[3px] text-[10px] tracking-[0.06em] text-[#e2d8c6] placeholder-[#8f8778]/55 outline-none transition-colors focus:border-[#d4b483]/60"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                className="absolute right-[6px] top-1/2 -translate-y-1/2 text-[10px] text-[#8f8778] hover:text-[#e2d8c6]"
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {/* ── Eyes Grid ──────────────────────────────────────────────── */}
+          <div className="thin-scroll grid max-h-[220px] grid-cols-4 gap-[6px] overflow-y-auto pr-[2px]">
+            {filteredEyes.map((eye, i) => {
+              const isSelected = eye.id === activeId;
+              const isZhizhen =
+                eye.file.toLowerCase().includes('zhizhen') ||
+                (eye.rel && eye.rel.toLowerCase().includes('ddseyes'));
+              const isKoralina = !!eye.rel && eye.rel.toLowerCase().includes('koralina');
+              const sourceLabel = isKoralina
+                ? 'Even More Eyes by Koralina'
+                : isZhizhen
+                  ? 'Zhizhen Eyes'
+                  : 'UBE / !COR';
+              const cleanLabel = eye.label || eye.file.replace(/\.dds$/i, '');
+
+              return (
+                <button
+                  key={eye.id}
+                  type="button"
+                  onClick={() => setAssets({ eyes: eye.id })}
+                  aria-label={cleanLabel}
+                  aria-pressed={isSelected}
+                  title={`${cleanLabel}\nMod: ${sourceLabel}\nFile: ${eye.file}`}
+                  className="group relative flex min-w-0 flex-col items-center text-left"
+                >
+                  {/* Circular Iris Disc Preview */}
+                  <span
+                    className={cn(
+                      'relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-full border p-[2px] transition-all duration-200',
+                      isSelected
+                        ? 'border-[#eac87f] bg-[#eac87f]/16 shadow-[0_0_12px_rgba(234,200,127,0.45)]'
+                        : 'border-[#d4b483]/25 bg-[#0b0a08]/80 group-hover:border-[#d4b483]/60 group-hover:bg-[#16120e]',
+                    )}
+                  >
+                    <img
+                      src={convertUrl({ kind: 'eyes', id: eye.id, mode: 'disc' })}
+                      alt=""
+                      loading="lazy"
+                      className={cn(
+                        'h-full w-full rounded-full object-cover transition-transform duration-200 group-hover:scale-105',
+                        isSelected ? 'opacity-100' : 'opacity-85 group-hover:opacity-100',
+                      )}
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        const thumbUrl = convertUrl({ kind: 'eyes', id: eye.id, mode: 'thumb' });
+                        if (target.src !== thumbUrl) {
+                          target.src = thumbUrl;
+                        }
+                      }}
+                    />
+
+                    <span className="pointer-events-none absolute bottom-[1px] right-[2px] text-[8.5px] font-mono tracking-tight text-[#eadcc0]/75">
+                      {String(i + 1).padStart(2, '0')}
+                    </span>
+
+                    {isSelected && (
+                      <span className="pointer-events-none absolute -top-[1px] h-[3px] w-[3px] rounded-full bg-[#f2dfbe] shadow-[0_0_5px_rgba(242,223,190,0.9)]" />
+                    )}
+                  </span>
+
+                  <span
+                    className={cn(
+                      'mt-[2px] w-full truncate text-center text-[9.5px] tracking-[0.04em] transition-colors',
+                      isSelected ? 'font-medium text-[#f0e2ca]' : 'text-[#a9a192]/70 group-hover:text-[#d5ccbb]',
+                    )}
+                  >
+                    {cleanLabel}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="text-center pt-1">
+            <span className="text-[9.5px] font-mono tracking-tight text-[#8f8778]">
+              [{activeLabel}]
+            </span>
+          </div>
         </div>
-        <span>{filteredEyes.length} SHOWN</span>
+
+        {/* ── Status Footer ─────────────────────────────────────────── */}
+        <div className="flex items-center justify-between border-t border-[#d4b483]/18 pt-2 text-[9.5px] tracking-[0.11em] text-[#8b8375]/60">
+          <div className="flex items-center gap-[4px]">
+            <IconSparkle className="h-[6px] w-[6px] text-[#c9b184]/50" />
+            <span>ZHIZHEN · UBE · KORALINA</span>
+          </div>
+          <span>{filteredEyes.length} SHOWN</span>
+        </div>
+
+        {/* ── Bottom Decorative Arc ─────────────────────────────────── */}
+        <div className="flex justify-center pt-1">
+          <svg className="h-5 w-14 text-[#d4b483]/30" viewBox="0 0 100 40" fill="none" stroke="currentColor" strokeWidth="1">
+            <path d="M 10 38 Q 50 5 90 38" />
+            <path d="M 50 5 L 50 0" />
+          </svg>
+        </div>
       </div>
     </div>
   );
