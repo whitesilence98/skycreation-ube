@@ -80,6 +80,88 @@ function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
   return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
 }
 
+interface BracketSliderProps {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  onChange: (v: number) => void;
+}
+
+function BracketSlider({
+  label,
+  value,
+  min = 0,
+  max = 1,
+  step = 0.01,
+  onChange,
+}: BracketSliderProps) {
+  const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const handlePointer = useCallback(
+    (e: React.PointerEvent<HTMLDivElement> | PointerEvent) => {
+      if (!trackRef.current) return;
+      const rect = trackRef.current.getBoundingClientRect();
+      const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+      const ratio = x / rect.width;
+      const raw = min + ratio * (max - min);
+      const stepped = Math.round(raw / step) * step;
+      onChange(Math.max(min, Math.min(max, Number(stepped.toFixed(4)))));
+    },
+    [min, max, step, onChange]
+  );
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: PointerEvent) => handlePointer(e);
+    const onUp = () => setDragging(false);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [dragging, handlePointer]);
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center justify-between text-[9.5px] font-mono tracking-wider">
+        <span className="text-[#a89e8f] uppercase">
+          {label} [{Math.round(value * 100)}%]
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#736b5e]">
+        <span className="select-none text-[#8f8576] font-light">[</span>
+        <div
+          ref={trackRef}
+          onPointerDown={(e) => {
+            setDragging(true);
+            handlePointer(e);
+          }}
+          className="relative h-[14px] flex-1 cursor-pointer flex items-center"
+        >
+          {/* Track line: hairline */}
+          <div className="h-[1px] w-full bg-[#4a3e30]">
+            <div
+              className="h-[1px] bg-[#8c7857]"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          {/* Vertical Bar Indicator Thumb */}
+          <div
+            className="pointer-events-none absolute top-1/2 h-[10px] w-[2px] -translate-x-1/2 -translate-y-1/2 bg-[#f0e2ca] shadow-[0_0_4px_rgba(0,0,0,0.9)]"
+            style={{ left: `${pct}%` }}
+          />
+        </div>
+        <span className="select-none text-[#8f8576] font-light">]</span>
+      </div>
+    </div>
+  );
+}
+
 export function BrowProperties() {
   const browColor = useCharacter((s) => s.browColor);
   const setBrowColor = useCharacter((s) => s.setBrowColor);
@@ -235,17 +317,17 @@ export function BrowProperties() {
   const pureHueHex = rgbToHex(pureHueRgb[0], pureHueRgb[1], pureHueRgb[2]);
 
   return (
-    <div className="relative flex w-full flex-col select-none text-[#e6e1d8]">
-      <div className="flex flex-col gap-3 rounded-xs border border-[#d4b483]/22 bg-black/45 p-3.5 backdrop-blur-md shadow-[0_14px_38px_rgba(0,0,0,0.42)]">
+    <div className="relative flex w-full max-w-[276px] flex-col select-none text-[#e6e1d8]">
+      <div className="flex flex-col gap-2.5 rounded-[2px] border border-[#463a2e] bg-[#161311]/92 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.65)] backdrop-blur-md">
         {/* Top Header: BROW COLOR & PROPERTIES */}
-        <div className="border-b border-[#d4b483]/18 pb-2">
-          <h2 className="text-[11px] font-medium tracking-[0.14em] text-[#d8c39c] uppercase">
+        <div className="pb-0.5">
+          <h2 className="text-[11px] font-medium tracking-[0.14em] text-[#d8c39c] uppercase font-mono">
             BROW COLOR &amp; PROPERTIES
           </h2>
         </div>
 
         {/* ── 2D Color Saturation/Value Box + Vertical Sliders ───────── */}
-        <div className="flex gap-2.5">
+        <div className="flex gap-2">
           {/* Main 2D SV Box */}
           <div
             ref={svBoxRef}
@@ -253,7 +335,7 @@ export function BrowProperties() {
               setDraggingSv(true);
               handleSvPointer(e);
             }}
-            className="relative h-[146px] flex-1 cursor-crosshair overflow-hidden rounded-xs border border-[#d4b483]/30"
+            className="relative h-[138px] flex-1 cursor-crosshair overflow-hidden rounded-[2px] border border-[#443729]"
             style={{ backgroundColor: pureHueHex }}
           >
             {/* Horizontal White gradient (Saturation) */}
@@ -271,15 +353,18 @@ export function BrowProperties() {
               }}
             />
 
-            {/* Draggable Reticle / Target Cursor */}
+            {/* Draggable Target Reticle Cursor */}
             <div
-              className="pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white shadow-[0_0_4px_rgba(0,0,0,0.9)]"
+              className="pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2"
               style={{
                 left: `${hsv[1] * 100}%`,
                 top: `${(1 - hsv[2]) * 100}%`,
               }}
             >
-              <div className="h-full w-full rounded-full border border-black/80" />
+              <div className="h-full w-full rotate-45 border border-[#efece6] shadow-[0_0_4px_rgba(0,0,0,0.95)]" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="h-1 w-1 rounded-full bg-white shadow-[0_0_2px_rgba(0,0,0,0.9)]" />
+              </div>
             </div>
           </div>
 
@@ -290,14 +375,14 @@ export function BrowProperties() {
               setDraggingVHue(true);
               handleVHuePointer(e);
             }}
-            className="relative h-[146px] w-[14px] cursor-pointer rounded-xs border border-[#d4b483]/30"
+            className="relative h-[138px] w-[12px] cursor-pointer rounded-[2px] border border-[#443729]"
             style={{
-              background: 'linear-gradient(to bottom, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)',
+              background: 'linear-gradient(to bottom, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)',
             }}
           >
             {/* Vertical Hue indicator thumb */}
             <div
-              className="pointer-events-none absolute -left-[2px] right-[2px] h-[4px] -translate-y-1/2 rounded-xs border border-white bg-black/60 shadow-[0_0_3px_rgba(0,0,0,0.8)]"
+              className="pointer-events-none absolute -left-[1px] -right-[1px] h-[3px] -translate-y-1/2 rounded-[1px] border border-black/80 bg-white shadow-[0_0_3px_rgba(0,0,0,0.8)]"
               style={{ top: `${(hsv[0] / 360) * 100}%` }}
             />
           </div>
@@ -309,14 +394,14 @@ export function BrowProperties() {
               setDraggingTone(true);
               handleTonePointer(e);
             }}
-            className="relative h-[146px] w-[14px] cursor-pointer rounded-xs border border-[#d4b483]/30"
+            className="relative h-[138px] w-[12px] cursor-pointer rounded-[2px] border border-[#443729]"
             style={{
               background: `linear-gradient(to bottom, ${pureHueHex}, #000000)`,
             }}
           >
             {/* Vertical Tone indicator thumb */}
             <div
-              className="pointer-events-none absolute -left-[2px] right-[2px] h-[4px] -translate-y-1/2 rounded-xs border border-white bg-black/60 shadow-[0_0_3px_rgba(0,0,0,0.8)]"
+              className="pointer-events-none absolute -left-[1px] -right-[1px] h-[3px] -translate-y-1/2 rounded-[1px] border border-black/80 bg-white shadow-[0_0_3px_rgba(0,0,0,0.8)]"
               style={{ top: `${(1 - hsv[2]) * 100}%` }}
             />
           </div>
@@ -329,20 +414,20 @@ export function BrowProperties() {
             setDraggingHue(true);
             handleHuePointer(e);
           }}
-          className="relative h-[10px] w-full cursor-pointer rounded-xs border border-[#d4b483]/30"
+          className="relative h-[8px] w-full cursor-pointer rounded-[2px] border border-[#443729]"
           style={{
-            background: 'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)',
+            background: 'linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)',
           }}
         >
           {/* Horizontal Hue Slider Thumb */}
           <div
-            className="pointer-events-none absolute top-1/2 h-[14px] w-[6px] -translate-x-1/2 -translate-y-1/2 rounded-xs border border-[#efece6] bg-black/80 shadow-[0_0_4px_rgba(0,0,0,0.9)]"
+            className="pointer-events-none absolute top-1/2 h-[12px] w-[4px] -translate-x-1/2 -translate-y-1/2 rounded-[1px] border border-black/80 bg-white shadow-[0_0_4px_rgba(0,0,0,0.9)]"
             style={{ left: `${(hsv[0] / 360) * 100}%` }}
           />
         </div>
 
         {/* ── Color Swatches Palette (8 items) ──────────────────────── */}
-        <div className="grid grid-cols-8 gap-1.5 pt-1">
+        <div className="grid grid-cols-8 gap-1.5 pt-0.5">
           {BROW_SWATCHES.map((swatch, idx) => {
             const isChromatic = swatch.hex === 'chromatic';
             const isActive = !isChromatic && browColor?.toLowerCase() === swatch.hex.toLowerCase();
@@ -364,10 +449,10 @@ export function BrowProperties() {
                 aria-label={swatch.name}
                 aria-pressed={isActive}
                 className={cn(
-                  'aspect-square rounded-xs border transition-transform hover:scale-110 focus:outline-none',
+                  'aspect-square rounded-[2px] border transition-transform hover:scale-105 focus:outline-none',
                   isActive
-                    ? 'border-[#eac87f] ring-1 ring-[#eac87f] shadow-[0_0_6px_rgba(234,200,127,0.4)]'
-                    : 'border-[#d4b483]/30 hover:border-[#d4b483]/70',
+                    ? 'border-[#eac87f] ring-1 ring-[#eac87f] shadow-[0_0_6px_rgba(234,200,127,0.5)]'
+                    : 'border-[#443729] hover:border-[#7a6952]',
                 )}
                 style={
                   isChromatic
@@ -383,24 +468,24 @@ export function BrowProperties() {
         </div>
 
         {/* ── RGB & HEX Numeric Inputs ──────────────────────────────── */}
-        <div className="flex items-center justify-between gap-2 border-y border-[#d4b483]/14 py-2 text-[10px] font-mono tracking-wider">
+        <div className="flex items-center justify-between gap-2 border-y border-[#463a2e]/50 py-1.5 text-[9.5px] font-mono tracking-wider">
           <div className="flex items-center gap-1.5">
-            <span className="text-[#c4b595]/80">RGB</span>
-            <div className="flex gap-1 text-[#e2d8c6]">
-              <span className="rounded-xs border border-[#d4b483]/25 bg-black/40 px-1.5 py-0.5 text-center min-w-[26px]">
+            <span className="text-[#8f8576]">RGB</span>
+            <div className="flex gap-1 text-[#d4cbb8]">
+              <span className="rounded-[2px] border border-[#443729] bg-[#1a1512] px-1.5 py-0.5 text-center min-w-[24px]">
                 {r}
               </span>
-              <span className="rounded-xs border border-[#d4b483]/25 bg-black/40 px-1.5 py-0.5 text-center min-w-[26px]">
+              <span className="rounded-[2px] border border-[#443729] bg-[#1a1512] px-1.5 py-0.5 text-center min-w-[24px]">
                 {g}
               </span>
-              <span className="rounded-xs border border-[#d4b483]/25 bg-black/40 px-1.5 py-0.5 text-center min-w-[26px]">
+              <span className="rounded-[2px] border border-[#443729] bg-[#1a1512] px-1.5 py-0.5 text-center min-w-[24px]">
                 {b}
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="text-[#c4b595]/80">HEX</span>
+            <span className="text-[#8f8576]">HEX</span>
             <input
               type="text"
               value={hexInput}
@@ -413,87 +498,42 @@ export function BrowProperties() {
                   setHsv(rgbToHsv(nr, ng, nb));
                 }
               }}
-              className="w-[66px] rounded-xs border border-[#d4b483]/25 bg-black/40 px-1.5 py-0.5 text-center text-[#eac87f] outline-none focus:border-[#eac87f]"
+              className="w-[66px] rounded-[2px] border border-[#443729] bg-[#1a1512] px-1.5 py-0.5 text-center text-[#eac87f] outline-none focus:border-[#b89552]"
             />
           </div>
         </div>
 
         {/* ── Fine-Tuning Sliders: OPACITY, GLOSS, GLOSSY ────────────── */}
-        <div className="flex flex-col gap-2.5 pt-0.5">
-          {/* OPACITY */}
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between text-[10px] font-mono tracking-wider">
-              <span className="text-[#c4b595] uppercase">
-                OPACITY [{Math.round(browOpacity * 100)}%]
-              </span>
-            </div>
-            {/* Custom Bracket Slider */}
-            <div className="flex items-center gap-1 text-[11px] font-mono text-[#d4b483]/60">
-              <span>[</span>
-              <div className="relative flex-1 py-1">
-                <input
-                  type="range"
-                  min="0.05"
-                  max="1.0"
-                  step="0.01"
-                  value={browOpacity}
-                  onChange={(e) => setBrowOpacity(parseFloat(e.target.value))}
-                  className="w-full cursor-pointer accent-[#eac87f] bg-transparent"
-                />
-              </div>
-              <span>]</span>
-            </div>
-          </div>
+        <div className="flex flex-col gap-2 pt-0.5">
+          <BracketSlider
+            label="OPACITY"
+            value={browOpacity}
+            min={0.05}
+            max={1.0}
+            step={0.01}
+            onChange={setBrowOpacity}
+          />
+          <BracketSlider
+            label="GLOSS"
+            value={browGloss}
+            min={0.0}
+            max={1.0}
+            step={0.01}
+            onChange={setBrowGloss}
+          />
+          <BracketSlider
+            label="GLOSSY"
+            value={browGlossy}
+            min={0.0}
+            max={1.0}
+            step={0.01}
+            onChange={setBrowGlossy}
+          />
+        </div>
 
-          {/* GLOSS */}
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between text-[10px] font-mono tracking-wider">
-              <span className="text-[#c4b595] uppercase">
-                GLOSS [{Math.round(browGloss * 100)}%]
-              </span>
-            </div>
-            {/* Custom Bracket Slider */}
-            <div className="flex items-center gap-1 text-[11px] font-mono text-[#d4b483]/60">
-              <span>[</span>
-              <div className="relative flex-1 py-1">
-                <input
-                  type="range"
-                  min="0.0"
-                  max="1.0"
-                  step="0.01"
-                  value={browGloss}
-                  onChange={(e) => setBrowGloss(parseFloat(e.target.value))}
-                  className="w-full cursor-pointer accent-[#eac87f] bg-transparent"
-                />
-              </div>
-              <span>]</span>
-            </div>
-          </div>
-
-          {/* GLOSSY */}
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between text-[10px] font-mono tracking-wider">
-              <span className="text-[#c4b595] uppercase">
-                GLOSSY [{Math.round(browGlossy * 100)}%]
-              </span>
-            </div>
-            {/* Custom Bracket Slider */}
-            <div className="flex items-center gap-1 text-[11px] font-mono text-[#d4b483]/60">
-              <span>[</span>
-              <div className="relative flex-1 py-1">
-                <input
-                  type="range"
-                  min="0.0"
-                  max="1.0"
-                  step="0.01"
-                  value={browGlossy}
-                  onChange={(e) => setBrowGlossy(parseFloat(e.target.value))}
-                  className="w-full cursor-pointer accent-[#eac87f] bg-transparent"
-                />
-              </div>
-              <span>]</span>
-            </div>
-          </div>
+        {/* ── Bottom Star Sparkle Decoration ────────────────────────── */}
+        <div className="flex justify-end pt-0.5 pr-1 text-[#d4b483]/30 pointer-events-none select-none">
+          <span className="text-[13px] leading-none">✧</span>
         </div>
       </div>
     </div>

@@ -95,11 +95,12 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
   const workspace = useCharacter((s) => s.workspace);
   const setWorkspace = useCharacter((s) => s.setWorkspace);
   const showUtilities = false;
+  const isBrowsTab = primaryTab === 'FACE' && subTab === 'BROWS';
 
   return (
     /* Docked rail body. The old absolutely-positioned 222 px column was tied to
        the 1024 × 572 reference; the rail now owns its own scroll and width. */
-    <div className="pointer-events-auto w-full select-none px-[12px] py-[10px]">
+    <div className={cn('pointer-events-auto w-full select-none', isBrowsTab ? 'p-0' : 'px-[12px] py-[10px]')}>
       {/* ── utility grid ───────────────────────────────────────────
           Styling workspaces own their rail; sculpt utilities collapse on
           HAIR, EQUIPMENT and FACE → MAKEUP to leave room for their pickers. */}
@@ -233,7 +234,7 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
 
       {/* ── brow textures & meshes / picker ─────────────────────────── */}
       {primaryTab === 'FACE' && subTab === 'BROWS' && (
-        <div className="mt-[3px]">
+        <div className="mt-0">
           <BrowsPicker manifest={manifest} />
         </div>
       )}

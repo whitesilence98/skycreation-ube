@@ -112,7 +112,10 @@ export function Hud({ manifest }: HudProps) {
   }, []);
 
   useEffect(() => {
-    if (workspace !== 'edit' || isBrowsTab) {
+    if (isBrowsTab) {
+      setLeftOpen(true);
+      setRightOpen(true);
+    } else if (workspace !== 'edit') {
       setRightOpen(true);
     }
   }, [workspace, isBrowsTab]);
@@ -267,6 +270,7 @@ export function Hud({ manifest }: HudProps) {
           'lg:bottom-[72px] lg:left-[60px] lg:top-[96px] lg:z-30 lg:w-[290px] lg:border lg:border-[#d4b483]/22 lg:bg-[#0a0907]/82 lg:shadow-[0_14px_38px_rgba(0,0,0,0.42)]',
           isDedicatedTab && '!left-[16px] lg:!left-[24px]',
           leftOpen && chrome ? 'translate-x-0' : 'invisible -translate-x-[130%]',
+          isBrowsTab && '!left-[20px] !top-[84px] !w-[276px] lg:!left-[20px] lg:!top-[84px] lg:!w-[276px] !bg-transparent !border-0 !shadow-none !backdrop-blur-none',
         )}
       >
         <div className="min-h-0 flex-1 overflow-y-auto thin-scroll">
@@ -285,7 +289,7 @@ export function Hud({ manifest }: HudProps) {
             'pointer-events-auto fixed bottom-[96px] right-2 top-[108px] z-50 flex select-none flex-col border-l border-[#d4b483]/25 bg-[#0a0907]/94 shadow-[0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-xl transition-all duration-300 motion-reduce:transition-none',
             'w-[min(calc(100vw-76px),380px)] lg:bottom-[72px] lg:top-[96px] lg:z-30 lg:w-[360px] lg:border lg:border-[#d4b483]/22 lg:bg-[#0a0907]/88 lg:shadow-[0_14px_38px_rgba(0,0,0,0.42)]',
             rightOpen && isRightDrawerActive ? 'translate-x-0' : 'invisible translate-x-[110%]',
-            isBrowsTab && '!bg-transparent !border-0 !shadow-none !backdrop-blur-none lg:!bg-transparent lg:!border-0 lg:!shadow-none lg:!w-[330px]',
+            isBrowsTab && '!right-[20px] !top-[84px] !w-[276px] lg:!right-[20px] lg:!top-[84px] lg:!w-[276px] !bg-transparent !border-0 !shadow-none !backdrop-blur-none',
           )}
         >
           {!isBrowsTab && (
