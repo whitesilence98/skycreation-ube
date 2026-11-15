@@ -120,9 +120,11 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                       setPrimaryTab(item);
                       if (item === 'BODY') {
                         setActiveCategory(bodyTab === 'gear' ? 'equipment' : 'body');
+                        if (bodyTab === 'gear') setWorkspace('wardrobe');
                       } else {
                         const kind = PRIMARY_CATEGORY[item];
                         if (kind) setActiveCategory(kind);
+                        if (workspace === 'wardrobe') setWorkspace('edit');
                       }
                       const pose = FRAMING_BY_TAB[item];
                       if (pose && !wasBodyFramed) triggerCameraPose(pose);
@@ -208,6 +210,7 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                   onClick={() => {
                     setBodyTab('gear');
                     setActiveCategory('equipment');
+                    setWorkspace('wardrobe');
                   }}
                   className={cn(
                     'whitespace-nowrap text-[10px] tracking-[0.11em] transition-colors duration-200',
@@ -231,6 +234,7 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                   onClick={() => {
                     setBodyTab('physique');
                     setActiveCategory('body');
+                    if (workspace === 'wardrobe') setWorkspace('edit');
                   }}
                   className={cn(
                     'whitespace-nowrap text-[10px] tracking-[0.11em] transition-colors duration-200',

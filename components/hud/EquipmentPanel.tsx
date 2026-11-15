@@ -10,6 +10,7 @@ import {
 import { assetOptions } from '@/lib/manifestSelect';
 import { convertUrl } from '@/lib/mo2/client';
 import { cn } from '@/lib/cn';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { IconHanger, IconSparkle } from '@/components/hud/Icons';
 import { SlotIcon } from '@/components/hud/SlotIcon';
@@ -156,19 +157,15 @@ export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
   const activeWornName = nameFor(activeWornId);
 
   return (
-    <div className="mt-[2px] select-none text-[#e6e1d8]">
-      {/* ── Title & Total Counter ──────────────────────────────────── */}
-      <div className="mb-[6px] flex items-baseline justify-between px-[2px]">
-        <h2 className="text-[11px] font-medium tracking-[0.05em] text-[#efece6]">
-          EQUIPPED GEAR
-        </h2>
-        <span className="num text-[10px] tracking-[0.1em] text-[#8f8778]/80 font-mono">
-          {wornCount}/{EQUIP_SLOTS.length} EQUIPPED
-        </span>
-      </div>
-
-      {/* ── Visual Paper-Doll 3x4 Layout with Silhouette ──────────── */}
-      <div className="relative mx-auto my-[1px] w-full max-w-[272px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[6px] backdrop-blur-md">
+    <StudioCard
+      title="EQUIPPED GEAR"
+      badge={`${wornCount}/${EQUIP_SLOTS.length} EQUIPPED`}
+      footerLeading={<span>CLICK TO BROWSE · RMB UNEQUIP</span>}
+      footerTrailing={<span>{allClothing.length} ITEMS</span>}
+    >
+      <div className="select-none text-[#e6e1d8]">
+        {/* ── Visual Paper-Doll 3x4 Layout with Silhouette ──────────── */}
+        <div className="relative mx-auto my-[1px] w-full max-w-[272px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[6px] backdrop-blur-md">
         {/* Subtle Anatomical Wireframe SVG */}
         <svg
           viewBox="0 0 260 255"
@@ -371,16 +368,8 @@ export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
           </button>
         </div>
       </div>
-
-      {/* ── Status Footer with Hotkey Hint ──────────────────────────── */}
-      <div className="mt-[4px] flex items-center justify-between border-t border-[#d4b483]/14 pt-[3px] text-[8.5px] tracking-[0.08em] text-[#8b8375]/70">
-        <div className="flex items-center gap-[4px]">
-          <IconSparkle className="h-[6px] w-[6px] text-[#c9b184]/50" />
-          <span>CLICK TO BROWSE · RMB UNEQUIP</span>
-        </div>
-        <span className="font-mono text-[#c9b184]/80">{allClothing.length} TOTAL ITEMS</span>
       </div>
-    </div>
+    </StudioCard>
   );
 }
 

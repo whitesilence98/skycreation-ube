@@ -68,9 +68,10 @@ export function Hud({ manifest }: HudProps) {
   const isDedicatedTab = primaryTab === 'EQUIPMENT' || primaryTab === 'BODY' || primaryTab === 'PRESET' || primaryTab === 'HAIR' || primaryTab === 'FACE';
   const isBrowsTab = primaryTab === 'FACE' && subTab === 'BROWS';
   const isHairTab = primaryTab === 'HAIR';
-  const isSkinTab = (primaryTab === 'FACE' && subTab === 'SKIN') || primaryTab === 'BODY';
+  const isSkinTab = primaryTab === 'FACE' && subTab === 'SKIN';
   const isMakeupTab = primaryTab === 'FACE' && subTab === 'MAKEUP';
   const isDualStudioTab = isBrowsTab || isHairTab || isSkinTab || isMakeupTab;
+  const isStudioLeftTab = isDualStudioTab || primaryTab === 'BODY' || (primaryTab === 'FACE' && subTab === 'EYES');
   const isRightDrawerActive = chrome && (workspace !== 'edit' || isDualStudioTab);
   const rightTitle = isBrowsTab
     ? 'BROW COLOR & PROPERTIES'
@@ -288,7 +289,7 @@ export function Hud({ manifest }: HudProps) {
           'lg:bottom-[72px] lg:left-[60px] lg:top-[96px] lg:z-30 lg:w-[290px] lg:border lg:border-[#d4b483]/22 lg:bg-[#0a0907]/82 lg:shadow-[0_14px_38px_rgba(0,0,0,0.42)]',
           isDedicatedTab && '!left-[16px] lg:!left-[24px]',
           leftOpen && chrome ? 'translate-x-0' : 'invisible -translate-x-[130%]',
-          isDualStudioTab && '!left-[20px] !top-[84px] !w-[276px] lg:!left-[20px] lg:!top-[84px] lg:!w-[276px] !bg-transparent !border-0 !shadow-none !backdrop-blur-none',
+          isStudioLeftTab && '!left-[20px] !top-[84px] !w-[276px] lg:!left-[20px] lg:!top-[84px] lg:!w-[276px] !bg-transparent !border-0 !shadow-none !backdrop-blur-none',
         )}
       >
         <div className="min-h-0 flex-1 overflow-y-auto thin-scroll">
