@@ -15,6 +15,7 @@ import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { IconCheck, IconHanger, IconSparkle } from '@/components/hud/Icons';
 import type { CatalogueEntry } from '@/lib/mo2/types';
 import { SlotIcon } from '@/components/hud/SlotIcon';
+import { GarmentThumbnail } from '@/components/hud/GarmentThumbnail';
 
 interface ClothingItem {
   id: string;
@@ -264,7 +265,7 @@ export function WardrobeDrawer({ manifest }: { manifest: Mo2Manifest | null }) {
             )}
           </div>
         ) : (
-          <div className="flex flex-col gap-1 pb-2">
+          <div className="grid grid-cols-2 gap-2 pb-2">
             {slotGarments.map((item, i) => {
               const isWorn = isEquipped(item);
               const label = cleanGarmentName(item.label || item.file);
@@ -283,52 +284,67 @@ export function WardrobeDrawer({ manifest }: { manifest: Mo2Manifest | null }) {
                   aria-pressed={isWorn}
                   title={`${label}\nTarget: ${EQUIP_SLOT_LABEL[currentSlot]} (Inferred: ${EQUIP_SLOT_LABEL[itemSlot]})\n${isWeightPaired ? 'Weight Paired (_0 + _1 blended)' : 'Single Weight'}\nFile: ${item.file}`}
                   className={cn(
-                    'group flex w-full items-center justify-between border px-2.5 py-1.5 text-left transition-colors duration-100',
+                    'group relative flex min-w-0 flex-col items-center border p-1 text-left transition-all duration-150',
                     isWorn
-                      ? 'border-[#eac87f] bg-[#eac87f]/15 text-[#f2dfbe] shadow-[0_0_8px_rgba(234,200,127,0.25)]'
-                      : 'border-[#d4b483]/20 bg-black/40 text-[#c5baa6] hover:border-[#d4b483]/50 hover:bg-[#16130e] hover:text-[#f0e4cc]',
+                      ? 'border-[#eac87f] bg-[#eac87f]/16 shadow-[0_0_12px_rgba(234,200,127,0.4)] ring-1 ring-[#eac87f]/50'
+                      : 'border-[#d4b483]/22 bg-black/40 hover:border-[#d4b483]/60 hover:bg-[#14120e] hover:scale-[1.02]',
                   )}
                 >
-                  {/* Left: Slot Icon + Index + Garment Title */}
-                  <div className="flex min-w-0 items-center gap-2">
-                    <SlotIcon
-                      slot={itemSlot}
-                      className={cn(
-                        'h-3.5 w-3.5 shrink-0 transition-colors',
-                        isWorn ? 'text-[#eac87f]' : 'text-[#d4b483]/50 group-hover:text-[#eac87f]/80',
+                  {/* Card 3D Garment Thumbnail Preview */}
+                  <div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-xs bg-black/60 p-1">
+                    <GarmentThumbnail
+                      id={item.weightVariants?.w1 ?? item.id}
+                      meshUrl={item.weightVariants ? convertUrl({ kind: 'clothingMesh', id: item.weightVariants.w1, mode: 'mesh' }) : undefined}
+                      label={label}
+                      slot={unrestrictedSlots ? itemSlot : currentSlot}
+                      iconClassName={cn(
+                        'h-7 w-7 transition-transform group-hover:scale-110',
+                        isWorn ? 'text-[#f2dfbe]' : 'text-[#d4b483]/60',
                       )}
+                      imgClassName="transition-transform duration-200 group-hover:scale-105"
                     />
-                    <span className="font-mono text-[8px] text-[#eadcc0]/40 shrink-0">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <span className="truncate text-[9.5px] font-mono tracking-wide">
-                      {label}
-                    </span>
-                  </div>
 
-                  {/* Right: Badges & Equipped Indicator */}
-                  <div className="flex shrink-0 items-center gap-1.5 ml-2">
+                    {/* Unrestricted Inferred Slot Tag */}
                     {unrestrictedSlots && (
-                      <span className="rounded-[1px] border border-[#d4b483]/30 bg-black/60 px-1 py-0.2 font-mono text-[7.5px] uppercase text-[#e8c98e]">
-                        {EQUIP_SLOT_LABEL[itemSlot]}
+                      <span className="absolute top-1 right-1 rounded-[1px] border border-[#d4b483]/25 bg-black/80 px-1 py-0.2 text-[7.5px] font-mono text-[#e8c98e] uppercase">
+                        {itemSlot.slice(0, 4)}
                       </span>
                     )}
+
+                    {/* Weight pair badge */}
                     {isWeightPaired && (
-                      <span className="rounded-[1px] bg-[#d4b483]/20 px-1 py-0.2 font-mono text-[7px] text-[#f2dfbe]">
+                      <span className="absolute top-1 left-1 rounded-[1px] bg-[#d4b483]/25 px-1 py-0.2 font-mono text-[7px] text-[#f2dfbe]">
                         W0/W1
                       </span>
                     )}
-                    {isWorn ? (
-                      <span className="flex items-center gap-1 rounded-xs bg-[#eac87f] px-1.5 py-0.5 font-mono text-[8px] font-bold text-black shadow-[0_0_6px_rgba(234,200,127,0.7)]">
-                        <IconCheck className="h-2.5 w-2.5" />
-                        <span>WORN</span>
-                      </span>
-                    ) : (
-                      <span className="opacity-0 group-hover:opacity-100 font-mono text-[8px] text-[#eac87f]/80 transition-opacity">
-                        EQUIP
+
+                    {/* Equipped Checkmark */}
+                    {isWorn && (
+                      <span
+                        className={cn(
+                          'absolute flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#eac87f] text-black shadow-[0_0_6px_rgba(234,200,127,0.8)]',
+                          unrestrictedSlots ? 'bottom-1 left-1' : 'top-1 right-1',
+                        )}
+                      >
+                        <IconCheck className="h-2 w-2" />
                       </span>
                     )}
+
+                    {/* Numerical Index */}
+                    <span className="pointer-events-none absolute bottom-0.5 right-1 font-mono text-[8px] text-[#eadcc0]/45">
+                      {String(i + 1).padStart(2, '0')}
+                    </span>
                   </div>
+
+                  {/* Garment Title */}
+                  <span
+                    className={cn(
+                      'mt-1 w-full truncate text-center text-[9px] tracking-wide transition-colors',
+                      isWorn ? 'font-bold text-[#f2dfbe]' : 'text-[#a9a192] group-hover:text-[#e0d7c6]',
+                    )}
+                  >
+                    {label}
+                  </span>
                 </button>
               );
             })}

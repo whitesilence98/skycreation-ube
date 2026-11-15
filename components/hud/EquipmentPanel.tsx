@@ -13,6 +13,7 @@ import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { IconHanger, IconSparkle } from '@/components/hud/Icons';
 import { SlotIcon } from '@/components/hud/SlotIcon';
+import { GarmentThumbnail } from '@/components/hud/GarmentThumbnail';
 
 interface ClothingItem {
   id: string;
@@ -456,18 +457,33 @@ function SlotCard({
           <span className="pointer-events-none absolute top-1 left-1 h-1 w-1 rounded-full bg-[#eac87f] shadow-[0_0_3px_rgba(234,200,127,0.8)]" />
         )}
 
-        {/* Slot Icon inside Box */}
-        <SlotIcon
-          slot={slot}
-          className={cn(
-            'transition-all duration-150',
-            isActive
-              ? 'h-5 w-5 text-[#f2dfbe] drop-shadow-[0_0_6px_rgba(242,223,190,0.6)] scale-105'
-              : isFilled
-                ? 'h-4 w-4 text-[#e0cfab]'
+        {/* Slot Icon or 3D Garment Thumbnail inside Box */}
+        {isFilled && equippedId ? (
+          <GarmentThumbnail
+            id={item?.weightVariants?.w1 ?? item?.id ?? equippedId}
+            meshUrl={item?.weightVariants ? convertUrl({ kind: 'clothingMesh', id: item.weightVariants.w1, mode: 'mesh' }) : item?.meshUrl}
+            slot={slot}
+            label={itemName}
+            className="h-full w-full p-0.5"
+            iconClassName={cn(
+              'transition-all duration-150',
+              isActive
+                ? 'h-5 w-5 text-[#f2dfbe] drop-shadow-[0_0_6px_rgba(242,223,190,0.6)] scale-105'
+                : 'h-4 w-4 text-[#e0cfab]',
+            )}
+            imgClassName="scale-95"
+          />
+        ) : (
+          <SlotIcon
+            slot={slot}
+            className={cn(
+              'transition-all duration-150',
+              isActive
+                ? 'h-5 w-5 text-[#f2dfbe] drop-shadow-[0_0_6px_rgba(242,223,190,0.6)] scale-105'
                 : 'h-3.5 w-3.5 text-[#8f8778]/40 group-hover:text-[#d4b483]/60',
-          )}
-        />
+            )}
+          />
+        )}
 
         {/* Quick Unequip "×" button on hover when equipped */}
         {isFilled && (
