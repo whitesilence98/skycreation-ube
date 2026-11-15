@@ -6,6 +6,7 @@ import { convertUrl, fetchCatalogue, matchesQuery } from '@/lib/mo2/client';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import type { CatalogueEntry } from '@/lib/mo2/types';
 import { cn } from '@/lib/cn';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import { IconSparkle } from '@/components/hud/Icons';
 
 type FilterTab = 'ALL' | 'CLASSIC' | 'ILV';
@@ -134,20 +135,14 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
   const activeMeshLabel = activeMeshEntry?.label || (activeMeshEntry?.file?.replace(/\.(nif|tri)$/i, '')) || 'FemaleBrows';
 
   return (
-    <div className="relative flex w-full max-w-[276px] flex-col select-none text-[#e6e1d8]">
-      <div className="flex flex-col gap-2.5 rounded-[2px] border border-[#463a2e] bg-[#161311]/92 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.65)] backdrop-blur-md">
-        {/* Top Header: BROWS & ARCH */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-[11px] font-medium tracking-[0.14em] text-[#d8c39c] uppercase font-mono">
-            BROWS &amp; ARCH
-          </h2>
-          <span className="text-[9.5px] font-mono tracking-wider text-[#8f8778]">
-            {loading ? 'LOADING…' : `${allBrows.length} STYLES`}
-          </span>
-        </div>
-
-        {/* ── Sub-brand / Series Filters ────────────────────────────── */}
-        <div className="flex flex-col gap-2 pt-0.5">
+    <StudioCard
+      title="BROWS & ARCH"
+      badge={loading ? 'LOADING…' : `${allBrows.length} STYLES`}
+      footerLeading={<span>+ COR · UBE · 3D SCULPT</span>}
+      footerTrailing={<span>{filteredBrows.length} SHOWN</span>}
+    >
+      {/* ── Sub-brand / Series Filters ────────────────────────────── */}
+      <div className="flex flex-col gap-2 pt-0.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#baab94]">
               BROW SHAPES
@@ -334,15 +329,6 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
             </span>
           </div>
         </div>
-
-        {/* ── Status Footer ─────────────────────────────────────────── */}
-        <div className="flex items-center justify-between border-t border-[#463a2e]/50 pt-2 text-[9px] font-mono tracking-wider text-[#736b5e]">
-          <div className="flex items-center gap-[4px]">
-            <span>+ COR · UBE · 3D SCULPT</span>
-          </div>
-          <span>{filteredBrows.length} SHOWN</span>
-        </div>
-      </div>
-    </div>
+    </StudioCard>
   );
 }

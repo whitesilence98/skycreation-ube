@@ -1,6 +1,7 @@
 'use client';
 
 import { useCharacter, BODY_WEIGHT_ENABLED } from '@/lib/store';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import { HudSlider } from '@/components/hud/HudSlider';
 import { IconSparkle } from '@/components/hud/Icons';
 import { cn } from '@/lib/cn';
@@ -32,16 +33,12 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
   );
 
   return (
-    <div className="select-none text-[#e6e1d8] hud-fade">
-      {/* ── Title Bar ─────────────────────────────────────────────── */}
-      <div className="mb-[8px] flex items-baseline justify-between border-b border-[#d4b483]/18 pb-[5px]">
-        <h2 className="text-[11px] font-medium tracking-[0.05em] text-[#efece6] uppercase">
-          BODY ANATOMY & PHYSIQUE
-        </h2>
-        <span className="font-mono text-[9.5px] text-[#eac87f]">
-          {!BODY_WEIGHT_ENABLED ? '0% WEIGHT (LOCKED)' : `${Math.round(weight * 100)}% WEIGHT`}
-        </span>
-      </div>
+    <StudioCard
+      title="BODY ANATOMY & PHYSIQUE"
+      badge={!BODY_WEIGHT_ENABLED ? '0% (LOCKED)' : `${Math.round(weight * 100)}% WEIGHT`}
+      footerLeading={<span>+ COR · UBE · 3D SCULPT</span>}
+      footerTrailing={<span>DUAL-WEIGHT BLEND</span>}
+    >
 
       {/* ── 1. Body Weight Slider (0–100% lerp) ────────────────────── */}
       <div className="rounded-xs border border-[#d4b483]/22 bg-black/45 p-[9px] backdrop-blur-md">
@@ -244,15 +241,6 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
           </button>
         </div>
       </div>
-
-      {/* ── Footer ────────────────────────────────────────────────── */}
-      <div className="mt-[4px] flex items-center justify-between border-t border-[#d4b483]/14 pt-[3px] text-[8.5px] tracking-[0.08em] text-[#8b8375]/70">
-        <div className="flex items-center gap-[4px]">
-          <IconSparkle className="h-[6px] w-[6px] text-[#c9b184]/50" />
-          <span>DUAL-WEIGHT MESH BLENDING</span>
-        </div>
-        <span className="font-mono text-[#c9b184]/80">UBE 2.0</span>
-      </div>
-    </div>
+    </StudioCard>
   );
 }

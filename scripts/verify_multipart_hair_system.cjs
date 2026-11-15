@@ -53,6 +53,18 @@ const testCases = [
   { input: 'FluteHL', expectedGroup: 'FluteHL', expectedPart: 0, expectedHL: true },
   { input: 'Maeve2HL', expectedGroup: 'MaeveHL', expectedPart: 2, expectedHL: true },
   { input: 'Azathoth5', expectedGroup: 'Azathoth', expectedPart: 5, expectedHL: false },
+  // Universal Companion Token Tests
+  { input: 'EmpressOf', expectedGroup: 'EmpressOf', expectedPart: 0, expectedHL: false },
+  { input: 'EmpressOf1', expectedGroup: 'EmpressOf', expectedPart: 1, expectedHL: false },
+  { input: 'EmpressOfAC', expectedGroup: 'EmpressOf', expectedPart: 100, expectedHL: false },
+  { input: 'EmpressOfAC3', expectedGroup: 'EmpressOf', expectedPart: 103, expectedHL: false },
+  { input: 'EmpressOfAC6', expectedGroup: 'EmpressOf', expectedPart: 106, expectedHL: false },
+  { input: 'EmpressOfHL', expectedGroup: 'EmpressOfHL', expectedPart: 0, expectedHL: true },
+  { input: 'EmpressOf1HL', expectedGroup: 'EmpressOfHL', expectedPart: 1, expectedHL: true },
+  { input: 'MarcellusSC', expectedGroup: 'Marcellus', expectedPart: 50, expectedHL: false },
+  { input: 'BuriedTreasureBan', expectedGroup: 'BuriedTreasure', expectedPart: 100, expectedHL: false },
+  { input: 'PiratessBr1', expectedGroup: 'Piratess', expectedPart: 101, expectedHL: false },
+  { input: 'PiratessRTai', expectedGroup: 'Piratess', expectedPart: 100, expectedHL: false },
 ];
 
 for (const tc of testCases) {
@@ -60,7 +72,7 @@ for (const tc of testCases) {
   assert.strictEqual(res.groupKey, tc.expectedGroup, `Group mismatch for ${tc.input}: got ${res.groupKey}, expected ${tc.expectedGroup}`);
   assert.strictEqual(res.partNumber, tc.expectedPart, `Part mismatch for ${tc.input}: got ${res.partNumber}, expected ${tc.expectedPart}`);
   assert.strictEqual(res.isHL, tc.expectedHL, `HL mismatch for ${tc.input}: got ${res.isHL}, expected ${tc.expectedHL}`);
-  console.log(`  ✓ ${tc.input.padEnd(14)} -> Group: ${res.groupKey.padEnd(14)} Part: ${res.partNumber} HL: ${res.isHL}`);
+  console.log(`  ✓ ${tc.input.padEnd(18)} -> Group: ${res.groupKey.padEnd(14)} Part: ${res.partNumber} HL: ${res.isHL}`);
 }
 
 console.log('\n=== Test 2: Full Catalogue Hairstyle Grouping ===');
@@ -69,7 +81,19 @@ const groups = buildHairGroups(hairMeshes);
 
 console.log(`  Total raw NIF meshes: ${hairMeshes.length}`);
 console.log(`  Consolidated hairstyles: ${groups.length}`);
-assert(groups.length >= 980 && groups.length <= 1000, `Expected ~990 groups, got ${groups.length}`);
+assert(groups.length >= 780 && groups.length <= 820, `Expected ~800 groups, got ${groups.length}`);
+
+// Check EmpressOf (Full 7-Part Hairstyle)
+const empress = groups.find(g => g.groupKey.toLowerCase() === 'empressof');
+assert(empress, 'EmpressOf group must exist');
+assert.strictEqual(empress.parts.length, 7, `EmpressOf must have 7 parts, got ${empress.parts.length}`);
+console.log(`  ✓ EmpressOf: ${empress.parts.length} parts (Base + 1 + AC + AC3 + AC4 + AC5 + AC6)`);
+
+// Check Piratess (Full 12-Part Hairstyle with Braids, Ponytail, Accessories)
+const piratess = groups.find(g => g.groupKey.toLowerCase() === 'piratess');
+assert(piratess, 'Piratess group must exist');
+assert.strictEqual(piratess.parts.length, 12, `Piratess must have 12 parts, got ${piratess.parts.length}`);
+console.log(`  ✓ Piratess: ${piratess.parts.length} parts (Base + 1 + AC..4 + Bangs + Braids..2 + Right Tail)`);
 
 // Check AsterionM
 const asterion = groups.find(g => g.groupKey.toLowerCase() === 'asterionm');

@@ -95,12 +95,15 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
   const workspace = useCharacter((s) => s.workspace);
   const setWorkspace = useCharacter((s) => s.setWorkspace);
   const showUtilities = false;
-  const isBrowsTab = primaryTab === 'FACE' && subTab === 'BROWS';
+  const isDualStudioTab =
+    (primaryTab === 'FACE' && (subTab === 'BROWS' || subTab === 'SKIN')) ||
+    primaryTab === 'HAIR' ||
+    primaryTab === 'BODY';
 
   return (
     /* Docked rail body. The old absolutely-positioned 222 px column was tied to
        the 1024 × 572 reference; the rail now owns its own scroll and width. */
-    <div className={cn('pointer-events-auto w-full select-none', isBrowsTab ? 'p-0' : 'px-[12px] py-[10px]')}>
+    <div className={cn('pointer-events-auto w-full select-none', isDualStudioTab ? 'p-0' : 'px-[12px] py-[10px]')}>
       {/* ── utility grid ───────────────────────────────────────────
           Styling workspaces own their rail; sculpt utilities collapse on
           HAIR, EQUIPMENT and FACE → MAKEUP to leave room for their pickers. */}
@@ -206,21 +209,21 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
 
       {/* ── hair styles ────────────────────────────────────────────── */}
       {primaryTab === 'HAIR' && (
-        <div className="mt-[3px]">
+        <div className="mt-0">
           <HairStyles manifest={manifest} />
         </div>
       )}
 
       {/* ── body controls / physique & weight ───────────────────────── */}
       {primaryTab === 'BODY' && (bodyTab === 'physique' || (!bodyTab && primaryTab === 'BODY')) && (
-        <div className="mt-[3px]">
+        <div className="mt-0">
           <BodyPanel manifest={manifest} />
         </div>
       )}
 
       {/* ── skin controls / picker ───────────────────────────────────── */}
       {primaryTab === 'FACE' && subTab === 'SKIN' && (
-        <div className="mt-[3px]">
+        <div className="mt-0">
           <SkinPicker manifest={manifest} />
         </div>
       )}

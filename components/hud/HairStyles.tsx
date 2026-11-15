@@ -7,31 +7,13 @@ import { convertUrl, fetchCatalogue } from '@/lib/mo2/client';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { cn } from '@/lib/cn';
 import { buildHairGroups, findHairGroupForPartId, type HairBrand, type HairGroup } from '@/lib/hair';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 
 /** Below this, the shipped head hides the mesh — see `visibility`. */
 const VISIBLE_MIN = 0.55;
 
 type HairCategoryFilter = 'ALL' | 'HAIR' | 'HL';
 type HairBrandFilter = 'ALL' | 'BDOR' | 'KSHAIR' | 'OTHER';
-
-const HAIR_PALETTE = [
-  { name: 'Raven Black', hex: '#110e0c' },
-  { name: 'Espresso', hex: '#1c1512' },
-  { name: 'Dark Chestnut', hex: '#2b1d16' },
-  { name: 'Mocha Brown', hex: '#3d281e' },
-  { name: 'Warm Chocolate', hex: '#523829' },
-  { name: 'Auburn Bronze', hex: '#633722' },
-  { name: 'Deep Copper', hex: '#7b3d22' },
-  { name: 'Spiced Rust', hex: '#8c482c' },
-  { name: 'Caramel Amber', hex: '#9e673a' },
-  { name: 'Honey Blonde', hex: '#b5834f' },
-  { name: 'Golden Wheat', hex: '#cca368' },
-  { name: 'Ash Blonde', hex: '#a6977e' },
-  { name: 'Platinum Ice', hex: '#d9d0c1' },
-  { name: 'Silver Frost', hex: '#9ea2a6' },
-  { name: 'Charcoal Grey', hex: '#403d3c' },
-  { name: 'Natural White', hex: '#eae7e1' },
-];
 
 export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
   const catalogues = useCharacter((s) => s.assetCatalogues);
@@ -118,38 +100,15 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
   const selectedGroupId = activeGroup?.id;
   const activeLabel = activeGroup ? activeGroup.label : 'Default Hair';
 
-  const activeColor = HAIR_PALETTE.find((c) => c.hex.toLowerCase() === hair.tone.toLowerCase());
-  const currentColorName = hair.tone === '#ffffff' ? 'Original Atlas' : activeColor?.name || hair.tone.toUpperCase();
-
-  const [hexInput, setHexInput] = useState(hair.tone);
-  useEffect(() => {
-    setHexInput(hair.tone);
-  }, [hair.tone]);
-
-  const glossPercent = Math.round(hair.gloss * 100);
-  const glossLabel = glossPercent < 25 ? 'Matte' : glossPercent < 55 ? 'Natural' : glossPercent < 80 ? 'Glossy' : 'High Shine';
-
-  const hairAlpha = hair.alpha !== undefined ? hair.alpha : 1.0;
-  const alphaPercent = Math.round(hairAlpha * 100);
-  const alphaLabel =
-    alphaPercent >= 98
-      ? 'Opaque'
-      : alphaPercent >= 70
-        ? 'Subtle Strand'
-        : alphaPercent >= 35
-          ? 'Translucent'
-          : 'Phantom';
-
   return (
-    <div className="relative flex w-full flex-col select-none">
-      <div className="flex flex-col gap-3 rounded-xs border border-[#d4b483]/22 bg-black/45 p-3.5 backdrop-blur-md">
-        {/* Top Header: HAIR & STYLE */}
-        <h2 className="text-[11px] font-medium tracking-[0.05em] text-[#efece6] uppercase">
-          HAIR &amp; STYLE
-        </h2>
-
-        {/* ── 1. HAIRSTYLES SELECTOR ─────────────────────────────────── */}
-        <div className="flex flex-col gap-2 pt-0.5">
+    <StudioCard
+      title="HAIR & STYLE"
+      badge={loading ? 'LOADING…' : `${hairGroups.length} STYLES`}
+      footerLeading={<span>+ COR · UBE · 3D SCULPT</span>}
+      footerTrailing={<span>{filtered.length} SHOWN</span>}
+    >
+      {/* ── 1. HAIRSTYLES SELECTOR ─────────────────────────────────── */}
+      <div className="flex flex-col gap-2 pt-0.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#c4b595]">
               HAIRSTYLE
@@ -358,163 +317,6 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
             </span>
           </div>
         </div>
-
-        {/* ── 2. HAIR COLOR & PALETTE ─────────────────────────────────── */}
-        <div className="flex flex-col items-center gap-1.5 border-t border-[#d4b483]/18 pt-2">
-          <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#c4b595]">
-            HAIR COLOR
-          </span>
-
-          <div className="flex w-full items-center justify-center gap-2.5">
-            {/* Color Swatch Preview & Native Color Picker Trigger */}
-            <label
-              className="group/picker relative aspect-square w-[46px] shrink-0 cursor-pointer overflow-hidden rounded-xs border border-[#d4b483]/50 shadow-[0_0_8px_rgba(0,0,0,0.6)] transition-all hover:border-[#eac87f]"
-              title="Click to open custom color picker"
-              style={{ backgroundColor: hair.tone || '#171310' }}
-            >
-              <input
-                type="color"
-                value={hair.tone && /^#[0-9a-f]{6}$/i.test(hair.tone) ? hair.tone : '#171310'}
-                onChange={(e) => {
-                  const val = e.target.value.toLowerCase();
-                  setHair({ tone: val });
-                  setHexInput(val);
-                }}
-                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                aria-label="Custom hair color picker"
-              />
-              <span className="pointer-events-none absolute inset-0 rounded-xs border border-white/20" />
-              <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover/picker:opacity-100">
-                <svg className="h-3.5 w-3.5 text-[#f0e6d4]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
-                </svg>
-              </span>
-            </label>
-
-            {/* 2×8 Palette Grid */}
-            <div className="grid grid-cols-8 gap-[2.5px]">
-              {HAIR_PALETTE.map((swatch) => {
-                const isSelected = hair.tone.toLowerCase() === swatch.hex.toLowerCase();
-                return (
-                  <button
-                    key={swatch.hex}
-                    type="button"
-                    onClick={() => {
-                      setHair({ tone: swatch.hex });
-                      setHexInput(swatch.hex);
-                    }}
-                    title={`${swatch.name} (${swatch.hex})`}
-                    className={cn(
-                      'h-[14px] w-[14px] rounded-[1px] border transition-all duration-100',
-                      isSelected
-                        ? 'scale-110 border-[#eac87f] ring-1 ring-[#eac87f] shadow-[0_0_6px_rgba(234,200,127,0.6)]'
-                        : 'border-black/50 hover:scale-110 hover:border-white/60',
-                    )}
-                    style={{ backgroundColor: swatch.hex }}
-                  />
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between w-full px-0.5">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9.5px] font-mono tracking-tight text-[#8f8778]">
-                [{currentColorName}]
-              </span>
-              <div className="flex items-center border border-[#d4b483]/28 bg-black/55 px-1 py-[1px]">
-                <span className="text-[8.5px] font-mono text-[#8f8778] mr-0.5">#</span>
-                <input
-                  type="text"
-                  value={hexInput.replace(/^#/, '')}
-                  onChange={(e) => {
-                    const raw = e.target.value.trim().replace(/^#/, '');
-                    const val = `#${raw}`;
-                    setHexInput(val);
-                    if (/^#[0-9a-f]{6}$/i.test(val)) {
-                      setHair({ tone: val.toLowerCase() });
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!/^#[0-9a-f]{6}$/i.test(hexInput)) {
-                      setHexInput(hair.tone);
-                    }
-                  }}
-                  maxLength={6}
-                  placeholder="RRGGBB"
-                  aria-label="Hex color code"
-                  className="w-[48px] bg-transparent text-[9px] font-mono uppercase text-[#e2d8c6] placeholder-[#8f8778]/50 outline-none"
-                />
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setHair({ tone: '#ffffff' });
-                setHexInput('#ffffff');
-              }}
-              className={cn(
-                'border px-1.5 py-0.5 text-[9px] font-mono tracking-wider transition-colors',
-                hair.tone === '#ffffff'
-                  ? 'border-[#d4b483] bg-[#d4b483]/15 text-[#f0e6d4]'
-                  : 'border-[#d4b483]/30 text-[#8f8778] hover:border-[#d4b483]/60 hover:text-[#d8c9ad]',
-              )}
-            >
-              [ORIGINAL]
-            </button>
-          </div>
-        </div>
-
-        {/* ── 3. HAIR TRANSPARENCY / ALPHA SLIDER ───────────────────── */}
-        <div className="flex flex-col gap-1 border-t border-[#d4b483]/18 pt-2">
-          <div className="flex items-center justify-between text-[10px] font-mono tracking-[0.08em]">
-            <span className="text-[#c4b595] uppercase">HAIR OPACITY / ALPHA</span>
-            <div className="flex items-center gap-1.5 text-[#8f8778]">
-              <span className="text-[#d8c39c]">[{alphaPercent}%]</span>
-              <span>[{alphaLabel}]</span>
-            </div>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={hairAlpha}
-            onChange={(e) => setHair({ alpha: parseFloat(e.target.value) })}
-            className="h-1 w-full cursor-pointer appearance-none rounded-full bg-[#201d18] accent-[#d4b483]"
-            aria-label="Hair transparency / opacity slider"
-          />
-        </div>
-
-        {/* ── 4. HAIR GLOSS SLIDER ───────────────────────────────────── */}
-        <div className="flex flex-col gap-1 border-t border-[#d4b483]/18 pt-2">
-          <div className="flex items-center justify-between text-[10px] font-mono tracking-[0.08em]">
-            <span className="text-[#c4b595] uppercase">HAIR GLOSS</span>
-            <div className="flex items-center gap-1.5 text-[#8f8778]">
-              <span className="text-[#d8c39c]">[{glossPercent}%]</span>
-              <span>[{glossLabel}]</span>
-            </div>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={hair.gloss}
-            onChange={(e) => setHair({ gloss: parseFloat(e.target.value) })}
-            className="h-1 w-full cursor-pointer appearance-none rounded-full bg-[#201d18] accent-[#d4b483]"
-            aria-label="Hair gloss slider"
-          />
-        </div>
-
-        {/* Decorative curve arc at the bottom */}
-        <div className="flex justify-center pt-1">
-          <svg className="h-5 w-14 text-[#d4b483]/30" viewBox="0 0 100 40" fill="none" stroke="currentColor" strokeWidth="1">
-            <path d="M 10 38 Q 50 5 90 38" />
-            <path d="M 50 5 L 50 0" />
-          </svg>
-        </div>
-      </div>
-    </div>
+    </StudioCard>
   );
 }

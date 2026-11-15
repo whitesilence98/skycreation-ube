@@ -13,6 +13,8 @@ import { BodyProperties } from '@/components/hud/BodyProperties';
 import { SettingsPanel } from '@/components/hud/SettingsPanel';
 import { WardrobeDrawer } from '@/components/hud/WardrobeDrawer';
 import { BrowProperties } from '@/components/hud/BrowProperties';
+import { HairProperties } from '@/components/hud/HairProperties';
+import { SkinProperties } from '@/components/hud/SkinProperties';
 import { GizmoTooltip } from '@/components/hud/GizmoTooltip';
 import {
   IconAlbum,
@@ -64,10 +66,17 @@ export function Hud({ manifest }: HudProps) {
   const subTab = useCharacter((s) => s.subTab);
   const isDedicatedTab = primaryTab === 'EQUIPMENT' || primaryTab === 'BODY' || primaryTab === 'PRESET' || primaryTab === 'HAIR' || primaryTab === 'FACE';
   const isBrowsTab = primaryTab === 'FACE' && subTab === 'BROWS';
-  const isRightDrawerActive = chrome && (workspace !== 'edit' || isBrowsTab);
+  const isHairTab = primaryTab === 'HAIR';
+  const isSkinTab = (primaryTab === 'FACE' && subTab === 'SKIN') || primaryTab === 'BODY';
+  const isDualStudioTab = isBrowsTab || isHairTab || isSkinTab;
+  const isRightDrawerActive = chrome && (workspace !== 'edit' || isDualStudioTab);
   const rightTitle = isBrowsTab
     ? 'BROW COLOR & PROPERTIES'
-    : workspace === 'camera'
+    : isHairTab
+      ? 'HAIR COLOR & PROPERTIES'
+      : isSkinTab
+        ? 'SKIN COLOR & PROPERTIES'
+        : workspace === 'camera'
       ? 'CAMERA STUDIO'
       : workspace === 'graphics'
         ? 'GRAPHICS & SHADERS'
@@ -112,13 +121,13 @@ export function Hud({ manifest }: HudProps) {
   }, []);
 
   useEffect(() => {
-    if (isBrowsTab) {
+    if (isDualStudioTab) {
       setLeftOpen(true);
       setRightOpen(true);
     } else if (workspace !== 'edit') {
       setRightOpen(true);
     }
-  }, [workspace, isBrowsTab]);
+  }, [workspace, isDualStudioTab]);
 
   /* Nonmodal drawers return focus to the workspace that opened them. Escape
      follows focus context first, so a drawer is closable from anywhere and is
@@ -270,7 +279,7 @@ export function Hud({ manifest }: HudProps) {
           'lg:bottom-[72px] lg:left-[60px] lg:top-[96px] lg:z-30 lg:w-[290px] lg:border lg:border-[#d4b483]/22 lg:bg-[#0a0907]/82 lg:shadow-[0_14px_38px_rgba(0,0,0,0.42)]',
           isDedicatedTab && '!left-[16px] lg:!left-[24px]',
           leftOpen && chrome ? 'translate-x-0' : 'invisible -translate-x-[130%]',
-          isBrowsTab && '!left-[20px] !top-[84px] !w-[276px] lg:!left-[20px] lg:!top-[84px] lg:!w-[276px] !bg-transparent !border-0 !shadow-none !backdrop-blur-none',
+          isDualStudioTab && '!left-[20px] !top-[84px] !w-[276px] lg:!left-[20px] lg:!top-[84px] lg:!w-[276px] !bg-transparent !border-0 !shadow-none !backdrop-blur-none',
         )}
       >
         <div className="min-h-0 flex-1 overflow-y-auto thin-scroll">
@@ -289,10 +298,10 @@ export function Hud({ manifest }: HudProps) {
             'pointer-events-auto fixed bottom-[96px] right-2 top-[108px] z-50 flex select-none flex-col border-l border-[#d4b483]/25 bg-[#0a0907]/94 shadow-[0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-xl transition-all duration-300 motion-reduce:transition-none',
             'w-[min(calc(100vw-76px),380px)] lg:bottom-[72px] lg:top-[96px] lg:z-30 lg:w-[360px] lg:border lg:border-[#d4b483]/22 lg:bg-[#0a0907]/88 lg:shadow-[0_14px_38px_rgba(0,0,0,0.42)]',
             rightOpen && isRightDrawerActive ? 'translate-x-0' : 'invisible translate-x-[110%]',
-            isBrowsTab && '!right-[20px] !top-[84px] !w-[276px] lg:!right-[20px] lg:!top-[84px] lg:!w-[276px] !bg-transparent !border-0 !shadow-none !backdrop-blur-none',
+            isDualStudioTab && '!right-[20px] !top-[84px] !w-[276px] lg:!right-[20px] lg:!top-[84px] lg:!w-[276px] !bg-transparent !border-0 !shadow-none !backdrop-blur-none',
           )}
         >
-          {!isBrowsTab && (
+          {!isDualStudioTab && (
             <div className="flex shrink-0 items-center justify-between border-b border-[#d4b483]/18 px-[12px] py-[9px]">
               <span className="text-[10px] tracking-[0.16em] text-[#d8c39c] font-mono uppercase">
                 {rightTitle}
@@ -314,6 +323,10 @@ export function Hud({ manifest }: HudProps) {
           <div className="min-h-0 flex-1 overflow-y-auto thin-scroll">
             {isBrowsTab ? (
               <BrowProperties />
+            ) : isHairTab ? (
+              <HairProperties />
+            ) : isSkinTab ? (
+              <SkinProperties />
             ) : (
               <>
                 {workspace === 'poses' && <PosePanel />}

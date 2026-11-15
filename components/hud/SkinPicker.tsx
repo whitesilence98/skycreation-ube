@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCharacter, BODY_WEIGHT_ENABLED } from '@/lib/store';
 import { cn } from '@/lib/cn';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
 interface SkinPickerProps {
@@ -360,12 +361,13 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
   };
 
   return (
-    <div className="relative select-none text-[#e6e1d8]">
-      {/* ── BASE PANEL: BODY & SKIN ─────────────────────────────────── */}
-      <div className="flex flex-col gap-3 rounded-xs border border-[#d4b483]/22 bg-black/45 p-3 backdrop-blur-md">
-        <h2 className="text-[11px] font-medium tracking-[0.05em] text-[#efece6] uppercase">
-          BODY & SKIN
-        </h2>
+    <>
+      <StudioCard
+        title="BODY & SKIN"
+        badge="UBE / RACEMENU"
+        footerLeading={<span>+ COR · UBE · 3D SCULPT</span>}
+        footerTrailing={<span>PBR ACTIVE</span>}
+      >
 
         {/* ── 1. BODY WEIGHT & STATURE ───────────────────────────────── */}
         <div className="flex flex-col gap-1.5 pt-0.5">
@@ -540,7 +542,7 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
             <line x1="50" y1="18" x2="50" y2="58" strokeDasharray="3 3" />
           </svg>
         </div>
-      </div>
+      </StudioCard>
 
       {/* ── MODAL 1: SKIN TEXTURE SELECTOR (IMAGE 1) ───────────────── */}
       {modalOpen === 'texture' && (
@@ -657,7 +659,7 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
           onCancel={cancelColor}
         />
       )}
-    </div>
+    </>
   );
 }
 

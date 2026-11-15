@@ -50,13 +50,53 @@ export interface ParsedHairLabel {
 }
 
 /**
+ * Universal companion tokens commonly used by Skyrim hair mod authors
+ * to split high-poly hair into non-overlapping accessory, volume, or scalp layers.
+ */
+export const COMPANION_TOKENS = [
+  // Anatomical Under-Scalp Caps
+  'Scalp', 'SCALP', 'SC', 'MSC', 'SCA',
+  // Accessories & Auxiliary Volume Buns
+  'AC', 'ACM', 'ACH',
+  // Headbands, Bandanas & Hair Ties
+  'Ban', 'MBan', 'Band',
+  // Ponytails & Tails
+  'Tail', 'RTai', 'TailM',
+  // Braids
+  'Br',
+  // Loose Framing Strands
+  'STR', 'STr',
+  // Hair Jewelry, Ears, Horns, Props & Ribbons
+  'Pearl', 'Ear', 'Ears', 'Horn', 'Ring', 'Bow', 'Ribbon',
+  'Mask', 'Goggle', 'Hat', 'Crown', 'CROWN',
+  'Feath', 'Flor', 'Leaf',
+  // Structural Sub-Sections
+  'Bk', 'FR', 'Mid', 'Inner', 'Main',
+  // Hair Wraps & Major Bang Sections
+  'W', 'B',
+] as const;
+
+const COMPANION_TOKEN_PATTERN = new RegExp(
+  '^(.*?)(?:[\\s_-]+|(?<=[a-z0-9]))(' +
+    [...COMPANION_TOKENS].sort((a, b) => b.length - a.length).join('|') +
+    ')(\\d*)$'
+);
+
+/**
  * Parses a hairstyle label or filename into its base group key, hairline flag,
  * and companion part index.
+ *
+ * Implements generic prefix-pattern grouping so hairstyles with companion
+ * parts (numbered layers, scalp caps, accessory buns, braids, bands) are united
+ * under their primary hairstyle, while keeping HairLine (HL) as an alternative variant.
  */
 export function parseHairLabel(rawLabel: string): ParsedHairLabel {
-  const label = (rawLabel || '').trim();
+  let label = (rawLabel || '').trim();
+  // Strip duplicate artifact suffixes commonly left by mod creators
+  label = label.replace(/\s*-\s*copy$/i, '').replace(/_n$/i, '');
 
-  // Pattern 1: ends with digit + HL (e.g. AsterionM2HL, CatoALTM2HL, Flute1HL)
+  // 1. Check for HL (HairLine) variant patterns
+  // Pattern 1a: ends with digit + HL (e.g. AsterionM2HL, CatoALTM2HL, Flute1HL)
   let m = label.match(/^(.*?)(?:_|\s|-)?(\d+)(?:_|\s|-)?(hl)$/i);
   if (m) {
     const base = m[1].replace(/[_\s-]+$/, '');
@@ -69,7 +109,7 @@ export function parseHairLabel(rawLabel: string): ParsedHairLabel {
     };
   }
 
-  // Pattern 2: ends with HL + digit (e.g. AsterionMHL2, HairHL3)
+  // Pattern 1b: ends with HL + digit (e.g. AsterionMHL2, HairHL3)
   m = label.match(/^(.*?)(?:_|\s|-)?(hl)(?:_|\s|-)?(\d+)$/i);
   if (m) {
     const base = m[1].replace(/[_\s-]+$/, '');
@@ -82,36 +122,62 @@ export function parseHairLabel(rawLabel: string): ParsedHairLabel {
     };
   }
 
-  // Pattern 3: ends with HL (no digit, e.g. AsterionMHL, MaeveHL)
-  m = label.match(/^(.*?)(?:_|\s|-)?(hl)$/i);
+  // Pattern 1c: general HL ending (e.g. AsterionMHL, PiratessBr1HL, ZhiAC1HL)
+  let isHL = false;
+  let workLabel = label;
+  m = label.match(/^(.*?)(?:_|\s|-)?hl$/i);
   if (m) {
-    const base = m[1].replace(/[_\s-]+$/, '');
+    isHL = true;
+    workLabel = m[1].replace(/[_\s-]+$/, '');
+  }
+
+  // 2. Check for universal companion tokens (AC, SC, Ban, Tail, Br, STR, etc.)
+  const tm = workLabel.match(COMPANION_TOKEN_PATTERN);
+  if (tm && tm[1].length >= 3 && !/^(face|race|grace|peace|space|trace|ace)$/i.test(tm[1])) {
+    const base = tm[1].replace(/[_\s-]+$/, '');
+    const tok = tm[2].toUpperCase();
+    const subNum = tm[3] ? parseInt(tm[3], 10) : 0;
+    // Scalps sort at 50, accessories/sections sort at 100+
+    const offset = ['SC', 'SCALP', 'MSC', 'SCA'].includes(tok) ? 50 : 100;
     return {
-      groupKey: base + 'HL',
-      label: base + ' HL',
-      isHL: true,
-      partNumber: 0,
+      groupKey: isHL ? base + 'HL' : base,
+      label: isHL ? base + ' HL' : base,
+      isHL,
+      partNumber: offset + subNum,
     };
   }
 
-  // Pattern 4: Non-HL ending with digit (e.g. AsterionM2, AsterionM3, Flute1, Azathoth5)
-  m = label.match(/^(.*?)(?:_|\s|-)?(\d+)$/);
+  // 3. Delimited companion parts: e.g. Hair_Accessories, Style-Bun
+  const dm = workLabel.match(/^(.*?)[_\s-]+([a-zA-Z]+)(\d*)$/);
+  if (dm && dm[1].length >= 3 && !/^(hl)$/i.test(dm[2])) {
+    const base = dm[1].replace(/[_\s-]+$/, '');
+    const subNum = dm[3] ? parseInt(dm[3], 10) : 0;
+    return {
+      groupKey: isHL ? base + 'HL' : base,
+      label: isHL ? base + ' HL' : base,
+      isHL,
+      partNumber: 150 + subNum,
+    };
+  }
+
+  // 4. Non-HL ending with digit (e.g. AsterionM2, AsterionM3, Flute1, EmpressOf1, Azathoth5)
+  m = workLabel.match(/^(.*?)(?:_|\s|-)?(\d+)$/);
   if (m) {
     const base = m[1].replace(/[_\s-]+$/, '');
     const partNum = parseInt(m[2], 10);
     return {
-      groupKey: base,
-      label: base,
-      isHL: false,
+      groupKey: isHL ? base + 'HL' : base,
+      label: isHL ? base + ' HL' : base,
+      isHL,
       partNumber: partNum,
     };
   }
 
-  // Pattern 5: Standard hair (no digits, no HL, e.g. AsterionM, Azathoth, LanXin)
+  // 5. Standard hair (no companion markers)
   return {
-    groupKey: label,
-    label: label,
-    isHL: false,
+    groupKey: isHL ? workLabel + 'HL' : workLabel,
+    label: isHL ? workLabel + ' HL' : workLabel,
+    isHL,
     partNumber: 0,
   };
 }
@@ -168,6 +234,14 @@ export function buildHairGroups<
     if (!group.pairedTextureId && opt.pairedTextureId) {
       group.pairedTextureId = opt.pairedTextureId;
     }
+
+    // Deduplicate identical parts (e.g. duplicate files or copy artifacts)
+    const isDup = group.parts.some(
+      (p) =>
+        p.id === opt.id ||
+        (p.raw.file && opt.file && p.raw.file.toLowerCase() === opt.file.toLowerCase()),
+    );
+    if (isDup) continue;
 
     group.parts.push({
       id: opt.id,
