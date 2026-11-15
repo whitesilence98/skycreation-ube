@@ -28,7 +28,7 @@ import { FaceGizmo } from '@/components/scene/FaceGizmo';
 import { AuthoredPart } from '@/components/scene/AuthoredPart';
 import { SkinnedPart } from '@/components/scene/SkinnedPart';
 import { EquippedGarment } from '@/components/scene/EquippedGarment';
-import { SkeletonRegistry } from '@/lib/character/skeleton';
+import { SkeletonRegistry, applySkeletonWeight } from '@/lib/character/skeleton';
 import { BodyPhysics } from '@/components/scene/BodyPhysics';
 import { AnimationDirector } from '@/components/scene/AnimationDirector';
 import { applyBodyPose, bodyPose, applyPoseTrack, fetchPoseTrack, BODY_POSES } from '@/lib/character/poses';
@@ -454,6 +454,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     const builtin = BODY_POSES.find((p) => p.id === bodyPoseId);
     if (builtin) {
       applyBodyPose(skeletonRegistry, builtin, poseIntensity);
+      applySkeletonWeight(skeletonRegistry, weight);
       finish();
       return;
     }
@@ -464,6 +465,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
       if (cancelled) return;
       if (track) applyPoseTrack(skeletonRegistry, track, poseIntensity);
       else applyBodyPose(skeletonRegistry, BODY_POSES[0], poseIntensity);
+      applySkeletonWeight(skeletonRegistry, weight);
       finish();
     });
 
@@ -1235,6 +1237,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
             skinDetailMap={skinDetailTex}
             skinDetail={skinDetail}
             renderOrder={0}
+            weight={weight}
           />
         ) : (
           <mesh name="Body" geometry={bodyGeo} material={partMaterial(bodyTexState, bodyMaterial)} renderOrder={0} />
@@ -1272,6 +1275,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           skinDetailMap={skinDetailTex}
           skinDetail={skinDetail}
           renderOrder={0}
+          weight={weight}
         />
       )}
       {feetMesh && (
@@ -1290,6 +1294,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           skinDetailMap={skinDetailTex}
           skinDetail={skinDetail}
           renderOrder={0}
+          weight={weight}
         />
       )}
       {/* The outfit's embedded body is always drawn; only the garment shapes
@@ -1310,6 +1315,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
             skinDetailMap={skinDetailTex}
             skinDetail={skinDetail}
             renderOrder={0}
+            weight={weight}
           />
         ) : (
           <AuthoredPart

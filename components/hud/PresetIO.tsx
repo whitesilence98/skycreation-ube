@@ -2,10 +2,9 @@
 
 import { useRef, useState } from 'react';
 import { useCharacter } from '@/lib/store';
-import { parsePreset, payloadFromMorphs, presetFileName } from '@/lib/presetIO';
+import { presetFileName } from '@/lib/presetIO';
 import { exportCharacterGlb } from '@/lib/exportGlb';
-import { sculptHeadFor } from '@/lib/manifestSelect';
-import { resolveOrBuildSculptHead } from '@/lib/head/dynamicSculpt';
+import { importPresetFromFiles } from '@/lib/head/nifImport';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
@@ -74,42 +73,21 @@ export function PresetIO({ manifest }: PresetIOProps) {
     flash({ kind: 'ok', text: `EXPORTED ${presetFileName(file.name)}` });
   };
 
-  const readFile = async (file: File) => {
+  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    e.target.value = '';
+    if (!files || !files.length) return;
+
     setBusy(true);
     try {
-      const text = await file.text();
-      const payload = parsePreset(text, file.name);
-      // Select an explicitly linked baked head or dynamically rebuild the sculpt on UBE base head
-      const dynamicHead = await resolveOrBuildSculptHead(manifest, text, file.name);
-      const head = dynamicHead ?? sculptHeadFor(manifest, payload.sourceFile);
-      // Exports already contain FaceGen morphs; do not deform them a second time.
-      loadPreset(payload.source === 'racemenu' && head?.origin === 'racemenu-export'
-        ? { ...payload, regions: payloadFromMorphs([], { baked: true }).regions }
-        : payload, head?.id);
-      if (payload.source === 'racemenu') {
-        const notes: string[] = [];
-        if (payload.unmapped) notes.push(`${payload.unmapped} MORPHS UNMAPPED`);
-        if (head) notes.push(`HEAD ${head.label.toUpperCase()}`);
-        else notes.push('NO BAKED HEAD');
-        flash({
-          kind: payload.unmapped || !head ? 'warn' : 'ok',
-          text: `IMPORTED ${file.name} · ${notes.join(' · ')}`,
-        });
-      } else {
-        flash({ kind: 'ok', text: `IMPORTED ${file.name}` });
-      }
+      const result = await importPresetFromFiles(files, manifest);
+      loadPreset(result.payload, result.headOption?.id);
+      flash({ kind: result.kind, text: result.summary });
     } catch (err) {
       flash({ kind: 'error', text: err instanceof Error ? err.message : 'Could not read that file.' });
     } finally {
       setBusy(false);
     }
-  };
-
-  const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    // Reset first: picking the same file twice must still fire a change.
-    e.target.value = '';
-    if (file) void readFile(file);
   };
 
   const tone =
@@ -124,7 +102,8 @@ export function PresetIO({ manifest }: PresetIOProps) {
       <input
         ref={inputRef}
         type="file"
-        accept=".json,.jslot,application/json"
+        multiple
+        accept=".json,.jslot,.nif,application/json"
         onChange={onPick}
         className="hidden"
       />

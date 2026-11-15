@@ -75,6 +75,8 @@ export interface SkinnedPartProps {
    * geometry is cloned per derived mesh and never mutated.
    */
   rigDonor?: LoadedMesh | null;
+  /** Body weight [0..1] forwarded for bounds updates and reactivity. */
+  weight?: number;
 }
 
 interface Slot {
@@ -192,6 +194,7 @@ export function SkinnedPart({
   skinDetailMap,
   skinDetail,
   rigDonor,
+  weight,
 }: SkinnedPartProps) {
   /* Opt-in auto-rig for a shape that cannot skin itself. The helper returns a
      geometry clone plus a bone table; the loader's cached mesh is untouched,
@@ -243,6 +246,13 @@ export function SkinnedPart({
      keeps `groups`/`materials` by reference and owns only its geometry, so
      neither set of descriptors is ever mutated. */
   const effectiveMesh = derived?.mesh ?? mesh;
+
+  /* Keep geometry bounding volumes accurate when body weight changes */
+  useEffect(() => {
+    if (weight === undefined) return;
+    effectiveMesh.geometry.computeBoundingSphere();
+    effectiveMesh.geometry.computeBoundingBox();
+  }, [weight, effectiveMesh]);
 
   const slots = useMemo(
     () => slotsFor({

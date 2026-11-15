@@ -86,11 +86,11 @@ export function sculptHeadFor(
   const baked = heads.find((h) => h.sculptSource?.toLowerCase() === wanted);
   if (baked) return baked;
   /* A LYRA export names the preset rather than the `.jslot`. Accept a unique
-     stem match ("Frau" → "Frau.jslot") so exports round-trip too, but only
+     stem match ("Frau" → "Frau.jslot" or "Frau.nif") so exports round-trip too, but only
      when exactly one head claims it — an ambiguous stem must not pick a face. */
-  const stem = wanted.replace(/\.jslot$/, '');
+  const stem = wanted.replace(/\.(jslot|nif)$/i, '');
   const hits = heads.filter(
-    (h) => h.sculptSource?.toLowerCase().replace(/\.jslot$/, '') === stem,
+    (h) => h.sculptSource?.toLowerCase().replace(/\.(jslot|nif)$/i, '') === stem,
   );
   return hits.length === 1 ? hits[0] : undefined;
 }

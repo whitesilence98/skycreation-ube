@@ -841,7 +841,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
            neither keeps the current weight, like the view fields above. */
         weight: payload.weight ?? s.weight,
         linkFaceToWeight: (payload as { linkFaceToWeight?: boolean }).linkFaceToWeight ?? s.linkFaceToWeight,
-        hair: payload.hair ? coerceHair(payload.hair) : s.hair,
+        hair: payload.hair ? coerceHair({ ...s.hair, ...payload.hair }) : s.hair,
         overlayLayers: payload.overlays ?? s.overlayLayers,
         /* A replacement stack invalidates the panel's `kind:id` selection; a
            file that carries no overlays keeps both. */

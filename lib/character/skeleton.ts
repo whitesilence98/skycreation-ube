@@ -320,3 +320,113 @@ export class SkeletonRegistry {
     this.updateWorld();
   }
 }
+
+export interface BoneScaleFactors {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * Anatomical scale coefficients for Creation Engine character weight morphing.
+ *
+ * In Skyrim's Creation Engine, weight morphing scales the character's skeleton
+ * bones (Pelvis, Spine, Belly, Butt, Thighs, Breasts) proportionally to the
+ * actor's weight. Because clothing meshes are skinned to these same skeleton bones,
+ * this scaling naturally expands both clothing and body together even when modded
+ * clothing NIFs carry subtle or zero vertex displacement in their `_0`/`_1` pairs.
+ *
+ * Calibrated in incremental steps to avoid compounded scale accumulation along
+ * the spine and limb hierarchies.
+ */
+export const SKELETON_WEIGHT_SCALES: Readonly<Record<string, BoneScaleFactors>> = {
+  // Spine & Torso (accumulates down Spine0 -> Spine1 -> Spine2 to ~10% total)
+  'NPC Spine [Spn0]': { x: 0.035, y: 0.035, z: 0.035 },
+  'NPC Spine1 [Spn1]': { x: 0.035, y: 0.035, z: 0.035 },
+  'NPC Spine2 [Spn2]': { x: 0.025, y: 0.025, z: 0.025 },
+  'NPC Belly': { x: 0.04, y: 0.05, z: 0.05 },
+  'Belly': { x: 0.04, y: 0.05, z: 0.05 },
+
+  // Pelvis & Butt (Pelvis ~9%, Butt ~14% total)
+  'NPC Pelvis [Pelv]': { x: 0.09, y: 0.08, z: 0.08 },
+  'NPC L Butt': { x: 0.045, y: 0.045, z: 0.045 },
+  'NPC R Butt': { x: 0.045, y: 0.045, z: 0.045 },
+  'Butt': { x: 0.045, y: 0.045, z: 0.045 },
+
+  // Breasts (XP32 / 3BA chains, reaching ~14% total on top of Spine2)
+  'L Breast01': { x: 0.038, y: 0.038, z: 0.038 },
+  'R Breast01': { x: 0.038, y: 0.038, z: 0.038 },
+  'L Breast02': { x: 0.025, y: 0.025, z: 0.025 },
+  'R Breast02': { x: 0.025, y: 0.025, z: 0.025 },
+  'NPC L Breast': { x: 0.038, y: 0.038, z: 0.038 },
+  'NPC R Breast': { x: 0.038, y: 0.038, z: 0.038 },
+
+  // Legs & Thighs (reaching ~8% on Thigh, ~4% on Calf)
+  'NPC L Thigh [LThg]': { x: -0.01, y: -0.01, z: -0.01 },
+  'NPC R Thigh [RThg]': { x: -0.01, y: -0.01, z: -0.01 },
+  'NPC L Calf [LClf]': { x: -0.035, y: -0.035, z: -0.035 },
+  'NPC R Calf [RClf]': { x: -0.035, y: -0.035, z: -0.035 },
+
+  // Arms (reaching ~6% on UpperArm)
+  'NPC L UpperArm [LUar]': { x: 0.06, y: 0.06, z: 0.06 },
+  'NPC R UpperArm [RUar]': { x: 0.06, y: 0.06, z: 0.06 },
+};
+
+/** Bones whose world scale must remain unscaled (identity 1.0) to preserve
+ *  anatomical anchors, neck seam alignment, and footwear/gloves fit. */
+const ANCHOR_BONES = [
+  'NPC Neck [Neck]',
+  'NPC L Foot [Lft ]',
+  'NPC R Foot [Rft ]',
+  'NPC L Hand [LHnd]',
+  'NPC R Hand [RHnd]',
+] as const;
+
+/**
+ * Apply Creation Engine body weight bone scaling over the skeleton registry.
+ */
+export function applySkeletonWeight(registry: SkeletonRegistry, weight: number): void {
+  const w = Math.max(0, Math.min(1, weight));
+
+  // 1. Reset scale to authored rest TRS first so scale is absolute, never accumulating across frames
+  for (const bone of registry.byName.values()) {
+    const rest = (bone.userData[REST] as BoneRest | undefined)?.pose;
+    if (rest) bone.scale.copy(rest.scale);
+    else bone.scale.set(1, 1, 1);
+  }
+
+  // 2. Apply body weight scaling multipliers
+  for (const [boneName, factors] of Object.entries(SKELETON_WEIGHT_SCALES)) {
+    const bone = registry.byName.get(boneName);
+    if (!bone) continue;
+    bone.scale.set(
+      bone.scale.x * (1.0 + factors.x * w),
+      bone.scale.y * (1.0 + factors.y * w),
+      bone.scale.z * (1.0 + factors.z * w),
+    );
+  }
+
+  // 3. Propagate transforms down the hierarchy
+  registry.updateWorld();
+
+  // 4. Counter-scale anchor bones (Neck, Feet, Hands) so their world scale stays identical to rest
+  const restWorldScale = new THREE.Vector3();
+  const parentWorldScale = new THREE.Vector3();
+  for (const anchorName of ANCHOR_BONES) {
+    const bone = registry.byName.get(anchorName);
+    const rest = bone ? (bone.userData[REST] as BoneRest | undefined) : undefined;
+    if (!bone || !bone.parent || !rest) continue;
+    rest.world.decompose(new THREE.Vector3(), new THREE.Quaternion(), restWorldScale);
+    bone.parent.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), parentWorldScale);
+    if (Math.abs(parentWorldScale.x) > 1e-5 && Math.abs(parentWorldScale.y) > 1e-5 && Math.abs(parentWorldScale.z) > 1e-5) {
+      bone.scale.set(
+        Math.abs(restWorldScale.x / parentWorldScale.x),
+        Math.abs(restWorldScale.y / parentWorldScale.y),
+        Math.abs(restWorldScale.z / parentWorldScale.z),
+      );
+    }
+  }
+
+  // 5. Final world matrix update with normalized anchors
+  registry.updateWorld();
+}

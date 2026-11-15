@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCharacter } from '@/lib/store';
-import { parsePreset, payloadFromMorphs, presetFileName } from '@/lib/presetIO';
+import { payloadFromMorphs, presetFileName } from '@/lib/presetIO';
 import { exportCharacterGlb } from '@/lib/exportGlb';
 import { assetOptions, sculptHeadFor } from '@/lib/manifestSelect';
-import { resolveOrBuildSculptHead } from '@/lib/head/dynamicSculpt';
+import { importPresetFromFiles } from '@/lib/head/nifImport';
 import { fetchCatalogue } from '@/lib/mo2/client';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest, Mo2PresetOption } from '@/lib/head/faceTexture';
@@ -195,28 +195,20 @@ export function PresetPanel({ manifest }: PresetPanelProps) {
   };
 
   const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = e.target.files;
     e.target.value = '';
-    if (!file) return;
+    if (!files || !files.length) return;
 
     setBusy(true);
     try {
-      const text = await file.text();
-      const payload = parsePreset(text, file.name);
-      const dynamicHead = await resolveOrBuildSculptHead(manifest, text, file.name);
-      const head = dynamicHead ?? sculptHeadFor(manifest, payload.sourceFile);
-      loadPreset(
-        payload.source === 'racemenu' && head?.origin === 'racemenu-export'
-          ? { ...payload, regions: payloadFromMorphs([], { baked: true }).regions }
-          : payload,
-        head?.id,
-      );
+      const result = await importPresetFromFiles(files, manifest);
+      loadPreset(result.payload, result.headOption?.id);
 
-      if (payload.name) {
-        setName(payload.name.toUpperCase().slice(0, 14));
+      if (result.characterName) {
+        setName(result.characterName.toUpperCase().slice(0, 14));
       }
 
-      flash({ kind: 'ok', text: `IMPORTED ${file.name}` });
+      flash({ kind: result.kind, text: result.summary });
     } catch (err) {
       flash({ kind: 'error', text: err instanceof Error ? err.message : 'Failed to import preset' });
     } finally {
@@ -230,7 +222,8 @@ export function PresetPanel({ manifest }: PresetPanelProps) {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".json,.jslot,application/json"
+        multiple
+        accept=".json,.jslot,.nif,application/json"
         onChange={onFileChange}
         className="hidden"
       />
@@ -465,7 +458,7 @@ export function PresetPanel({ manifest }: PresetPanelProps) {
           {/* Row 3: Format Compatibility Tagline */}
           <div className="flex items-center justify-center gap-1.5 pt-0.5 text-[8.5px] font-mono tracking-[0.12em] text-[#8b8375]/70">
             <span className="text-[#d4b483]/70">+</span>
-            <span>SKYRIM SE · RACEMENU · XPMSE</span>
+            <span>SKYRIM SE · RACEMENU (.JSLOT & .NIF) · XPMSE</span>
           </div>
 
           {/* Status Message Toast */}

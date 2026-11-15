@@ -561,8 +561,21 @@ export function parsePreset(text: string, fileName?: string): PresetPayload {
     name: typeof obj.name === 'string' ? obj.name : undefined,
     actorWeight: (obj.actor as { weight?: unknown } | undefined)?.weight,
   });
+
+  const rawActor = obj.actor as { hairColor?: unknown; weight?: unknown } | undefined;
+  const hairColorInt = rawActor?.hairColor;
+  let hair: HairSettings | undefined;
+  if (typeof hairColorInt === 'number' && Number.isFinite(hairColorInt) && hairColorInt > 0) {
+    const r = (hairColorInt >> 16) & 0xFF;
+    const g = (hairColorInt >> 8) & 0xFF;
+    const b = hairColorInt & 0xFF;
+    const tone = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    hair = { tone } as unknown as HairSettings;
+  }
+
   return {
     ...mapped,
+    hair: hair ?? mapped.hair,
     /* The `.jslot`'s own basename, so import can find the head mesh whose
        sculpt was baked from this file. A `.jslot` has no `name` field
        (RaceMenu writes the filename outside the JSON), so the basename is the

@@ -99,6 +99,7 @@ export function EquippedGarment({
       skinDetailMap={skinDetailMap}
       skinDetail={skinDetail}
       renderOrder={renderOrder}
+      weight={weight}
     />
   ) : (
     <AuthoredPart
