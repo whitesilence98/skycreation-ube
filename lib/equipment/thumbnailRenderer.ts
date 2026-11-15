@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import type { MeshData } from '@/components/scene/useMeshGeometry';
+import type { MeshData, MeshGroup, MeshMaterialSpec } from '@/components/scene/useMeshGeometry';
 import { meshDataToGeometry } from '@/components/scene/useMeshGeometry';
 
 // In-memory cache for rendered 3D thumbnail WebP data URLs
 const THUMBNAIL_CACHE = new Map<string, string>();
 const PENDING_RENDERS = new Map<string, Promise<string | null>>();
+const FAILED_RENDERS = new Set<string>();
 
 interface RenderQueueItem {
   id: string;
@@ -15,12 +16,39 @@ interface RenderQueueItem {
 const renderQueue: RenderQueueItem[] = [];
 let isProcessingQueue = false;
 
+// Network fetch queue: limit concurrent downloads to avoid saturating HTTP sockets
+const MAX_CONCURRENT_FETCHES = 2;
+let activeFetches = 0;
+const fetchQueue: Array<() => void> = [];
+
+function enqueueFetch<T>(fn: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const run = () => {
+      activeFetches++;
+      fn()
+        .then(resolve, reject)
+        .finally(() => {
+          activeFetches--;
+          const next = fetchQueue.shift();
+          if (next) next();
+        });
+    };
+
+    if (activeFetches < MAX_CONCURRENT_FETCHES) {
+      run();
+    } else {
+      fetchQueue.push(run);
+    }
+  });
+}
+
 // Headless offscreen studio state (initialized lazily in browser)
 let offscreenRenderer: THREE.WebGLRenderer | null = null;
 let offscreenScene: THREE.Scene | null = null;
 let offscreenCamera: THREE.PerspectiveCamera | null = null;
 let offscreenCanvas: HTMLCanvasElement | null = null;
 const textureCache = new Map<string, THREE.Texture>();
+const failedTextures = new Set<string>();
 
 const THUMB_WIDTH = 160;
 const THUMB_HEIGHT = 120;
@@ -82,6 +110,7 @@ function initStudio(): boolean {
 
 /** Preload a texture with timeout so thumbnails render swiftly */
 function loadTextureWithTimeout(url: string, timeoutMs = 800): Promise<THREE.Texture | null> {
+  if (failedTextures.has(url)) return Promise.resolve(null);
   const cached = textureCache.get(url);
   if (cached) return Promise.resolve(cached);
 
@@ -90,6 +119,7 @@ function loadTextureWithTimeout(url: string, timeoutMs = 800): Promise<THREE.Tex
     const timer = setTimeout(() => {
       if (!settled) {
         settled = true;
+        failedTextures.add(url);
         resolve(null);
       }
     }, timeoutMs);
@@ -110,10 +140,104 @@ function loadTextureWithTimeout(url: string, timeoutMs = 800): Promise<THREE.Tex
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        failedTextures.add(url);
         resolve(null);
       },
     );
   });
+}
+
+/**
+ * For composite outfits that bake the character's body mesh (BaseShape, role === 'skin')
+ * directly into the NIF alongside clothing, isolate the clothing geometry so that:
+ * 1. The preview displays only the garment itself consistently.
+ * 2. Heavy 170k+ vertex skin buffers are not uploaded to WebGL.
+ * 3. Skin diffuse/normal textures are never downloaded for thumbnails.
+ * 4. Auto-framing centers and zooms directly on the garment.
+ */
+export function extractGarmentMeshData(data: MeshData): MeshData {
+  if (!data.groups || !data.materials || data.groups.length <= 1) {
+    return data;
+  }
+  const hasSkin = data.materials.some((m) => m.role === 'skin');
+  const hasNonSkin = data.materials.some((m) => m.role !== 'skin');
+  if (!hasSkin || !hasNonSkin) {
+    return data;
+  }
+
+  // Find non-skin groups
+  const nonSkinGroups = data.groups.filter((g) => {
+    const mat = data.materials?.[g.materialIndex];
+    return mat && mat.role !== 'skin';
+  });
+
+  if (nonSkinGroups.length === 0) {
+    return data;
+  }
+
+  // Remap materials
+  const newMaterials: MeshMaterialSpec[] = [];
+  const matIndexMap = new Map<number, number>();
+
+  for (const g of nonSkinGroups) {
+    if (!matIndexMap.has(g.materialIndex)) {
+      const origMat = data.materials[g.materialIndex];
+      matIndexMap.set(g.materialIndex, newMaterials.length);
+      newMaterials.push(origMat);
+    }
+  }
+
+  // Collect used vertex indices & remap them to prune unused skin vertices
+  const oldToNewVert = new Map<number, number>();
+  const newPositions: number[] = [];
+  const newNormals: number[] = [];
+  const newUvs: number[] = [];
+  const origPos = data.positions;
+  const origNorm = data.normals;
+  const origUvs = data.uvs;
+
+  const remapVertex = (oldIdx: number): number => {
+    let newIdx = oldToNewVert.get(oldIdx);
+    if (newIdx !== undefined) return newIdx;
+
+    newIdx = oldToNewVert.size;
+    oldToNewVert.set(oldIdx, newIdx);
+
+    const p3 = oldIdx * 3;
+    newPositions.push(origPos[p3], origPos[p3 + 1], origPos[p3 + 2]);
+    newNormals.push(origNorm[p3], origNorm[p3 + 1], origNorm[p3 + 2]);
+
+    const u2 = oldIdx * 2;
+    newUvs.push(origUvs[u2], origUvs[u2 + 1]);
+
+    return newIdx;
+  };
+
+  const newIndices: number[] = [];
+  const newGroups: MeshGroup[] = [];
+  let currentStart = 0;
+
+  for (const g of nonSkinGroups) {
+    const slice = data.indices.slice(g.start, g.start + g.count);
+    for (let i = 0; i < slice.length; i++) {
+      newIndices.push(remapVertex(slice[i]));
+    }
+    newGroups.push({
+      start: currentStart,
+      count: g.count,
+      materialIndex: matIndexMap.get(g.materialIndex)!,
+    });
+    currentStart += g.count;
+  }
+
+  return {
+    positions: new Float32Array(newPositions),
+    normals: new Float32Array(newNormals),
+    uvs: new Float32Array(newUvs),
+    indices: newIndices,
+    groups: newGroups,
+    materials: newMaterials,
+  };
 }
 
 /** Render a single clothing mesh data object to a WebP data URL */
@@ -229,8 +353,17 @@ async function processQueue() {
       item.resolve(null);
     }
 
-    // Yield tiny 4ms slice to keep UI 60fps responsive
-    await new Promise((r) => setTimeout(r, 4));
+    // Yield to browser main thread so user scrolling and 3D viewport stay 60fps
+    await new Promise<void>((resolve) => {
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        (window as unknown as { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => void }).requestIdleCallback(
+          () => resolve(),
+          { timeout: 16 },
+        );
+      } else {
+        setTimeout(resolve, 8);
+      }
+    });
   }
 
   isProcessingQueue = false;
@@ -249,21 +382,40 @@ export function requestGarmentThumbnail(
   const cached = THUMBNAIL_CACHE.get(id);
   if (cached) return Promise.resolve(cached);
 
+  if (FAILED_RENDERS.has(id)) return Promise.resolve(null);
+
   const pending = PENDING_RENDERS.get(id);
   if (pending) return pending;
 
   const promise = (async () => {
     try {
-      const res = await fetch(meshUrl);
-      if (!res.ok) return null;
-      const data = (await res.json()) as MeshData;
-      if (!data || !data.positions) return null;
+      const data = await enqueueFetch(async () => {
+        const res = await fetch(meshUrl);
+        if (!res.ok) return null;
+        return (await res.json()) as MeshData;
+      });
+
+      if (!data || !data.positions) {
+        FAILED_RENDERS.add(id);
+        return null;
+      }
+
+      // Filter out heavy embedded skin meshes (BaseShape)
+      const garmentData = extractGarmentMeshData(data);
 
       return new Promise<string | null>((resolve) => {
-        renderQueue.push({ id, meshData: data, resolve });
+        renderQueue.push({
+          id,
+          meshData: garmentData,
+          resolve: (url) => {
+            if (!url) FAILED_RENDERS.add(id);
+            resolve(url);
+          },
+        });
         void processQueue();
       });
     } catch {
+      FAILED_RENDERS.add(id);
       return null;
     } finally {
       PENDING_RENDERS.delete(id);

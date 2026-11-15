@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { EquipSlot } from '@/lib/equipment';
 import { convertUrl } from '@/lib/mo2/client';
 import { getCachedGarmentThumbnail, requestGarmentThumbnail } from '@/lib/equipment/thumbnailRenderer';
@@ -26,12 +26,47 @@ export function GarmentThumbnail({
   iconClassName,
   imgClassName,
 }: GarmentThumbnailProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isInView, setIsInView] = useState<boolean>(() => Boolean(getCachedGarmentThumbnail(id)));
   const [thumbUrl, setThumbUrl] = useState<string | null>(() => getCachedGarmentThumbnail(id) ?? null);
   const [loading, setLoading] = useState<boolean>(!thumbUrl);
 
   const effectiveUrl = meshUrl ?? (id.startsWith('/') ? id : convertUrl({ kind: 'clothingMesh', id, mode: 'mesh' }));
 
   useEffect(() => {
+    // If thumbnail already cached in memory, no need for observer
+    if (getCachedGarmentThumbnail(id)) {
+      setThumbUrl(getCachedGarmentThumbnail(id)!);
+      setLoading(false);
+      return;
+    }
+
+    const node = containerRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setIsInView(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry && entry.isIntersecting) {
+          setIsInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '120px' }, // prefetch 120px before card scrolls into viewport
+    );
+
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!isInView) return;
+
     const cached = getCachedGarmentThumbnail(id);
     if (cached) {
       setThumbUrl(cached);
@@ -51,10 +86,13 @@ export function GarmentThumbnail({
     return () => {
       cancelled = true;
     };
-  }, [id, effectiveUrl]);
+  }, [id, effectiveUrl, isInView]);
 
   return (
-    <div className={cn('relative flex h-full w-full items-center justify-center overflow-hidden', className)}>
+    <div
+      ref={containerRef}
+      className={cn('relative flex h-full w-full items-center justify-center overflow-hidden', className)}
+    >
       {thumbUrl ? (
         <img
           src={thumbUrl}
