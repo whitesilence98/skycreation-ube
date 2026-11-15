@@ -644,6 +644,10 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const skinDetail = useCharacter((s) => s.skinDetail);
   const skinSheen = useCharacter((s) => s.skinSheen);
   const skinColor = useCharacter((s) => s.skinColor);
+  const browColor = useCharacter((s) => s.browColor);
+  const browOpacity = useCharacter((s) => s.browOpacity);
+  const browGloss = useCharacter((s) => s.browGloss);
+  const browGlossy = useCharacter((s) => s.browGlossy);
   const skinRoughness = skinRoughnessFromGloss(skinGloss);
 
   /* Authored hair and outfit are rendered by `AuthoredPart`, which keeps each
@@ -927,9 +931,17 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
      `#1a1412` crushed it to near-black, which read as a painted-on stripe
      rather than hair. */
   useEffect(() => {
-    browsMaterial.color.set(browsTexState === 'loaded' ? '#ffffff' : '#1a1412');
+    if (browsTexState === 'loaded') {
+      browsMaterial.color.set(browColor || '#ffffff');
+    } else {
+      browsMaterial.color.set(browColor || '#1a1412');
+    }
+    browsMaterial.opacity = browOpacity;
+    browsMaterial.transparent = browOpacity < 0.999;
+    const totalGloss = Math.min(1, browGloss * 0.7 + browGlossy * 0.3);
+    browsMaterial.roughness = Math.max(0.08, 0.95 - totalGloss * 0.75);
     browsMaterial.needsUpdate = true;
-  }, [browsMaterial, browsTexState]);
+  }, [browsMaterial, browsTexState, browColor, browOpacity, browGloss, browGlossy]);
   useMaterialTexture(browsMaterial, 'normalMap', parts?.brows?.normalTexture, { wrap: true });
 
   const bodyMaterial = useMemo(

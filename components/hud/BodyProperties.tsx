@@ -1,6 +1,6 @@
 'use client';
 
-import { useCharacter } from '@/lib/store';
+import { useCharacter, BODY_WEIGHT_ENABLED } from '@/lib/store';
 import { BODY_POSES } from '@/lib/character/poses';
 import { HudSlider } from '@/components/hud/HudSlider';
 import { cn } from '@/lib/cn';
@@ -44,21 +44,24 @@ export function BodyProperties({ manifest = null }: BodyPropertiesProps) {
       <section className="mb-[16px]">
         <HudSlider
           label="BODY WEIGHT"
-          suffix={hasBodyPair ? undefined : '(UNSUPPORTED)'}
+          suffix={!BODY_WEIGHT_ENABLED ? '(LOCKED AT 0%)' : hasBodyPair ? undefined : '(UNSUPPORTED)'}
           min={0}
           max={1}
           step={0.01}
           value={weight}
-          display={`${Math.round(weight * 100)}% (${weight.toFixed(2)})`}
+          disabled={!BODY_WEIGHT_ENABLED || !hasBodyPair}
+          display={!BODY_WEIGHT_ENABLED ? '0% (DISABLED)' : `${Math.round(weight * 100)}% (${weight.toFixed(2)})`}
           onChange={(v) => {
-            if (hasBodyPair) setWeight(v);
+            if (BODY_WEIGHT_ENABLED && hasBodyPair) setWeight(v);
           }}
           bracketed
         />
         <p className="-mt-[8px] mb-[10px] text-[10px] leading-[1.5] text-[#a9a192]/65">
-          {hasBodyPair
-            ? 'Blends femalebody_0 (slim) → femalebody_1 (full muscular).'
-            : 'Active body mesh ships no weight variants (_0/_1 pair).'}
+          {!BODY_WEIGHT_ENABLED
+            ? 'Body weight adjustments are temporarily locked at 0% (slim _0 mesh).'
+            : hasBodyPair
+              ? 'Blends femalebody_0 (slim) → femalebody_1 (full muscular).'
+              : 'Active body mesh ships no weight variants (_0/_1 pair).'}
         </p>
 
         {/* Link Face to Weight */}

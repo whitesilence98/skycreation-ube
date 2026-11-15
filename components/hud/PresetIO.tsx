@@ -42,7 +42,7 @@ export function PresetIO({ manifest }: PresetIOProps) {
     setExportingGlb(true);
     flash({ kind: 'ok', text: 'EXPORTING MODEL & RIG (.GLB)...' });
     try {
-      await exportCharacterGlb(characterName);
+      await exportCharacterGlb(characterName, { animated: true });
       const safeName = (characterName || 'Character').trim().replace(/[^a-zA-Z0-9_\-]/g, '_') || 'Character';
       flash({ kind: 'ok', text: `EXPORTED ${safeName}.glb` });
     } catch (err) {

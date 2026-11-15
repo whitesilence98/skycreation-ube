@@ -13,12 +13,13 @@ interface SliderProps {
   onChange: (v: number) => void;
   onActiveChange?: (active: boolean) => void;
   bracketed?: boolean;
+  disabled?: boolean;
 }
 
-export function HudSlider({ label, suffix, value, min, max, step, display, onChange, onActiveChange, bracketed = false }: SliderProps) {
+export function HudSlider({ label, suffix, value, min, max, step, display, onChange, onActiveChange, bracketed = false, disabled = false }: SliderProps) {
   const pct = ((value - min) / (max - min)) * 100;
   return (
-    <div className="mb-[14px] min-h-[36px]">
+    <div className={cn("mb-[14px] min-h-[36px]", disabled && "opacity-45")}>
       <div className="mb-[4px] flex min-h-[16px] items-baseline justify-between gap-2">
         <label className="flex items-baseline gap-[4px] text-[10px] tracking-[0.09em] text-[#cec5b3]/88">
           <span>{label}</span>
@@ -27,11 +28,15 @@ export function HudSlider({ label, suffix, value, min, max, step, display, onCha
         <span className={cn('num text-[10px] tracking-[0.02em]', bracketed ? 'text-[#d8c9ad]/88' : 'text-[#c3baa9]/80')}>{display}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        onPointerDown={() => onActiveChange?.(true)} onPointerUp={() => onActiveChange?.(false)}
-        onPointerCancel={() => onActiveChange?.(false)} onFocus={() => onActiveChange?.(true)} onBlur={() => onActiveChange?.(false)}
+        disabled={disabled}
+        onChange={(event) => !disabled && onChange(Number(event.target.value))}
+        onPointerDown={() => !disabled && onActiveChange?.(true)} onPointerUp={() => onActiveChange?.(false)}
+        onPointerCancel={() => onActiveChange?.(false)} onFocus={() => !disabled && onActiveChange?.(true)} onBlur={() => onActiveChange?.(false)}
         aria-label={`${label} ${suffix ?? ''}`.trim()}
-        className="hud-range h-[9px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#eac87f]"
+        className={cn(
+          "hud-range h-[9px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#eac87f]",
+          disabled && "cursor-not-allowed opacity-50 pointer-events-none"
+        )}
         style={{ ['--pct' as string]: `${pct}%` }} />
     </div>
   );

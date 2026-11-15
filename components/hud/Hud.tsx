@@ -12,6 +12,7 @@ import { PosePanel } from '@/components/hud/PosePanel';
 import { BodyProperties } from '@/components/hud/BodyProperties';
 import { SettingsPanel } from '@/components/hud/SettingsPanel';
 import { WardrobeDrawer } from '@/components/hud/WardrobeDrawer';
+import { BrowProperties } from '@/components/hud/BrowProperties';
 import { GizmoTooltip } from '@/components/hud/GizmoTooltip';
 import {
   IconAlbum,
@@ -62,9 +63,11 @@ export function Hud({ manifest }: HudProps) {
   const primaryTab = useCharacter((s) => s.primaryTab);
   const subTab = useCharacter((s) => s.subTab);
   const isDedicatedTab = primaryTab === 'EQUIPMENT' || primaryTab === 'BODY' || primaryTab === 'PRESET' || primaryTab === 'HAIR' || primaryTab === 'FACE';
-  const isRightDrawerActive = chrome && workspace !== 'edit';
-  const rightTitle =
-    workspace === 'camera'
+  const isBrowsTab = primaryTab === 'FACE' && subTab === 'BROWS';
+  const isRightDrawerActive = chrome && (workspace !== 'edit' || isBrowsTab);
+  const rightTitle = isBrowsTab
+    ? 'BROW COLOR & PROPERTIES'
+    : workspace === 'camera'
       ? 'CAMERA STUDIO'
       : workspace === 'graphics'
         ? 'GRAPHICS & SHADERS'
@@ -109,10 +112,10 @@ export function Hud({ manifest }: HudProps) {
   }, []);
 
   useEffect(() => {
-    if (workspace !== 'edit') {
+    if (workspace !== 'edit' || isBrowsTab) {
       setRightOpen(true);
     }
-  }, [workspace]);
+  }, [workspace, isBrowsTab]);
 
   /* Nonmodal drawers return focus to the workspace that opened them. Escape
      follows focus context first, so a drawer is closable from anywhere and is
@@ -282,34 +285,43 @@ export function Hud({ manifest }: HudProps) {
             'pointer-events-auto fixed bottom-[96px] right-2 top-[108px] z-50 flex select-none flex-col border-l border-[#d4b483]/25 bg-[#0a0907]/94 shadow-[0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-xl transition-all duration-300 motion-reduce:transition-none',
             'w-[min(calc(100vw-76px),380px)] lg:bottom-[72px] lg:top-[96px] lg:z-30 lg:w-[360px] lg:border lg:border-[#d4b483]/22 lg:bg-[#0a0907]/88 lg:shadow-[0_14px_38px_rgba(0,0,0,0.42)]',
             rightOpen && isRightDrawerActive ? 'translate-x-0' : 'invisible translate-x-[110%]',
+            isBrowsTab && '!bg-transparent !border-0 !shadow-none !backdrop-blur-none lg:!bg-transparent lg:!border-0 lg:!shadow-none lg:!w-[330px]',
           )}
         >
-          <div className="flex shrink-0 items-center justify-between border-b border-[#d4b483]/18 px-[12px] py-[9px]">
-            <span className="text-[10px] tracking-[0.16em] text-[#d8c39c] font-mono uppercase">
-              {rightTitle}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setRightOpen(false);
-                setWorkspace('edit');
-              }}
-              aria-label="Collapse drawer"
-              title="Close drawer (Esc)"
-              className="flex h-[22px] w-[22px] items-center justify-center border border-[#d4b483]/28 text-[#c3b698]/85 transition-colors hover:border-[#d4b483]/60 hover:text-[#f0e6d4] hud-focus"
-            >
-              <IconChevronLeft className="h-[10px] w-[10px] rotate-180" />
-            </button>
-          </div>
+          {!isBrowsTab && (
+            <div className="flex shrink-0 items-center justify-between border-b border-[#d4b483]/18 px-[12px] py-[9px]">
+              <span className="text-[10px] tracking-[0.16em] text-[#d8c39c] font-mono uppercase">
+                {rightTitle}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setRightOpen(false);
+                  setWorkspace('edit');
+                }}
+                aria-label="Collapse drawer"
+                title="Close drawer (Esc)"
+                className="flex h-[22px] w-[22px] items-center justify-center border border-[#d4b483]/28 text-[#c3b698]/85 transition-colors hover:border-[#d4b483]/60 hover:text-[#f0e6d4] hud-focus"
+              >
+                <IconChevronLeft className="h-[10px] w-[10px] rotate-180" />
+              </button>
+            </div>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto thin-scroll">
-            {workspace === 'poses' && <PosePanel />}
-            {workspace === 'camera' && <CameraPanel />}
-            {workspace === 'graphics' && <GraphicsPanel />}
-            {workspace === 'physics' && <BodyProperties manifest={manifest} />}
-            {workspace === 'sculpt' && <RightPanel manifest={manifest} />}
-            {workspace === 'settings' && <SettingsPanel />}
-            {workspace === 'assets' && <AssetPanel manifest={manifest} active={true} />}
-            {workspace === 'wardrobe' && <WardrobeDrawer manifest={manifest} />}
+            {isBrowsTab ? (
+              <BrowProperties />
+            ) : (
+              <>
+                {workspace === 'poses' && <PosePanel />}
+                {workspace === 'camera' && <CameraPanel />}
+                {workspace === 'graphics' && <GraphicsPanel />}
+                {workspace === 'physics' && <BodyProperties manifest={manifest} />}
+                {workspace === 'sculpt' && <RightPanel manifest={manifest} />}
+                {workspace === 'settings' && <SettingsPanel />}
+                {workspace === 'assets' && <AssetPanel manifest={manifest} active={true} />}
+                {workspace === 'wardrobe' && <WardrobeDrawer manifest={manifest} />}
+              </>
+            )}
           </div>
         </aside>
       )}

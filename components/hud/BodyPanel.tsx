@@ -1,6 +1,6 @@
 'use client';
 
-import { useCharacter } from '@/lib/store';
+import { useCharacter, BODY_WEIGHT_ENABLED } from '@/lib/store';
 import { HudSlider } from '@/components/hud/HudSlider';
 import { IconSparkle } from '@/components/hud/Icons';
 import { cn } from '@/lib/cn';
@@ -39,7 +39,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
           BODY ANATOMY & PHYSIQUE
         </h2>
         <span className="font-mono text-[9.5px] text-[#eac87f]">
-          {Math.round(weight * 100)}% WEIGHT
+          {!BODY_WEIGHT_ENABLED ? '0% WEIGHT (LOCKED)' : `${Math.round(weight * 100)}% WEIGHT`}
         </span>
       </div>
 
@@ -47,14 +47,15 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
       <div className="rounded-xs border border-[#d4b483]/22 bg-black/45 p-[9px] backdrop-blur-md">
         <HudSlider
           label="BODY WEIGHT"
-          suffix={hasBodyPair ? undefined : '(SINGLE MESH)'}
+          suffix={!BODY_WEIGHT_ENABLED ? '(LOCKED AT 0%)' : hasBodyPair ? undefined : '(SINGLE MESH)'}
           min={0}
           max={1}
           step={0.01}
           value={weight}
-          display={`${Math.round(weight * 100)}% (${weight.toFixed(2)})`}
+          disabled={!BODY_WEIGHT_ENABLED || !hasBodyPair}
+          display={!BODY_WEIGHT_ENABLED ? '0% (DISABLED)' : `${Math.round(weight * 100)}% (${weight.toFixed(2)})`}
           onChange={(v) => {
-            if (hasBodyPair) setWeight(v);
+            if (BODY_WEIGHT_ENABLED && hasBodyPair) setWeight(v);
           }}
           bracketed
         />
@@ -63,9 +64,10 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
         <div className="mt-2 flex items-center justify-between gap-1.5 text-[9px] font-mono">
           <button
             type="button"
+            disabled={!BODY_WEIGHT_ENABLED}
             onClick={() => setWeight(0)}
             className={cn(
-              'flex-1 rounded-xs border py-1 tracking-wider transition-all',
+              'flex-1 rounded-xs border py-1 tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed',
               weight === 0
                 ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
                 : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
@@ -75,9 +77,10 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
           </button>
           <button
             type="button"
+            disabled={!BODY_WEIGHT_ENABLED}
             onClick={() => setWeight(0.5)}
             className={cn(
-              'flex-1 rounded-xs border py-1 tracking-wider transition-all',
+              'flex-1 rounded-xs border py-1 tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed',
               Math.abs(weight - 0.5) < 0.02
                 ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
                 : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
@@ -87,9 +90,10 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
           </button>
           <button
             type="button"
+            disabled={!BODY_WEIGHT_ENABLED}
             onClick={() => setWeight(1)}
             className={cn(
-              'flex-1 rounded-xs border py-1 tracking-wider transition-all',
+              'flex-1 rounded-xs border py-1 tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed',
               weight === 1
                 ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
                 : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',

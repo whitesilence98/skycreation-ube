@@ -40,6 +40,16 @@ import { type BackgroundMode } from '@/lib/backgrounds';
 import { type CameraFraming, type CameraPoseRequest, CAMERA_FOV_DEFAULT, CAMERA_FOV_MIN, CAMERA_FOV_MAX, CAMERA_ROTATE_SPEED_DEFAULT, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPEED_MAX } from '@/lib/camera';
 import { LIGHTING_DEFAULTS, coerceLighting, bounded, wrapDegrees, type LightingSettings } from '@/lib/lighting';
 
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * FEATURE FLAG: BODY WEIGHT SCALING
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Set to `true` to re-enable body weight scaling and dynamic _0/_1 slider lerping.
+ * Set to `false` to disable changing body weight and lock to 0% (default slim _0 mesh).
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const BODY_WEIGHT_ENABLED = false;
+
 /** How a tint layer combines with the atlas beneath it. `normal` is the
  *  historical source-over draw and the value an absent `blend` means. */
 export type OverlayBlend = 'normal' | 'multiply' | 'screen' | 'overlay';
@@ -283,6 +293,21 @@ export interface CharacterState {
   skinSheen: number;
   /** Skin tone color tint `#rrggbb`. '#ffffff' = untinted raw diffuse. */
   skinColor: string;
+  /** Eyebrow tint `#rrggbb`. Default '#2B1A0A' matching Skyrim creation studio. */
+  browColor: string;
+  setBrowColor: (c: string) => void;
+  /** Eyebrow opacity [0..1]. Default 1.0 (100%). */
+  browOpacity: number;
+  setBrowOpacity: (v: number) => void;
+  /** Eyebrow specular gloss [0..1]. Default 0.15 (15%). */
+  browGloss: number;
+  setBrowGloss: (v: number) => void;
+  /** Eyebrow glossiness sharpness [0..1]. Default 0.15 (15%). */
+  browGlossy: number;
+  setBrowGlossy: (v: number) => void;
+  /** Favorited brow IDs. */
+  favoriteBrows: string[];
+  toggleFavoriteBrow: (id: string) => void;
   /** Display transform applied after the linear composer. */
   toneMapping: ToneMappingId;
   /** Whether the graphics workspace is the active left dock panel. */
@@ -468,10 +493,12 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         ? s.favoritePoses.filter((p) => p !== id)
         : [...s.favoritePoses, id],
     })),
-  /* Skyrim's own default weight is 1.0, and `femalebody_1.nif` is the mesh the
-     game shows at it. */
-  weight: 1,
-  setWeight: (weight) => set({ weight: Math.min(1, Math.max(0, weight)) }),
+  /* Default weight is locked to 0 (slim _0 mesh) when BODY_WEIGHT_ENABLED is false. */
+  weight: BODY_WEIGHT_ENABLED ? 1 : 0,
+  setWeight: (weight) => {
+    if (!BODY_WEIGHT_ENABLED) return;
+    set({ weight: Math.min(1, Math.max(0, weight)) });
+  },
   linkFaceToWeight: true,
   setLinkFaceToWeight: (linkFaceToWeight) => set({ linkFaceToWeight }),
   bodyPhysicsEnabled: true,
@@ -546,6 +573,21 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   skinDetail: 0.45,
   skinSheen: 0.2,
   skinColor: '#ffffff',
+  browColor: '#2B1A0A',
+  setBrowColor: (browColor) => set({ browColor }),
+  browOpacity: 1.0,
+  setBrowOpacity: (browOpacity) => set({ browOpacity: Math.min(1, Math.max(0, browOpacity)) }),
+  browGloss: 0.15,
+  setBrowGloss: (browGloss) => set({ browGloss: Math.min(1, Math.max(0, browGloss)) }),
+  browGlossy: 0.15,
+  setBrowGlossy: (browGlossy) => set({ browGlossy: Math.min(1, Math.max(0, browGlossy)) }),
+  favoriteBrows: [],
+  toggleFavoriteBrow: (id) =>
+    set((s) => ({
+      favoriteBrows: s.favoriteBrows.includes(id)
+        ? s.favoriteBrows.filter((b) => b !== id)
+        : [...s.favoriteBrows, id],
+    })),
   toneMapping: 'neutral',
   graphicsOpen: false,
   cameraOpen: false,
@@ -716,7 +758,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         sliders: def ? presetSliderBank(def) : buildSliderBank(),
         poses: buildPoseBank(),
         assetSelection,
-        ...(def?.weight !== undefined ? { weight: def.weight } : {}),
+        ...(BODY_WEIGHT_ENABLED && def?.weight !== undefined ? { weight: def.weight } : { weight: 0 }),
       };
     }),
 
@@ -837,9 +879,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
            view fields above — a `.jslot` has no notion of the paper-doll. */
         equipment: payload.equipment ?? s.equipment,
         /* A `.jslot` records `actor.weight` as 0–100; `parsePreset` divides it.
-           A LYRA export writes the same 0–1 value back. A file that carries
-           neither keeps the current weight, like the view fields above. */
-        weight: payload.weight ?? s.weight,
+           When BODY_WEIGHT_ENABLED is false, weight is locked at 0. */
+        weight: BODY_WEIGHT_ENABLED ? (payload.weight ?? s.weight) : 0,
         linkFaceToWeight: (payload as { linkFaceToWeight?: boolean }).linkFaceToWeight ?? s.linkFaceToWeight,
         hair: payload.hair ? coerceHair({ ...s.hair, ...payload.hair }) : s.hair,
         overlayLayers: payload.overlays ?? s.overlayLayers,

@@ -24,6 +24,8 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
   const selection = useCharacter((s) => s.assetSelection);
   const setAssets = useCharacter((s) => s.setAssets);
   const setCatalogue = useCharacter((s) => s.setAssetCatalogue);
+  const favoriteBrows = useCharacter((s) => s.favoriteBrows);
+  const toggleFavoriteBrow = useCharacter((s) => s.toggleFavoriteBrow);
 
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterTab>('ALL');
@@ -231,14 +233,17 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
           </div>
 
           {/* ── Search Input ───────────────────────────────────────────── */}
-          <div className="relative">
+          <div className="relative flex items-center">
+            <span className="pointer-events-none absolute left-[8px] text-[10px] text-[#8f8778]">
+              🔍
+            </span>
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search brows by style or number…"
               aria-label="Search brows"
-              className="w-full border border-[#d4b483]/26 bg-black/48 px-[7px] py-[3px] text-[10px] tracking-[0.06em] text-[#e2d8c6] placeholder-[#8f8778]/55 outline-none transition-colors focus:border-[#d4b483]/60"
+              className="w-full rounded-xs border border-[#d4b483]/26 bg-black/48 pl-[24px] pr-[22px] py-[4px] text-[10px] tracking-[0.06em] text-[#e2d8c6] placeholder-[#8f8778]/55 outline-none transition-colors focus:border-[#d4b483]/60"
             />
             {query && (
               <button
@@ -251,76 +256,74 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
             )}
           </div>
 
-          {/* ── Eyebrows Grid (2 columns of 2.2:1 horizontal cards) ──────── */}
-          <div className="thin-scroll grid max-h-[260px] grid-cols-2 gap-2 overflow-y-auto pr-[2px]">
-            {filteredBrows.map((brow, i) => {
+          {/* ── Eyebrows Grid (2 columns of 2.1:1 horizontal cards) ──────── */}
+          <div className="thin-scroll grid max-h-[268px] grid-cols-2 gap-2 overflow-y-auto pr-[2px]">
+            {filteredBrows.map((brow) => {
               const isSelected = brow.id === activeId;
+              const isFavorite = favoriteBrows.includes(brow.id);
               const isIlv = (brow.rel || '').includes('Brows_ILV');
-              const seriesTag = isIlv ? 'ILV' : 'COR';
               const cleanLabel = formatBrowLabel(brow);
 
               return (
-                <button
+                <div
                   key={brow.id}
-                  type="button"
                   onClick={() => setAssets({ brows: brow.id })}
-                  aria-label={cleanLabel}
-                  aria-pressed={isSelected}
+                  className={cn(
+                    'group relative flex aspect-[2.1/1] w-full cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xs border p-[4px] transition-all duration-200 select-none',
+                    isSelected
+                      ? 'border-[#eac87f] bg-[#eac87f]/14 shadow-[0_0_12px_rgba(234,200,127,0.35)] ring-1 ring-[#eac87f]/60'
+                      : 'border-[#d4b483]/25 bg-[#161311]/90 hover:border-[#d4b483]/60 hover:bg-[#201a16]',
+                  )}
                   title={`${cleanLabel}\nSeries: ${isIlv ? 'ILV Series' : 'COR Classic'}\nFile: ${brow.file}`}
-                  className="group relative flex min-w-0 flex-col items-center text-left"
                 >
-                  {/* Eyebrow Arch Card Preview */}
-                  <span
+                  {/* Eyebrow Arch Texture Preview */}
+                  <img
+                    src={convertUrl({ kind: 'brows', id: brow.id, mode: 'thumb' })}
+                    alt=""
+                    loading="lazy"
                     className={cn(
-                      'relative flex aspect-[2.2/1] w-full items-center justify-center overflow-hidden rounded-xs border p-[3px] transition-all duration-200',
-                      isSelected
-                        ? 'border-[#eac87f] bg-[#eac87f]/16 shadow-[0_0_12px_rgba(234,200,127,0.45)] ring-1 ring-[#eac87f]/60'
-                        : 'border-[#d4b483]/25 bg-[#161311] group-hover:border-[#d4b483]/60 group-hover:bg-[#201a16]',
+                      'h-full w-full object-contain filter drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)] transition-transform duration-200 group-hover:scale-105',
+                      isSelected ? 'opacity-100' : 'opacity-85 group-hover:opacity-100',
                     )}
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      const atlasUrl = convertUrl({ kind: 'brows', id: brow.id, mode: 'atlas' });
+                      if (target.src !== atlasUrl) {
+                        target.src = atlasUrl;
+                      }
+                    }}
+                  />
+
+                  {/* Favorite Star Icon on Top-Right */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavoriteBrow(brow.id);
+                    }}
+                    title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                    aria-label={isFavorite ? 'Unfavorite brow' : 'Favorite brow'}
+                    className="absolute top-[3px] right-[4px] z-10 text-[11px] leading-none transition-transform hover:scale-125 focus:outline-none"
                   >
-                    <img
-                      src={convertUrl({ kind: 'brows', id: brow.id, mode: 'thumb' })}
-                      alt=""
-                      loading="lazy"
-                      className={cn(
-                        'h-full w-full object-contain filter drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)] transition-transform duration-200 group-hover:scale-105',
-                        isSelected ? 'opacity-100' : 'opacity-85 group-hover:opacity-100',
-                      )}
-                      onError={(e) => {
-                        const target = e.currentTarget;
-                        const atlasUrl = convertUrl({ kind: 'brows', id: brow.id, mode: 'atlas' });
-                        if (target.src !== atlasUrl) {
-                          target.src = atlasUrl;
-                        }
-                      }}
-                    />
-
-                    {/* Series Badge on Top-Left */}
-                    <span className="pointer-events-none absolute top-[2px] left-[3px] text-[7.5px] font-mono tracking-tight text-[#d4b483]/70 font-bold">
-                      {seriesTag}
-                    </span>
-
-                    {/* Index Badge on Bottom-Right */}
-                    <span className="pointer-events-none absolute bottom-[1px] right-[3px] text-[8px] font-mono tracking-tight text-[#eadcc0]/75">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-
-                    {/* Active glowing indicator */}
-                    {isSelected && (
-                      <span className="pointer-events-none absolute top-[2px] right-[3px] h-[4px] w-[4px] rounded-full bg-[#f2dfbe] shadow-[0_0_6px_rgba(242,223,190,0.95)]" />
+                    {isFavorite || isSelected ? (
+                      <span className="text-[#eac87f] drop-shadow-[0_0_4px_rgba(234,200,127,0.8)]">★</span>
+                    ) : (
+                      <span className="text-[#8f8778]/60 hover:text-[#eac87f]">☆</span>
                     )}
-                  </span>
+                  </button>
 
-                  {/* Brow Title */}
+                  {/* Brow Title Pill at Bottom */}
                   <span
                     className={cn(
-                      'mt-[3px] w-full truncate text-center text-[9.5px] tracking-[0.03em] transition-colors',
-                      isSelected ? 'font-medium text-[#f0e2ca]' : 'text-[#a9a192]/70 group-hover:text-[#d5ccbb]',
+                      'absolute bottom-[3px] inset-x-[4px] truncate rounded-[2px] px-1 py-[1.5px] text-center text-[8.5px] tracking-[0.03em] backdrop-blur-xs transition-colors',
+                      isSelected
+                        ? 'bg-black/75 font-medium text-[#f0e2ca]'
+                        : 'bg-black/55 text-[#a9a192] group-hover:text-[#e2d8c6] group-hover:bg-black/70',
                     )}
                   >
                     {cleanLabel}
                   </span>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -337,7 +340,7 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
         <div className="flex items-center justify-between border-t border-[#d4b483]/18 pt-2 text-[9.5px] tracking-[0.11em] text-[#8b8375]/60">
           <div className="flex items-center gap-[4px]">
             <IconSparkle className="h-[6px] w-[6px] text-[#c9b184]/50" />
-            <span>!COR · !UBE · 3D SCULPT</span>
+            <span>+ COR · UBE · 3D SCULPT</span>
           </div>
           <span>{filteredBrows.length} SHOWN</span>
         </div>

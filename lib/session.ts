@@ -251,9 +251,8 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     animationPlaying: bool(o.animationPlaying, defaults.animationPlaying ?? true),
     animationSpeed: bounded(o.animationSpeed, defaults.animationSpeed ?? 1, 0.2, 2),
     autoRigUnskinned: bool(o.autoRigUnskinned, defaults.autoRigUnskinned ?? true),
-    /* `coerceWeight` normalises 0–100 → 0–1 and refuses anything outside it;
-       the fallback is the model's own 1.0, not the stored nonsense. */
-    weight: coerceWeight(o.weight) ?? defaults.weight,
+    /* When default weight is 0 (locked), session restores 0. Otherwise coerceWeight. */
+    weight: defaults.weight === 0 ? 0 : (coerceWeight(o.weight) ?? defaults.weight),
     bodyPhysicsEnabled: bool(o.bodyPhysicsEnabled, defaults.bodyPhysicsEnabled ?? true),
     bodyPhysicsBounciness: clamp(finite(o.bodyPhysicsBounciness, defaults.bodyPhysicsBounciness ?? 0.5), 0, 1),
     bodyCollisionsEnabled: bool(o.bodyCollisionsEnabled, defaults.bodyCollisionsEnabled ?? true),

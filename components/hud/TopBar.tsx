@@ -150,32 +150,6 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
             })}
           </nav>
 
-          {/* Only FACE has texture sub-tabs; FACE SHAPE owns its own rail, so
-              the row collapses everywhere else instead of showing a stale
-              highlight for a category that tab does not list. */}
-          {primaryTab === 'PRESET' && (
-            <div className="mt-[2px] flex max-w-full items-center gap-[6px] overflow-x-auto overflow-y-hidden py-[2px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
-              <div className="flex items-center gap-[6px]">
-                <span className="mr-[1px] inline-block h-[3px] w-[3px] rounded-full bg-[#d4b483]" />
-                <span className="whitespace-nowrap text-[10px] font-medium tracking-[0.11em] text-[#d8c39c]">
-                  PRESET SELECTION [ACTIVE]
-                </span>
-                <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
-              </div>
-              <div className="flex items-center gap-[6px]">
-                <span className="cursor-not-allowed whitespace-nowrap text-[10px] font-light tracking-[0.11em] text-[#7a7266]/35 select-none">
-                  SAVED PRESETS
-                </span>
-                <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
-              </div>
-              <div className="flex items-center gap-[6px]">
-                <span className="cursor-not-allowed whitespace-nowrap text-[10px] font-light tracking-[0.11em] text-[#7a7266]/35 select-none">
-                  USER PRESETS
-                </span>
-              </div>
-            </div>
-          )}
-
           {primaryTab === 'FACE' && (
           <div className="mt-[2px] flex max-w-full items-center gap-[6px] overflow-x-auto overflow-y-hidden py-[2px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>div]:shrink-0">
             {SECONDARY.map((item, i) => {

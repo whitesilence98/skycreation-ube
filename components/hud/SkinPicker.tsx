@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useCharacter } from '@/lib/store';
+import { useCharacter, BODY_WEIGHT_ENABLED } from '@/lib/store';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
@@ -370,10 +370,10 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
         {/* ── 1. BODY WEIGHT & STATURE ───────────────────────────────── */}
         <div className="flex flex-col gap-1.5 pt-0.5">
           <div className="flex items-center justify-between text-[10px] font-mono tracking-[0.08em]">
-            <span className="text-[#c4b595] uppercase">BODY WEIGHT</span>
+            <span className="text-[#c4b595] uppercase">BODY WEIGHT {!BODY_WEIGHT_ENABLED && '(LOCKED)'}</span>
             <div className="flex items-center gap-1.5 text-[#8f8778]">
-              <span className="text-[#d8c39c]">[{weightPercent}%]</span>
-              <span>({weight.toFixed(2)})</span>
+              <span className="text-[#d8c39c]">[{!BODY_WEIGHT_ENABLED ? '0%' : `${weightPercent}%`}]</span>
+              <span>({!BODY_WEIGHT_ENABLED ? '0.00' : weight.toFixed(2)})</span>
             </div>
           </div>
           <input
@@ -382,8 +382,12 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
             max={1}
             step={0.01}
             value={weight}
-            onChange={(e) => setWeight(parseFloat(e.target.value))}
-            className="h-1 w-full cursor-pointer appearance-none rounded-full bg-[#201d18] accent-[#d4b483]"
+            disabled={!BODY_WEIGHT_ENABLED}
+            onChange={(e) => BODY_WEIGHT_ENABLED && setWeight(parseFloat(e.target.value))}
+            className={cn(
+              "h-1 w-full cursor-pointer appearance-none rounded-full bg-[#201d18] accent-[#d4b483]",
+              !BODY_WEIGHT_ENABLED && "opacity-40 cursor-not-allowed pointer-events-none"
+            )}
             aria-label="Body weight slider"
           />
           <div className="flex items-center justify-between text-[8.5px] font-mono text-[#8f8778]/70 px-0.5">

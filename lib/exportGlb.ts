@@ -43,8 +43,9 @@ export async function exportCharacterGlb(
   customName?: string,
   options?: ExportOptions,
 ): Promise<void> {
+  const opts: ExportOptions = { animated: true, ...options };
   if (activeHandler) {
-    return activeHandler(customName, options);
+    return activeHandler(customName, opts);
   }
   throw new Error('3D scene is not ready for export. Please wait for model to load.');
 }
@@ -320,7 +321,8 @@ export async function exportCharacterScene(
        whose node is gone. Facial-rig (`SkyrimHeadRoot`) bones collapse onto
        the head bone below, so only body/XP32 motion is exported. */
     const keep = new Set(essentialList.flatMap((bone) => [bone.uuid, bone.name]));
-    const clips = options?.animated ? buildExportClips(essentialList, keep) : [];
+    const animated = options?.animated !== false;
+    const clips = animated ? buildExportClips(essentialList, keep) : [];
 
     const exporter = new GLTFExporter();
     const gltf = await exporter.parseAsync(character, {
