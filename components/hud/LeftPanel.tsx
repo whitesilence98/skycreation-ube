@@ -96,7 +96,7 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
   const setWorkspace = useCharacter((s) => s.setWorkspace);
   const showUtilities = false;
   const isDualStudioTab =
-    (primaryTab === 'FACE' && (subTab === 'BROWS' || subTab === 'SKIN')) ||
+    (primaryTab === 'FACE' && (subTab === 'BROWS' || subTab === 'SKIN' || subTab === 'EYES' || subTab === 'MAKEUP')) ||
     primaryTab === 'HAIR' ||
     primaryTab === 'BODY';
 
@@ -230,7 +230,7 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
 
       {/* ── eye textures / picker ───────────────────────────────────── */}
       {primaryTab === 'FACE' && subTab === 'EYES' && (
-        <div className="mt-[3px]">
+        <div className="mt-0">
           <EyePicker manifest={manifest} />
         </div>
       )}
@@ -244,7 +244,7 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
 
       {/* ── makeup & tintmask picker ──────────────────────────────── */}
       {primaryTab === 'FACE' && subTab === 'MAKEUP' && (
-        <div className="mt-[3px]">
+        <div className="mt-0">
           <MakeupPicker />
         </div>
       )}

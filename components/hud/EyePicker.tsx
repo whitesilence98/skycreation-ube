@@ -5,6 +5,7 @@ import { useCharacter } from '@/lib/store';
 import { convertUrl, fetchCatalogue, matchesQuery } from '@/lib/mo2/client';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import type { CatalogueEntry } from '@/lib/mo2/types';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import { cn } from '@/lib/cn';
 import { IconSparkle } from '@/components/hud/Icons';
 
@@ -110,13 +111,14 @@ export function EyePicker({ manifest }: { manifest: Mo2Manifest | null }) {
   const activeLabel = activeEntry ? (activeEntry.label || activeEntry.file.replace(/\.dds$/i, '')) : 'Default Eyes';
 
   return (
-    <div className="relative flex w-full flex-col select-none">
-      <div className="flex flex-col gap-3 rounded-xs border border-[#d4b483]/22 bg-black/45 p-3.5 backdrop-blur-md">
-        {/* Top Header: EYES & GAZE */}
-        <h2 className="text-[11px] font-medium tracking-[0.05em] text-[#efece6] uppercase">
-          EYES &amp; GAZE
-        </h2>
-
+    <StudioCard
+      title="EYES & GAZE"
+      badge={loading ? 'LOADING…' : `${allEyes.length} PRESETS`}
+      footerLeading={<span>+ ZHIZHEN · UBE · KORALINA</span>}
+      footerTrailing={<span>{filteredEyes.length} SHOWN</span>}
+      showSparkle
+    >
+      <div className="flex flex-col gap-2.5">
         {/* ── Sub-brand Filters ─────────────────────────────────────── */}
         <div className="flex flex-col gap-2 pt-0.5">
           <div className="flex items-center justify-between">
@@ -267,24 +269,7 @@ export function EyePicker({ manifest }: { manifest: Mo2Manifest | null }) {
             </span>
           </div>
         </div>
-
-        {/* ── Status Footer ─────────────────────────────────────────── */}
-        <div className="flex items-center justify-between border-t border-[#d4b483]/18 pt-2 text-[9.5px] tracking-[0.11em] text-[#8b8375]/60">
-          <div className="flex items-center gap-[4px]">
-            <IconSparkle className="h-[6px] w-[6px] text-[#c9b184]/50" />
-            <span>ZHIZHEN · UBE · KORALINA</span>
-          </div>
-          <span>{filteredEyes.length} SHOWN</span>
-        </div>
-
-        {/* ── Bottom Decorative Arc ─────────────────────────────────── */}
-        <div className="flex justify-center pt-1">
-          <svg className="h-5 w-14 text-[#d4b483]/30" viewBox="0 0 100 40" fill="none" stroke="currentColor" strokeWidth="1">
-            <path d="M 10 38 Q 50 5 90 38" />
-            <path d="M 50 5 L 50 0" />
-          </svg>
-        </div>
       </div>
-    </div>
+    </StudioCard>
   );
 }

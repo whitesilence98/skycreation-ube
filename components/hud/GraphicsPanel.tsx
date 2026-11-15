@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useCharacter, type EnbPreset, type FilterPreset, type ToneMappingId } from '@/lib/store';
 import { FILTER_PRESETS } from '@/lib/graphics';
 import { useRenderStats } from '@/lib/perf';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import { IconCamera, IconEye, IconGear } from '@/components/hud/Icons';
 import { RangeRow as SliderRow } from '@/components/hud/HudSlider';
 import { cn } from '@/lib/cn';
@@ -79,7 +80,11 @@ function CheckSquare({ on, className }: { on: boolean; className?: string }) {
   );
 }
 
-export function GraphicsPanel() {
+export interface GraphicsPanelProps {
+  onClose?: () => void;
+}
+
+export function GraphicsPanel({ onClose }: GraphicsPanelProps = {}) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement | null>(null);
   const enbEnabled = useCharacter((s) => s.enbEnabled);
@@ -119,18 +124,15 @@ export function GraphicsPanel() {
   }, [pickerOpen]);
 
   return (
-    <section
-      id="graphics-panel"
-      aria-label="Graphics engine and visuals"
-      className="flex h-full min-h-0 w-full select-none flex-col overflow-y-auto thin-scroll"
+    <StudioCard
+      title="GRAPHICS ENGINE"
+      badge="ENB / FX"
+      onClose={onClose ?? (() => useCharacter.getState().setWorkspace('edit'))}
+      footerLeading={<span>+ THREE.JS PBR</span>}
+      footerTrailing={<span>FPS {perf.fps || '—'}</span>}
+      showSparkle
     >
-      <header className="sticky top-0 z-10 border-b border-[#d4b483]/16 bg-[#14100b]/96 px-[12px] py-[6px] backdrop-blur-md">
-        <h2 className="text-[10px] font-medium tracking-[0.14em] text-[#efe3c8]">
-          GRAPHICS ENGINE &amp; VISUALS (ENB/FX)
-        </h2>
-      </header>
-
-      <div className="flex flex-col gap-[7px] px-[12px] py-[9px]">
+      <div className="flex flex-col gap-[7px]">
         {/* ── ENB ─────────────────────────────────────────────────── */}
             <div>
               <SectionTitle>ENB PRESETS</SectionTitle>
@@ -485,6 +487,6 @@ export function GraphicsPanel() {
               <span className="text-[#8f8778]/55">VRAM N/A — not exposed by WebGL</span>
             </div>
       </div>
-    </section>
+    </StudioCard>
   );
 }

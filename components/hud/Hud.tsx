@@ -15,6 +15,8 @@ import { WardrobeDrawer } from '@/components/hud/WardrobeDrawer';
 import { BrowProperties } from '@/components/hud/BrowProperties';
 import { HairProperties } from '@/components/hud/HairProperties';
 import { SkinProperties } from '@/components/hud/SkinProperties';
+import { EyeProperties } from '@/components/hud/EyeProperties';
+import { MakeupProperties } from '@/components/hud/MakeupProperties';
 import { GizmoTooltip } from '@/components/hud/GizmoTooltip';
 import {
   IconAlbum,
@@ -68,7 +70,9 @@ export function Hud({ manifest }: HudProps) {
   const isBrowsTab = primaryTab === 'FACE' && subTab === 'BROWS';
   const isHairTab = primaryTab === 'HAIR';
   const isSkinTab = (primaryTab === 'FACE' && subTab === 'SKIN') || primaryTab === 'BODY';
-  const isDualStudioTab = isBrowsTab || isHairTab || isSkinTab;
+  const isEyesTab = primaryTab === 'FACE' && subTab === 'EYES';
+  const isMakeupTab = primaryTab === 'FACE' && subTab === 'MAKEUP';
+  const isDualStudioTab = isBrowsTab || isHairTab || isSkinTab || isEyesTab || isMakeupTab;
   const isRightDrawerActive = chrome && (workspace !== 'edit' || isDualStudioTab);
   const rightTitle = isBrowsTab
     ? 'BROW COLOR & PROPERTIES'
@@ -76,7 +80,11 @@ export function Hud({ manifest }: HudProps) {
       ? 'HAIR COLOR & PROPERTIES'
       : isSkinTab
         ? 'SKIN COLOR & PROPERTIES'
-        : workspace === 'camera'
+        : isEyesTab
+          ? 'EYE COLOR & PROPERTIES'
+          : isMakeupTab
+            ? 'MAKEUP & TINT'
+            : workspace === 'camera'
       ? 'CAMERA STUDIO'
       : workspace === 'graphics'
         ? 'GRAPHICS & SHADERS'
@@ -98,6 +106,11 @@ export function Hud({ manifest }: HudProps) {
   const [rightOpen, setRightOpen] = useState(true);
   const leftTrigger = useRef<HTMLButtonElement>(null);
   const rightTrigger = useRef<HTMLButtonElement>(null);
+
+  const closeRightDrawer = () => {
+    setRightOpen(false);
+    setWorkspace('edit');
+  };
   /* Only a deliberate workspace switch moves focus into the rail. Mounting the
      HUD or leaving preview must never pull focus off whatever had it. */
   const pendingFocus = useRef(false);
@@ -287,7 +300,7 @@ export function Hud({ manifest }: HudProps) {
         </div>
       </aside>
 
-      {/* ── right studio drawer: opens on demand for tools like Pose, Camera, Graphics, Physics, Sculpt ────── */}
+      {/* ── right studio drawer: universal floating studio card for tools and properties ────── */}
       {chrome && (
         <aside
           id="hud-right-rail"
@@ -295,31 +308,11 @@ export function Hud({ manifest }: HudProps) {
           aria-hidden={!rightOpen || !isRightDrawerActive}
           inert={!rightOpen || !isRightDrawerActive}
           className={cn(
-            'pointer-events-auto fixed bottom-[96px] right-2 top-[108px] z-50 flex select-none flex-col border-l border-[#d4b483]/25 bg-[#0a0907]/94 shadow-[0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-xl transition-all duration-300 motion-reduce:transition-none',
-            'w-[min(calc(100vw-76px),380px)] lg:bottom-[72px] lg:top-[96px] lg:z-30 lg:w-[360px] lg:border lg:border-[#d4b483]/22 lg:bg-[#0a0907]/88 lg:shadow-[0_14px_38px_rgba(0,0,0,0.42)]',
-            rightOpen && isRightDrawerActive ? 'translate-x-0' : 'invisible translate-x-[110%]',
-            isDualStudioTab && '!right-[20px] !top-[84px] !w-[276px] lg:!right-[20px] lg:!top-[84px] lg:!w-[276px] !bg-transparent !border-0 !shadow-none !backdrop-blur-none',
+            'pointer-events-auto fixed right-[20px] top-[84px] z-50 flex w-[276px] select-none flex-col',
+            'bg-transparent border-0 shadow-none backdrop-blur-none transition-all duration-300 motion-reduce:transition-none',
+            rightOpen && isRightDrawerActive ? 'translate-x-0' : 'invisible translate-x-[120%]',
           )}
         >
-          {!isDualStudioTab && (
-            <div className="flex shrink-0 items-center justify-between border-b border-[#d4b483]/18 px-[12px] py-[9px]">
-              <span className="text-[10px] tracking-[0.16em] text-[#d8c39c] font-mono uppercase">
-                {rightTitle}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setRightOpen(false);
-                  setWorkspace('edit');
-                }}
-                aria-label="Collapse drawer"
-                title="Close drawer (Esc)"
-                className="flex h-[22px] w-[22px] items-center justify-center border border-[#d4b483]/28 text-[#c3b698]/85 transition-colors hover:border-[#d4b483]/60 hover:text-[#f0e6d4] hud-focus"
-              >
-                <IconChevronLeft className="h-[10px] w-[10px] rotate-180" />
-              </button>
-            </div>
-          )}
           <div className="min-h-0 flex-1 overflow-y-auto thin-scroll">
             {isBrowsTab ? (
               <BrowProperties />
@@ -327,16 +320,20 @@ export function Hud({ manifest }: HudProps) {
               <HairProperties />
             ) : isSkinTab ? (
               <SkinProperties />
+            ) : isEyesTab ? (
+              <EyeProperties />
+            ) : isMakeupTab ? (
+              <MakeupProperties />
             ) : (
               <>
-                {workspace === 'poses' && <PosePanel />}
-                {workspace === 'camera' && <CameraPanel />}
-                {workspace === 'graphics' && <GraphicsPanel />}
-                {workspace === 'physics' && <BodyProperties manifest={manifest} />}
-                {workspace === 'sculpt' && <RightPanel manifest={manifest} />}
-                {workspace === 'settings' && <SettingsPanel />}
-                {workspace === 'assets' && <AssetPanel manifest={manifest} active={true} />}
-                {workspace === 'wardrobe' && <WardrobeDrawer manifest={manifest} />}
+                {workspace === 'poses' && <PosePanel onClose={closeRightDrawer} />}
+                {workspace === 'camera' && <CameraPanel onClose={closeRightDrawer} />}
+                {workspace === 'graphics' && <GraphicsPanel onClose={closeRightDrawer} />}
+                {workspace === 'physics' && <BodyProperties manifest={manifest} onClose={closeRightDrawer} />}
+                {workspace === 'sculpt' && <RightPanel manifest={manifest} onClose={closeRightDrawer} />}
+                {workspace === 'settings' && <SettingsPanel onClose={closeRightDrawer} />}
+                {workspace === 'assets' && <AssetPanel manifest={manifest} active={true} onClose={closeRightDrawer} />}
+                {workspace === 'wardrobe' && <WardrobeDrawer manifest={manifest} onClose={closeRightDrawer} />}
               </>
             )}
           </div>

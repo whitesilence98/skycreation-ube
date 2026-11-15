@@ -2,6 +2,7 @@
 
 import { useCharacter } from '@/lib/store';
 import { SLIDER_DEFS, REGIONS_BY_ID, REGIONS, type TransformMode } from '@/lib/regions';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import { IconCheck, IconMove, IconRotate, IconScale, IconSparkle } from '@/components/hud/Icons';
 import { HudSlider as Slider } from '@/components/hud/HudSlider';
 import { cn } from '@/lib/cn';
@@ -15,9 +16,10 @@ const MODES: Array<{ id: TransformMode; label: string; Icon: (p: { className?: s
 
 interface RightPanelProps {
   manifest?: Mo2Manifest | null;
+  onClose?: () => void;
 }
 
-export function RightPanel({ manifest: _manifest = null }: RightPanelProps) {
+export function RightPanel({ manifest: _manifest = null, onClose }: RightPanelProps) {
   const mode = useCharacter((s) => s.transformMode);
   const setMode = useCharacter((s) => s.setTransformMode);
   const activeRegion = useCharacter((s) => s.activeRegion);
@@ -36,14 +38,16 @@ export function RightPanel({ manifest: _manifest = null }: RightPanelProps) {
   const morphSliders = SLIDER_DEFS.filter((s) => s.style === 'morph');
 
   return (
-    <div className="pointer-events-auto w-full select-none p-3 hud-fade">
-      <div className="mb-[12px] border-b border-[#d4b483]/20 pb-[6px]">
-        <h3 className="text-[10px] font-medium tracking-[0.14em] text-[#d8c39c] uppercase font-mono">
-          3D FACE SCULPT CONTROLLER
-        </h3>
-      </div>
-
-      {/* ── Facial Region Selection ─────────────────────────────────── */}
+    <StudioCard
+      title="FACIAL SCULPT"
+      badge={region?.label ?? activeRegion.toUpperCase()}
+      onClose={onClose ?? (() => useCharacter.getState().setWorkspace('edit'))}
+      footerLeading={<span>+ 3D RACEMENU</span>}
+      footerTrailing={<span>{region.bone}</span>}
+      showSparkle
+    >
+      <div className="flex flex-col gap-2.5">
+        {/* ── Facial Region Selection ─────────────────────────────────── */}
       <div className="mb-[12px] border border-[#d4b483]/22 bg-black/40 p-2">
         <div className="mb-[6px] flex items-center justify-between text-[10px] font-mono tracking-wider text-[#d8c39c]">
           <span>SELECT REGION:</span>
@@ -171,10 +175,7 @@ export function RightPanel({ manifest: _manifest = null }: RightPanelProps) {
           <IconSparkle className="h-[14px] w-[14px] text-[#cfc0a2]/42" />
         </div>
       </div>
-
-      <p className="mt-[10px] whitespace-nowrap pl-[1px] text-[9.5px] font-mono tracking-[0.13em] text-[#8b8375]/52">
-        {region.short} · {region.bone} · RACEMENU MORPH
-      </p>
-    </div>
+      </div>
+    </StudioCard>
   );
 }

@@ -5,6 +5,7 @@ import { useCharacter, type OverlayLayer, type OverlayBlend } from '@/lib/store'
 import { convertUrl, fetchCatalogue, matchesQuery } from '@/lib/mo2/client';
 import type { CatalogueEntry } from '@/lib/mo2/types';
 import { cn } from '@/lib/cn';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import { IconEye, IconSparkle } from '@/components/hud/Icons';
 
 const CATEGORIES = ['ALL', 'LIPS', 'BLUSH', 'EYELINER', 'EYESHADOW', 'OVERLAYS'] as const;
@@ -182,13 +183,14 @@ export function MakeupPicker({ onDirty }: { onDirty?: () => void }) {
   };
 
   return (
-    <div className="relative flex w-full flex-col select-none">
-      <div className="flex flex-col gap-3 rounded-xs border border-[#d4b483]/22 bg-black/45 p-3.5 backdrop-blur-md">
-        {/* Top Header: MAKEUP & TINTS */}
-        <h2 className="text-[11px] font-medium tracking-[0.05em] text-[#efece6] uppercase">
-          MAKEUP &amp; TINTS
-        </h2>
-
+    <StudioCard
+      title="MAKEUP & TINTS"
+      badge={loading ? 'LOADING…' : `${entries.length} STYLES`}
+      footerLeading={<span>+ SDZ21 · UBE 4K ATLAS MASKS</span>}
+      footerTrailing={<span>{filtered.length} SHOWN</span>}
+      showSparkle
+    >
+      <div className="flex flex-col gap-2.5">
         {/* ── 1. ACTIVE LAYERS STACK ─────────────────────────────────── */}
         <div className="flex flex-col gap-1.5 pt-0.5">
           <div className="flex items-center justify-between">
@@ -527,23 +529,7 @@ export function MakeupPicker({ onDirty }: { onDirty?: () => void }) {
             )}
           </div>
         </div>
-
-        {/* ── 4. Status Footer & Arc ─────────────────────────────────── */}
-        <div className="flex items-center justify-between border-t border-[#d4b483]/18 pt-2 text-[9.5px] tracking-[0.11em] text-[#8b8375]/60">
-          <div className="flex items-center gap-[4px]">
-            <IconSparkle className="h-[6px] w-[6px] text-[#c9b184]/50" />
-            <span>SDZ21 · UBE 4K ATLAS MASKS</span>
-          </div>
-          <span>{filtered.length} SHOWN</span>
-        </div>
-
-        <div className="flex justify-center pt-1">
-          <svg className="h-5 w-14 text-[#d4b483]/30" viewBox="0 0 100 40" fill="none" stroke="currentColor" strokeWidth="1">
-            <path d="M 10 38 Q 50 5 90 38" />
-            <path d="M 50 5 L 50 0" />
-          </svg>
-        </div>
       </div>
-    </div>
+    </StudioCard>
   );
 }

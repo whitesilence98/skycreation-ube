@@ -2,15 +2,17 @@
 
 import { useCharacter, BODY_WEIGHT_ENABLED } from '@/lib/store';
 import { BODY_POSES } from '@/lib/character/poses';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import { HudSlider } from '@/components/hud/HudSlider';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
 interface BodyPropertiesProps {
   manifest?: Mo2Manifest | null;
+  onClose?: () => void;
 }
 
-export function BodyProperties({ manifest = null }: BodyPropertiesProps) {
+export function BodyProperties({ manifest = null, onClose }: BodyPropertiesProps) {
   const weight = useCharacter((s) => s.weight);
   const setWeight = useCharacter((s) => s.setWeight);
   const linkFaceToWeight = useCharacter((s) => s.linkFaceToWeight);
@@ -35,10 +37,15 @@ export function BodyProperties({ manifest = null }: BodyPropertiesProps) {
   );
 
   return (
-    <aside aria-label="Body properties" className="pointer-events-auto w-full select-none p-3 hud-fade">
-      <div className="mb-[12px] border-b border-[#d4b483]/20 pb-[6px]">
-        <h3 className="text-[10px] font-medium tracking-[0.14em] text-[#d8c39c] uppercase">BODY PROPERTIES</h3>
-      </div>
+    <StudioCard
+      title="BODY & PHYSICS"
+      badge="HDT-SMP"
+      onClose={onClose ?? (() => setWorkspace('edit'))}
+      footerLeading={<span>+ UBE ANATOMY</span>}
+      footerTrailing={<span>SMP ACTIVE</span>}
+      showSparkle
+    >
+      <div className="flex flex-col gap-3">
 
       {/* ── Body Weight Slider ──────────────────────────────────── */}
       <section className="mb-[16px]">
@@ -261,6 +268,7 @@ export function BodyProperties({ manifest = null }: BodyPropertiesProps) {
           })}
         </div>
       </section>
-    </aside>
+      </div>
+    </StudioCard>
   );
 }

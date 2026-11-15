@@ -58,10 +58,12 @@ export const COMPANION_TOKENS = [
   'Scalp', 'SCALP', 'SC', 'MSC', 'SCA',
   // Accessories & Auxiliary Volume Buns
   'AC', 'ACM', 'ACH',
+  // Inner Hair Volume Layers
+  'In', 'Inner', 'Main',
   // Headbands, Bandanas & Hair Ties
   'Ban', 'MBan', 'Band',
-  // Ponytails & Tails
-  'Tail', 'RTai', 'TailM',
+  // Ponytails, Tails & Tail Wraps
+  'Tail', 'RTai', 'TailM', 'TailW',
   // Braids
   'Br',
   // Loose Framing Strands
@@ -71,13 +73,13 @@ export const COMPANION_TOKENS = [
   'Mask', 'Goggle', 'Hat', 'Crown', 'CROWN',
   'Feath', 'Flor', 'Leaf',
   // Structural Sub-Sections
-  'Bk', 'FR', 'Mid', 'Inner', 'Main',
+  'Bk', 'FR', 'Mid',
   // Hair Wraps & Major Bang Sections
   'W', 'B',
 ] as const;
 
 const COMPANION_TOKEN_PATTERN = new RegExp(
-  '^(.*?)(?:[\\s_-]+|(?<=[a-z0-9]))(' +
+  '^(.*?)(?:[\\s_-]+|(?<=[a-zA-Z0-9]))(' +
     [...COMPANION_TOKENS].sort((a, b) => b.length - a.length).join('|') +
     ')(\\d*)$'
 );

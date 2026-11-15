@@ -7,6 +7,7 @@ export interface StudioCardProps {
   title?: string;
   badge?: string;
   headerTrailing?: React.ReactNode;
+  onClose?: () => void;
   footerLeading?: React.ReactNode;
   footerTrailing?: React.ReactNode;
   showSparkle?: boolean;
@@ -18,13 +19,14 @@ export function StudioCard({
   title,
   badge,
   headerTrailing,
+  onClose,
   footerLeading,
   footerTrailing,
   showSparkle = false,
   className,
   children,
 }: StudioCardProps) {
-  const hasHeader = Boolean(title || badge || headerTrailing);
+  const hasHeader = Boolean(title || badge || headerTrailing || onClose);
   const hasFooter = Boolean(footerLeading || footerTrailing || showSparkle);
 
   return (
@@ -50,6 +52,17 @@ export function StudioCard({
                 </span>
               )}
               {headerTrailing}
+              {onClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close panel"
+                  title="Close (Esc)"
+                  className="flex h-[18px] w-[18px] items-center justify-center rounded-[2px] border border-[#d4b483]/22 text-[#a89b85] transition-all hover:border-[#d4b483]/60 hover:text-[#f0e6d4] hover:bg-[#d4b483]/10"
+                >
+                  <span className="text-[10px] leading-none select-none font-mono">✕</span>
+                </button>
+              )}
             </div>
           </div>
         )}

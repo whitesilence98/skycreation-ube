@@ -13,6 +13,7 @@ import {
 } from '@/lib/manifestSelect';
 import { payloadFromMorphs } from '@/lib/presetIO';
 import { cn } from '@/lib/cn';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import { EQUIP_SLOT_LABEL, equipSlotOf } from '@/lib/equipment';
 import { IconSparkle } from '@/components/hud/Icons';
 import type { Mo2AssetOption, Mo2Manifest } from '@/lib/head/faceTexture';
@@ -24,6 +25,7 @@ interface AssetPanelProps {
   /** True while the ASSETS workspace is the visible rail. The panel stays
    *  mounted either way; it is only hidden, never unmounted. */
   active?: boolean;
+  onClose?: () => void;
 }
 
 /** Backend fields the indexer writes; kept local so this panel compiles against
@@ -78,7 +80,7 @@ function entryChip(e: Entry): string {
   return ext;
 }
 
-export function AssetPanel({ manifest, active = false }: AssetPanelProps) {
+export function AssetPanel({ manifest, active = false, onClose }: AssetPanelProps) {
   /* The workspace tab is the disclosure control now; the panel body renders
      whenever ASSETS owns the rail so filters, scroll and fetched catalogues
      survive a switch. */
@@ -425,25 +427,15 @@ export function AssetPanel({ manifest, active = false }: AssetPanelProps) {
   /* The workspace rail, not a floating popover: the list fills the dock below
      its own header. EQUIPMENT lists one slot's garments in the same panel. */
   return (
-    <section aria-label="Asset pipeline" className="flex h-full min-h-0 w-full flex-col select-none">
-      <div className="shrink-0 border-b border-[#d4b483]/16 px-[12px] py-[7px]">
-        <div className="flex items-center gap-[7px]">
-          <span
-            className={cn(
-              'inline-block h-[4px] w-[4px] rounded-full',
-              manifest.available ? 'bg-[#4fd1c5] shadow-[0_0_6px_rgba(79,209,197,0.9)]' : 'bg-[#b56a5a]',
-            )}
-          />
-          <span className="text-[10px] tracking-[0.14em] text-[#cbc1af]/82">
-            {manifest.sourceLayout === 'pack' ? 'PRESET PACK' : 'MO2'} ASSET PIPELINE
-          </span>
-          <span className="ml-auto text-[10px] tracking-[0.1em] text-[#8f8778]/70">
-            {manifest.available ? `${spec.label}${count ? ` ${count}` : ''}` : 'OFFLINE'}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[12px] py-[8px] thin-scroll">
+    <StudioCard
+      title={`${spec.label} BROWSER`}
+      badge={manifest.available ? (count ? `${count} ITEMS` : 'ONLINE') : 'OFFLINE'}
+      onClose={onClose ?? (() => useCharacter.getState().setWorkspace('edit'))}
+      footerLeading={<span>+ MO2 VIRTUAL MODS</span>}
+      footerTrailing={<span>HOT-RELOAD</span>}
+      showSparkle
+    >
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[2px] py-[4px] thin-scroll font-mono">
           <div className="mb-[7px] flex items-center gap-[5px] text-[10px] tracking-[0.13em] text-[#8f8778]/72">
             <IconSparkle className="h-[9px] w-[9px] text-[#c9b184]/55" />
             <span className="truncate normal-case" title={manifest.source}>
@@ -751,7 +743,7 @@ export function AssetPanel({ manifest, active = false }: AssetPanelProps) {
             ) : null;
           })()}
         </div>
-    </section>
+    </StudioCard>
   );
 }
 

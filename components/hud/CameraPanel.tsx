@@ -16,6 +16,7 @@ import { ENV_MODES, type EnvMode } from '@/lib/envModes';
 import { BACKGROUND_PRESETS, type BackgroundMode } from '@/lib/backgrounds';
 import { LIGHTING_DEFAULTS, LIGHT_RIGS } from '@/lib/lighting';
 import { useViewState } from '@/lib/viewState';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import { cn } from '@/lib/cn';
 import { IconRevert } from '@/components/hud/Icons';
 import { RangeRow } from '@/components/hud/HudSlider';
@@ -68,7 +69,11 @@ function ViewReadout() {
   );
 }
 
-export function CameraPanel() {
+export interface CameraPanelProps {
+  onClose?: () => void;
+}
+
+export function CameraPanel({ onClose }: CameraPanelProps = {}) {
 
   const cameraFov = useCharacter((s) => s.cameraFov);
   const setCameraFov = useCharacter((s) => s.setCameraFov);
@@ -121,38 +126,26 @@ export function CameraPanel() {
     preset.keyColor === lighting.keyColor;
 
   return (
-    <section
-      id="camera-panel"
-      aria-label="View, lighting and camera controls"
-      className="flex h-full min-h-0 w-full select-none flex-col overflow-y-auto thin-scroll"
+    <StudioCard
+      title="CAMERA & FRAMING"
+      badge="CINEMATIC"
+      onClose={onClose ?? (() => useCharacter.getState().setWorkspace('edit'))}
+      headerTrailing={
+        <button
+          type="button"
+          onClick={resetCameraView}
+          title="Reset to default front face view"
+          className="flex items-center gap-[3px] text-[9.5px] font-mono tracking-[0.08em] text-[#a49a88]/75 transition-colors hover:text-[#f0e3c6]"
+        >
+          <IconRevert className="h-[7px] w-[7px]" />
+          <span>RESET</span>
+        </button>
+      }
+      footerLeading={<span>+ 4K CINEMATIC PIVOT</span>}
+      footerTrailing={<span>FOV {Math.round(cameraFov)}°</span>}
+      showSparkle
     >
-      {/* ── header ── */}
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b border-[#d4b483]/16 bg-[#14100b]/96 px-[12px] py-[6px] backdrop-blur-md">
-        <h2 className="text-[10px] font-medium tracking-[0.14em] text-[#efe3c8]">
-          VIEW · LIGHT · CAMERA
-        </h2>
-        <div className="flex items-center gap-[7px]">
-          <button
-            type="button"
-            onClick={resetCameraView}
-            title="Reset to default front face view"
-            className="flex items-center gap-[3px] text-[10px] tracking-[0.1em] text-[#a49a88]/75 transition-colors hover:text-[#f0e3c6] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#eac87f]/80"
-          >
-            <IconRevert className="h-[7px] w-[7px]" />
-            <span>RESET</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => useCharacter.getState().setWorkspace('edit')}
-            aria-label="Close camera workspace"
-            className="text-[10px] leading-none text-[#a49a88]/75 transition-colors hover:text-[#f0e3c6] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#eac87f]/80"
-          >
-            ✕
-          </button>
-        </div>
-      </header>
-
-      <div className="flex flex-col gap-[7px] px-[11px] py-[6px]">
+      <div className="flex flex-col gap-[7px]">
         {/* ── framing presets ── */}
         <div>
           <SectionTitle sub="DISTANCE &amp; TARGET">FRAMING</SectionTitle>
@@ -536,6 +529,6 @@ export function CameraPanel() {
           )}
         </div>
       </div>
-    </section>
+    </StudioCard>
   );
 }

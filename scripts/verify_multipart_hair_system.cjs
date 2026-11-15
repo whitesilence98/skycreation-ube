@@ -95,6 +95,20 @@ assert(piratess, 'Piratess group must exist');
 assert.strictEqual(piratess.parts.length, 12, `Piratess must have 12 parts, got ${piratess.parts.length}`);
 console.log(`  ✓ Piratess: ${piratess.parts.length} parts (Base + 1 + AC..4 + Bangs + Braids..2 + Right Tail)`);
 
+// Check Shadow (5 Parts: Base + 2 + AC + AC2 + In)
+const shadow = groups.find(g => g.groupKey.toLowerCase() === 'shadow');
+assert(shadow, 'Shadow group must exist');
+assert.strictEqual(shadow.parts.length, 5, `Shadow must have 5 parts including ShadowIn, got ${shadow.parts.length}`);
+assert(!groups.some(g => g.groupKey.toLowerCase() === 'shadowin'), 'ShadowIn must not exist as standalone group');
+console.log(`  ✓ Shadow: ${shadow.parts.length} parts (Base + 2 + AC + AC2 + In [Inner volume])`);
+
+// Check Regina (2 Parts: Base + In)
+const regina = groups.find(g => g.groupKey.toLowerCase() === 'regina');
+assert(regina, 'Regina group must exist');
+assert.strictEqual(regina.parts.length, 2, `Regina must have 2 parts including ReginaIn, got ${regina.parts.length}`);
+assert(!groups.some(g => g.groupKey.toLowerCase() === 'reginain'), 'ReginaIn must not exist as standalone group');
+console.log(`  ✓ Regina: ${regina.parts.length} parts (Base + In [Inner volume])`);
+
 // Check AsterionM
 const asterion = groups.find(g => g.groupKey.toLowerCase() === 'asterionm');
 assert(asterion, 'AsterionM group must exist');

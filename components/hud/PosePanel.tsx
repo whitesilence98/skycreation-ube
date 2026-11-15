@@ -10,6 +10,7 @@ import {
   type PoseManifestItem,
 } from '@/lib/character/poses';
 import { cn } from '@/lib/cn';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import { IconSparkle } from '@/components/hud/Icons';
 import { exportCharacterGlb } from '@/lib/exportGlb';
 
@@ -21,7 +22,11 @@ import { exportCharacterGlb } from '@/lib/exportGlb';
  * - Quick REST (A-POSE) reset button
  * - External Havok Skyrim pose archive explorer
  */
-export function PosePanel() {
+export interface PosePanelProps {
+  onClose?: () => void;
+}
+
+export function PosePanel({ onClose }: PosePanelProps = {}) {
   const bodyPoseId = useCharacter((s) => s.bodyPoseId);
   const setBodyPose = useCharacter((s) => s.setBodyPose);
   const poseIntensity = useCharacter((s) => s.poseIntensity);
@@ -113,37 +118,30 @@ export function PosePanel() {
   const isRest = bodyPoseId === 'rest';
 
   return (
-    <div className="flex flex-col gap-3 p-3 select-none text-[#e2d8c6]">
-      {/* ── Header: Title & Quick Reset ─────────────────────────────── */}
-      <div className="flex items-center justify-between border-b border-[#d4b483]/20 pb-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-[12px] font-semibold tracking-[0.14em] text-[#f2e6cf]">
-            POSES
-          </h2>
-          <span className="flex items-center gap-1 rounded bg-[#d4b483]/10 px-1.5 py-0.5 text-[9px] font-mono tracking-wider text-[#d4b483]/85">
-            <IconSparkle className="h-2 w-2 text-[#eac87f]" />
-            XP32 RIG
-          </span>
-        </div>
-
-        {/* Quick Reset to Rest (A-Pose) */}
+    <StudioCard
+      title="POSES & ANIMATION"
+      badge="XPMSE"
+      onClose={onClose}
+      headerTrailing={
         <button
           type="button"
           onClick={() => setBodyPose('rest')}
           title="Reset skeleton to neutral A-pose"
           className={cn(
-            'flex items-center gap-1 rounded border px-2 py-0.5 text-[9.5px] tracking-wider transition-all duration-150',
+            'flex items-center gap-1 rounded-xs border px-1.5 py-0.5 text-[8.5px] font-mono tracking-wider transition-all duration-150',
             isRest
-              ? 'border-[#d8be8c]/60 bg-[#d4b483]/20 text-[#f5ecd8] shadow-[0_0_8px_rgba(216,190,140,0.2)]'
+              ? 'border-[#d8be8c]/60 bg-[#d4b483]/20 text-[#f5ecd8]'
               : 'border-[#d4b483]/20 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#e4dac5]',
           )}
         >
-          <svg viewBox="0 0 16 16" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9L2 6M2 2v4h4" />
-          </svg>
-          REST (A-POSE)
+          REST
         </button>
-      </div>
+      }
+      footerLeading={<span>+ XPMSE 4.80</span>}
+      footerTrailing={<span>{favoritePoses.length} STARRED</span>}
+      showSparkle
+    >
+      <div className="flex flex-col gap-3">
 
       <div className="flex flex-col gap-2 border-b border-[#d4b483]/20 pb-3 text-[10px]">
         <label className="flex items-center justify-between gap-2">
@@ -438,7 +436,8 @@ export function PosePanel() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </StudioCard>
   );
 }
 

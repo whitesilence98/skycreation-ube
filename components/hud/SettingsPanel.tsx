@@ -1,6 +1,7 @@
 'use client';
 
 import { useCharacter } from '@/lib/store';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import { cn } from '@/lib/cn';
 import { IconCheck, IconGear, IconSparkle } from '@/components/hud/Icons';
 
@@ -42,7 +43,11 @@ function ToggleSwitch({
   );
 }
 
-export function SettingsPanel() {
+export interface SettingsPanelProps {
+  onClose?: () => void;
+}
+
+export function SettingsPanel({ onClose }: SettingsPanelProps = {}) {
   const unrestrictedSlots = useCharacter((s) => s.unrestrictedSlots);
   const setUnrestrictedSlots = useCharacter((s) => s.setUnrestrictedSlots);
   const showGroundMeshes = useCharacter((s) => s.showGroundMeshes);
@@ -54,8 +59,16 @@ export function SettingsPanel() {
   const setPreviewMode = useCharacter((s) => s.setPreviewMode);
 
   return (
-    <div className="pointer-events-auto flex w-full flex-col gap-4 select-none p-3.5 hud-fade font-mono">
-      {/* ── Section: EQUIPMENT & MOD ACCESSORIES ───────────────────── */}
+    <StudioCard
+      title="STUDIO SETTINGS"
+      badge="SYSTEM"
+      onClose={onClose ?? (() => useCharacter.getState().setWorkspace('edit'))}
+      footerLeading={<span>+ UBE · XPMSSE</span>}
+      footerTrailing={<span>AUTOSAVE ON</span>}
+      showSparkle
+    >
+      <div className="flex flex-col gap-3 font-mono">
+        {/* ── Section: EQUIPMENT & MOD ACCESSORIES ───────────────────── */}
       <div className="flex flex-col gap-2 rounded-xs border border-[#d4b483]/22 bg-black/45 p-3 backdrop-blur-md">
         <div className="flex items-center gap-2 border-b border-[#d4b483]/18 pb-1.5">
           <IconGear className="h-3.5 w-3.5 text-[#eac87f]" />
@@ -165,6 +178,7 @@ export function SettingsPanel() {
           <span className="text-[#cdc2ac]">XPMSSE 4.82+</span>
         </div>
       </div>
-    </div>
+      </div>
+    </StudioCard>
   );
 }

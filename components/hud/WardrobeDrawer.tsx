@@ -10,6 +10,7 @@ import {
 } from '@/lib/equipment';
 import { assetOptions } from '@/lib/manifestSelect';
 import { matchesQuery, convertUrl } from '@/lib/mo2/client';
+import { StudioCard } from '@/components/hud/common/StudioCard';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { IconCheck, IconHanger, IconSparkle } from '@/components/hud/Icons';
@@ -42,7 +43,12 @@ function cleanGarmentName(name: string): string {
     .trim();
 }
 
-export function WardrobeDrawer({ manifest }: { manifest: Mo2Manifest | null }) {
+interface WardrobeDrawerProps {
+  manifest: Mo2Manifest | null;
+  onClose?: () => void;
+}
+
+export function WardrobeDrawer({ manifest, onClose }: WardrobeDrawerProps) {
   const equipment = useCharacter((s) => s.equipment);
   const equipSlot = useCharacter((s) => s.equipSlot);
   const setEquipSlot = useCharacter((s) => s.setEquipSlot);
@@ -155,8 +161,16 @@ export function WardrobeDrawer({ manifest }: { manifest: Mo2Manifest | null }) {
   };
 
   return (
-    <div className="pointer-events-auto flex h-full w-full flex-col select-none p-3 font-mono hud-fade">
-      {/* ── Slot Quick-Switcher Tabs ───────────────────────────────── */}
+    <StudioCard
+      title="WARDROBE & GEAR"
+      badge={EQUIP_SLOT_LABEL[currentSlot]}
+      onClose={onClose ?? (() => useCharacter.getState().setWorkspace('edit'))}
+      footerLeading={<span>+ 9 SLOTS AUTO-FIT</span>}
+      footerTrailing={<span>{slotGarments.length} OPTIONS</span>}
+      showSparkle
+    >
+      <div className="flex flex-col gap-2.5 font-mono">
+        {/* ── Slot Quick-Switcher Tabs ───────────────────────────────── */}
       <div className="mb-2.5 flex flex-wrap gap-1 border-b border-[#d4b483]/20 pb-2">
         {EQUIP_SLOTS.map((slot) => {
           const isActive = currentSlot === slot;
@@ -351,15 +365,7 @@ export function WardrobeDrawer({ manifest }: { manifest: Mo2Manifest | null }) {
           </div>
         )}
       </div>
-
-      {/* ── Footer Bar ─────────────────────────────────────────────── */}
-      <div className="mt-2 flex shrink-0 items-center justify-between border-t border-[#d4b483]/18 pt-2 text-[9px] text-[#8b8375]">
-        <div className="flex items-center gap-1.5">
-          <IconSparkle className="h-2.5 w-2.5 text-[#c9b184]/60" />
-          <span>LMB EQUIP · RMB UNEQUIP</span>
-        </div>
-        <span className="font-mono text-[#c9b184]">{slotGarments.length} OPTIONS</span>
       </div>
-    </div>
+    </StudioCard>
   );
 }
