@@ -7,7 +7,6 @@ import { convertUrl, fetchCatalogue } from '@/lib/mo2/client';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { cn } from '@/lib/cn';
 import { buildHairGroups, findHairGroupForPartId, type HairBrand, type HairGroup } from '@/lib/hair';
-import { HairThumbnail } from '@/components/hud/HairThumbnail';
 
 /** Below this, the shipped head hides the mesh — see `visibility`. */
 const VISIBLE_MIN = 0.55;
@@ -280,12 +279,10 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
             )}
           </div>
 
-          {/* Hairstyle Grid */}
-          <div className="thin-scroll grid max-h-[190px] grid-cols-4 gap-[6px] overflow-y-auto pr-[2px]">
+          {/* Hairstyle List */}
+          <div className="thin-scroll flex max-h-[220px] flex-col gap-1 overflow-y-auto pr-[2px]">
             {filtered.map((g, i) => {
               const isSelected = selectedGroupId === g.id;
-              const rep = g.representative;
-              const isUnt = rep.untextured === true;
 
               return (
                 <button
@@ -293,71 +290,58 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
                   type="button"
                   aria-label={`${g.label} — ${g.mod || g.brand}${g.partCount > 1 ? ` (${g.partCount} Parts)` : ''}`}
                   aria-pressed={isSelected}
-                  title={`${g.label}\nBrand: ${g.brand}\nParts: ${g.partCount} (${g.parts.map((p) => p.label).join(', ')})\nMod: ${g.mod || 'preset-pack'}${isUnt ? '\nNo atlas — drawn flat grey' : ''}`}
+                  title={`${g.label}\nBrand: ${g.brand}\nParts: ${g.partCount} (${g.parts.map((p) => p.label).join(', ')})\nMod: ${g.mod || 'preset-pack'}`}
                   onClick={() =>
                     setAssets({
                       hairMesh: g.id,
                       ...(g.pairedTextureId ? { hair: g.pairedTextureId } : {}),
                     })
                   }
-                  className="group relative flex min-w-0 flex-col items-center text-left"
+                  className={cn(
+                    'group flex w-full items-center justify-between border px-2.5 py-1.5 text-left transition-colors duration-100',
+                    isSelected
+                      ? 'border-[#eac87f] bg-[#eac87f]/15 text-[#f2dfbe] shadow-[0_0_8px_rgba(234,200,127,0.25)]'
+                      : 'border-[#d4b483]/20 bg-black/40 text-[#c5baa6] hover:border-[#d4b483]/50 hover:bg-[#16130e] hover:text-[#f0e4cc]',
+                  )}
                 >
-                  <span
-                    className={cn(
-                      'relative flex aspect-[4/5] w-full items-center justify-center overflow-hidden border p-[2px] transition-all duration-200',
-                      isSelected
-                        ? 'border-[#eac87f] bg-[#eac87f]/16 shadow-[0_0_10px_rgba(234,200,127,0.45)]'
-                        : 'border-[#d4b483]/25 bg-[#0b0a08]/80 group-hover:border-[#d4b483]/60 group-hover:bg-[#16120e]',
-                    )}
-                  >
-                    {/* Multi-part count badge */}
+                  {/* Left: Index + Hair Name */}
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="font-mono text-[8px] text-[#eadcc0]/40 shrink-0">
+                      {String(i + 1).padStart(2, '0')}
+                    </span>
+                    <span className="truncate text-[9.5px] font-mono tracking-wide">
+                      {g.label}
+                    </span>
+                  </div>
+
+                  {/* Right: Badges & Selected Indicator */}
+                  <div className="flex shrink-0 items-center gap-1.5 ml-2">
+                    <span className="rounded-[1px] border border-[#d4b483]/25 bg-black/60 px-1 py-0.2 font-mono text-[7.5px] uppercase text-[#a9a192]">
+                      {g.brand}
+                    </span>
+
                     {g.partCount > 1 && (
-                      <span className="pointer-events-none absolute top-[2px] right-[2px] z-10 rounded-[1px] border border-[#eac87f]/50 bg-black/80 px-[3px] py-[0.5px] font-mono text-[7px] font-medium tracking-tight text-[#f2dfbe] shadow-xs">
+                      <span className="rounded-[1px] border border-[#eac87f]/40 bg-[#d4b483]/20 px-1 py-0.2 font-mono text-[7px] font-medium text-[#f2dfbe]">
                         {g.partCount}P
                       </span>
                     )}
 
-                    {/* Hairline variant badge */}
                     {g.isHL && (
-                      <span className="pointer-events-none absolute top-[2px] left-[2px] z-10 rounded-[1px] border border-[#7fb0ea]/50 bg-black/80 px-[3px] py-[0.5px] font-mono text-[7px] font-medium tracking-tight text-[#bfdbfe] shadow-xs">
+                      <span className="rounded-[1px] border border-[#7fb0ea]/40 bg-[#7fb0ea]/20 px-1 py-0.2 font-mono text-[7px] font-medium text-[#bfdbfe]">
                         HL
                       </span>
                     )}
 
-                    <HairThumbnail
-                      id={g.id}
-                      meshUrls={g.parts.map((p) =>
-                        (p.raw && 'meshUrl' in p.raw && typeof p.raw.meshUrl === 'string'
-                          ? p.raw.meshUrl
-                          : convertUrl({ kind: 'hairMesh', id: p.id, mode: 'mesh' }))
-                      )}
-                      label={g.label}
-                      hairTone={hair.tone}
-                      className={cn(
-                        'h-full w-full transition-transform duration-200 group-hover:scale-105',
-                        isSelected ? 'opacity-100' : 'opacity-85 group-hover:opacity-100',
-                      )}
-                    />
-
-                    <span className="pointer-events-none absolute bottom-[1px] right-[2px] text-[8px] font-mono tracking-tight text-[#eadcc0]/75">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-
-                    {isSelected && (
-                      <span className="pointer-events-none absolute -top-[1px] h-[3px] w-[3px] rounded-full bg-[#f2dfbe] shadow-[0_0_5px_rgba(242,223,190,0.9)]" />
+                    {isSelected ? (
+                      <span className="flex items-center gap-1 rounded-xs bg-[#eac87f] px-1.5 py-0.5 font-mono text-[8px] font-bold text-black shadow-[0_0_6px_rgba(234,200,127,0.7)]">
+                        ACTIVE
+                      </span>
+                    ) : (
+                      <span className="opacity-0 group-hover:opacity-100 font-mono text-[8px] text-[#eac87f]/80 transition-opacity">
+                        SELECT
+                      </span>
                     )}
-                  </span>
-
-                  <span
-                    className={cn(
-                      'mt-[2px] w-full truncate text-center text-[9px] tracking-[0.04em] transition-colors',
-                      isSelected
-                        ? 'font-medium text-[#f0e2ca]'
-                        : 'text-[#a9a192]/70 group-hover:text-[#d5ccbb]',
-                    )}
-                  >
-                    {g.label}
-                  </span>
+                  </div>
                 </button>
               );
             })}
