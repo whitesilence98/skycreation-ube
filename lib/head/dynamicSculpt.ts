@@ -196,6 +196,28 @@ export async function resolveOrBuildSculptHead(
     };
   }
 
+  // Check UBE compatibility: Vanilla/CBBE head has 996 vertices, High Poly Head has 3,832 vertices.
+  // UBE has 11,498 vertices. Replaying Vanilla/HPH deltas on UBE geometry would distort vertex IDs.
+  const isUbeCompatible =
+    headBlock.host?.toLowerCase().includes('ube') ||
+    headBlock.data.some((pt) => pt[0] > 4000);
+
+  if (!isUbeCompatible) {
+    return baseHeadOption ?? {
+      id: 'ube-base-neutral-head',
+      mod: 'UBE',
+      rel: 'UBE/FemaleHead.tri',
+      file: 'FemaleHead.tri',
+      label: 'UBE Neutral Default Head',
+      meshUrl: headUrl,
+      isRealMesh: true,
+      bytes: 0,
+      version: '1.0',
+      nodes: [],
+      shapes: { vertexCount: 11498, triangleCount: 22044 },
+    };
+  }
+
   // 4. Load base UBE head geometry
   const baseHeadData = await fetchBaseMesh(headUrl);
   if (!baseHeadData) {

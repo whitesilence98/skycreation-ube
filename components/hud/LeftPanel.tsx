@@ -6,6 +6,7 @@ import { PRESETS, REGIONS } from '@/lib/regions';
 import { FaceDiagram } from '@/components/hud/FaceDiagram';
 import { HairStyles } from '@/components/hud/HairStyles';
 import { EyePicker } from '@/components/hud/EyePicker';
+import { BrowsPicker } from '@/components/hud/BrowsPicker';
 import { SkinPicker } from '@/components/hud/SkinPicker';
 import { MakeupPicker } from '@/components/hud/MakeupPicker';
 import { PosePanel } from '@/components/hud/PosePanel';
@@ -230,6 +231,13 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
         </div>
       )}
 
+      {/* ── brow textures & meshes / picker ─────────────────────────── */}
+      {primaryTab === 'FACE' && subTab === 'BROWS' && (
+        <div className="mt-[3px]">
+          <BrowsPicker manifest={manifest} />
+        </div>
+      )}
+
       {/* ── makeup & tintmask picker ──────────────────────────────── */}
       {primaryTab === 'FACE' && subTab === 'MAKEUP' && (
         <div className="mt-[3px]">
@@ -237,8 +245,8 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
         </div>
       )}
 
-      {/* ── other face sub-tabs (lashes, brows, mouth, tattoo, wrinkle) ── */}
-      {primaryTab === 'FACE' && subTab !== 'SKIN' && subTab !== 'EYES' && subTab !== 'MAKEUP' && (
+      {/* ── other face sub-tabs (lashes, mouth, tattoo, wrinkle) ─────── */}
+      {primaryTab === 'FACE' && subTab !== 'SKIN' && subTab !== 'EYES' && subTab !== 'BROWS' && subTab !== 'MAKEUP' && (
         <div className="mt-[3px]">
           <div className="flex flex-col gap-2 rounded-xs border border-[#d4b483]/22 bg-black/45 p-3 backdrop-blur-md">
             <div className="flex items-center justify-between border-b border-[#d4b483]/18 pb-1.5">

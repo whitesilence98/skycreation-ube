@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {
   NECK_DELTA_INDICES,
   NECK_DELTA_POSITIONS,
+  NECK_DELTA_NORMALS,
   NECK_SPINE2_WEIGHTS,
   NECK_SEAM_HEAD_INDICES,
   NECK_SEAM_BODY_INDICES,
@@ -749,6 +750,12 @@ export function applyNeckDelta(
           vx += factor * NECK_DELTA_POSITIONS[i * 3];
           vy += factor * NECK_DELTA_POSITIONS[i * 3 + 1];
           vz += factor * NECK_DELTA_POSITIONS[i * 3 + 2];
+
+          if (currentNorm) {
+            currentNorm[idx * 3] += factor * NECK_DELTA_NORMALS[i * 3];
+            currentNorm[idx * 3 + 1] += factor * NECK_DELTA_NORMALS[i * 3 + 1];
+            currentNorm[idx * 3 + 2] += factor * NECK_DELTA_NORMALS[i * 3 + 2];
+          }
         }
 
         // 2. Posing dual-bone blend (BSFaceGenNiNodeSkinned)

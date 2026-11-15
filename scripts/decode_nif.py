@@ -36,8 +36,9 @@ def decode_nif_parts(nif_path: Path) -> dict:
         }
         
         # Categorize
-        if re.search(r"femalehead", name, re.I) and not re.search(r"brow", name, re.I):
-            parts["head"] = part_geo
+        if re.search(r"femalehead|malehead|\bhead\b|humanhead|facemesh|^head", name, re.I) and not re.search(r"brow|mouth|lash|eye|hair|earring|ground|line|dummy", name, re.I):
+            if "head" not in parts or re.search(r"femalehead", name, re.I) or part_geo["vertexCount"] > parts["head"]["vertexCount"]:
+                parts["head"] = part_geo
         elif re.search(r"mouth", name, re.I):
             parts["mouth"] = part_geo
         elif re.search(r"lash", name, re.I):
@@ -47,8 +48,35 @@ def decode_nif_parts(nif_path: Path) -> dict:
         elif re.search(r"eye", name, re.I) and not re.search(r"shadow|outer|lens|dummy|brow(?!n)", name, re.I):
             parts["eyes"] = part_geo
 
+    # Robust fallback: if head shape was not explicitly matched by name,
+    # find the largest non-accessory geometry (excluding hair/mouth/eyes/etc.)
     if "head" not in parts:
-        raise ValueError(f"no female head shape found in {nif_path.name}")
+        best_candidate = None
+        for g in groups:
+            mat = materials[g["materialIndex"]]
+            name = str(mat.get("sourceShape") or mat.get("name") or "")
+            if re.search(r"brow|mouth|lash|eye|hair|earring|ground|line|dummy|shadow|lens", name, re.I):
+                continue
+            start = g["start"]
+            count = g["count"]
+            indices = geo["indices"][start:start + count]
+            used = sorted(set(indices))
+            if best_candidate is None or len(used) > best_candidate[0]:
+                remap = {v: i for i, v in enumerate(used)}
+                candidate_geo = {
+                    "positions": [round(float(geo["positions"][v * 3 + axis]), 5) for v in used for axis in range(3)],
+                    "normals": [round(float(geo["normals"][v * 3 + axis]), 4) for v in used for axis in range(3)],
+                    "uvs": [round(float(geo["uvs"][v * 2 + axis]), 5) for v in used for axis in range(2)],
+                    "indices": [remap[v] for v in indices],
+                    "vertexCount": len(used),
+                    "triangleCount": len(indices) // 3
+                }
+                best_candidate = (len(used), candidate_geo)
+        if best_candidate and best_candidate[0] > 100:
+            parts["head"] = best_candidate[1]
+
+    if "head" not in parts:
+        raise ValueError(f"no valid head shape found in {nif_path.name}")
         
     return parts
 

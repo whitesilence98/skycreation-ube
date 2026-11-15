@@ -190,7 +190,7 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                     onClick={() => {
                       setSubTab(item);
                       setActiveCategory(SECONDARY_CATEGORY[item]);
-                      if (item !== 'SKIN' && item !== 'EYES' && item !== 'MAKEUP') {
+                      if (item !== 'SKIN' && item !== 'EYES' && item !== 'BROWS' && item !== 'MAKEUP') {
                         setWorkspace('assets');
                       }
                       if (item === 'EYES' || item === 'LASHES' || item === 'BROWS') {

@@ -31,6 +31,7 @@ interface PresetIOProps {
 export function PresetIO({ manifest }: PresetIOProps) {
   const loadPreset = useCharacter((s) => s.loadPreset);
   const snapshotPreset = useCharacter((s) => s.snapshotPreset);
+  const setName = useCharacter((s) => s.setName);
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<Status>(null);
   const [busy, setBusy] = useState(false);
@@ -74,14 +75,18 @@ export function PresetIO({ manifest }: PresetIOProps) {
   };
 
   const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+    const fileList = Array.from(e.target.files ?? []);
+    // Reset input value so re-selecting the exact same file in succession will trigger onChange
     e.target.value = '';
-    if (!files || !files.length) return;
+    if (!fileList.length) return;
 
     setBusy(true);
     try {
-      const result = await importPresetFromFiles(files, manifest);
+      const result = await importPresetFromFiles(fileList, manifest);
       loadPreset(result.payload, result.headOption?.id);
+      if (result.characterName) {
+        setName(result.characterName.toUpperCase().slice(0, 14));
+      }
       flash({ kind: result.kind, text: result.summary });
     } catch (err) {
       flash({ kind: 'error', text: err instanceof Error ? err.message : 'Could not read that file.' });
@@ -103,7 +108,7 @@ export function PresetIO({ manifest }: PresetIOProps) {
         ref={inputRef}
         type="file"
         multiple
-        accept=".json,.jslot,.nif,application/json"
+        accept=".json,.jslot,.nif"
         onChange={onPick}
         className="hidden"
       />

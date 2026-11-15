@@ -236,7 +236,7 @@ export function resolveManifest(
    */
   const companionEyeMesh = (head as { eyeMeshUrl?: string })?.eyeMeshUrl;
   const companionLashesMesh = (head as { lashesMeshUrl?: string })?.lashesMeshUrl;
-  const companionBrowsMesh = (head as { browsMeshUrl?: string })?.browsMeshUrl;
+  const companionBrowsMesh = selection.browsMesh ? undefined : (head as { browsMeshUrl?: string })?.browsMeshUrl;
   const companionMouthMesh = (head as { mouthMeshUrl?: string })?.mouthMeshUrl;
 
   const part = (
