@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import struct
 import sys
 from pathlib import Path
@@ -1045,13 +1046,13 @@ def _nif_authored_geometry(path: Path, frame: str = "head") -> dict[str, object]
             raise ValueError(f"shape {shape['name']} has no triangles")
         fields = shape["fields"]
         if int(fields["shader"]) < 0:
-            if not dynamic:
+            if not dynamic and not re.search(r"virtual|dummy|collision|proxy", shape["name"], re.I):
                 # A static shape with no shader is not a layout this decoder
                 # has ever accepted; keep that refusal rather than inventing
                 # an untextured material for it.
                 raise ValueError("unsupported shader layout: no texture set ref")
-            # FaceGen writes the lens "dummy" shapes without a shader. They stay
-            # in the output as untextured groups so the shape list is complete.
+            # FaceGen writes the lens "dummy" shapes without a shader, and HDT-SMP
+            # writes physics collision proxies (e.g. VirtualHead) without a shader.
             texture_paths, flags2 = [], 0
         else:
             texture_paths, flags2 = _nif_shader(nif, int(fields["shader"]))
