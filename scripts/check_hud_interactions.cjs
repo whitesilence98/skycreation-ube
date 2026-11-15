@@ -215,14 +215,14 @@ const path = require('node:path');
     assert.equal(await railHidden('left'), 'true', 'Escape closes the mobile drawer');
     assert.equal(await activeLabel(), 'EDIT workspace');
 
-    /* Top-bar category reaches EQUIPMENT on the narrow viewport. */
-    await click(button('EQUIPMENT'), 'EQUIPMENT tab');
-    results.mobileEquipment = await evaluate(`(() => {
-      const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === 'EQUIPMENT');
+    /* Top-bar category reaches BODY on the narrow viewport. */
+    await click(button('BODY'), 'BODY tab');
+    results.mobileBody = await evaluate(`(() => {
+      const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim().startsWith('BODY'));
       const r = b.getBoundingClientRect();
       return { left: Math.round(r.left), right: Math.round(r.right), inView: r.left >= 0 && r.right <= innerWidth };
     })()`);
-    assert.ok(results.mobileEquipment.inView, 'EQUIPMENT must be reachable without page overflow');
+    assert.ok(results.mobileBody.inView, 'BODY must be reachable without page overflow');
 
     /* Footer actions are visible and clickable at phone width. */
     results.mobileFooter = await evaluate(`(() => {

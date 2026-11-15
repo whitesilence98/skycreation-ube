@@ -38,7 +38,7 @@ import { coerceLighting, bounded, wrapDegrees, type LightingSettings } from '@/l
 import { CAMERA_ROTATE_SPEED_DEFAULT, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPEED_MAX } from '@/lib/camera';
 import { createJSONStorage, type PersistStorage, type StateStorage } from 'zustand/middleware';
 import type {
-  ActiveCategory, ColorOverlay, EnbPreset, FilterPreset, GizmoPose, GradeSettings,
+  ActiveCategory, BodyTab, ColorOverlay, EnbPreset, FilterPreset, GizmoPose, GradeSettings,
   OverlayLayer, ToneMappingId, UtilityToggles,
 } from '@/lib/store';
 
@@ -82,6 +82,7 @@ export interface PersistedSession {
   activeRegion: RegionId;
   primaryTab: string;
   subTab: string;
+  bodyTab?: BodyTab;
   transformMode: TransformMode;
   bisymmetry: boolean;
   asymmetry: boolean;
@@ -146,6 +147,7 @@ const UTIL_KEYS: Array<keyof UtilityToggles> = [
    which reads as a bug rather than as "your old tab no longer exists". */
 const PRIMARY_TABS = ['PRESET', 'HAIR', 'FACE SHAPE', 'FACE', 'BODY', 'EQUIPMENT'];
 const SECONDARY_TABS = ['SKIN', 'EYES', 'LASHES', 'BROWS', 'MOUTH', 'MAKEUP', 'TATTOO', 'WRINKLE'];
+const BODY_TABS: readonly BodyTab[] = ['gear', 'physique'];
 
 const isOneOf = <T extends string>(list: readonly T[], v: unknown): v is T =>
   typeof v === 'string' && (list as readonly string[]).includes(v);
@@ -238,6 +240,7 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     activeRegion: isRegionId(o.activeRegion) ? o.activeRegion : defaults.activeRegion,
     primaryTab: isOneOf(PRIMARY_TABS, o.primaryTab) ? o.primaryTab : defaults.primaryTab,
     subTab: isOneOf(SECONDARY_TABS, o.subTab) ? o.subTab : defaults.subTab,
+    bodyTab: isOneOf(BODY_TABS, o.bodyTab) ? o.bodyTab : defaults.bodyTab,
     transformMode: isOneOf(TRANSFORM_MODES, o.transformMode) ? o.transformMode : defaults.transformMode,
     bisymmetry: bool(o.bisymmetry, defaults.bisymmetry),
     asymmetry: bool(o.asymmetry, defaults.asymmetry),
@@ -304,6 +307,7 @@ export function pickSession(s: PersistedSession): PersistedSession {
     activeRegion: s.activeRegion,
     primaryTab: s.primaryTab,
     subTab: s.subTab,
+    bodyTab: s.bodyTab,
     transformMode: s.transformMode,
     bisymmetry: s.bisymmetry,
     asymmetry: s.asymmetry,

@@ -158,12 +158,16 @@ const buildPoseBank = (): Record<RegionId, GizmoPose> =>
     GizmoPose
   >;
 
+export type BodyTab = 'gear' | 'physique';
+
 export interface CharacterState {
   hair: HairSettings;
   hairTab: HairTab;
   setHair: (patch: Partial<HairSettings>) => void;
   applyHairStyle: (id: string) => void;
   setHairTab: (tab: HairTab) => void;
+  bodyTab: BodyTab;
+  setBodyTab: (tab: BodyTab) => void;
   name: string;
   stats: { faces: number; verts: number; tris: number };
   activeRegion: RegionId;
@@ -435,6 +439,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   activeRegion: 'nose',
   primaryTab: 'FACE',
   subTab: 'SKIN',
+  bodyTab: 'gear',
+  setBodyTab: (bodyTab) => set({ bodyTab }),
   transformMode: 'translate',
   bisymmetry: true,
   asymmetry: false,

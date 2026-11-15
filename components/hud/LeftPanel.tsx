@@ -84,6 +84,7 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
   const setShowMesh = useCharacter((s) => s.setShowMesh);
   const primaryTab = useCharacter((s) => s.primaryTab);
   const subTab = useCharacter((s) => s.subTab);
+  const bodyTab = useCharacter((s) => s.bodyTab);
   const activeRegion = useCharacter((s) => s.activeRegion);
   const setActiveRegion = useCharacter((s) => s.setActiveRegion);
   const preset = useCharacter((s) => s.preset);
@@ -194,11 +195,8 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
       )}
 
       {/* ── worn gear paper-doll ──────────────────────────────────────
-          EQUIPMENT is a gear section, not a face-sculpt or export one: the
-          MO2 utilities and METRIC MESH have nothing to act on there, and they
-          would push the slot rows below the fold. It collapses them exactly
-          as HAIR does. */}
-      {primaryTab === 'EQUIPMENT' && (
+          GEAR SLOTS: displays the zero-scroll paper doll hub. */}
+      {((primaryTab === 'BODY' && bodyTab === 'gear') || primaryTab === 'EQUIPMENT') && (
         <div className="mt-[3px]">
           <EquipmentPanel manifest={manifest} />
         </div>
@@ -212,7 +210,7 @@ export function LeftPanel({ manifest }: { manifest: Mo2Manifest | null }) {
       )}
 
       {/* ── body controls / physique & weight ───────────────────────── */}
-      {primaryTab === 'BODY' && (
+      {primaryTab === 'BODY' && (bodyTab === 'physique' || (!bodyTab && primaryTab === 'BODY')) && (
         <div className="mt-[3px]">
           <BodyPanel manifest={manifest} />
         </div>

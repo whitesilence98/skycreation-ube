@@ -15,7 +15,7 @@ import type { Mo2Manifest } from '@/lib/head/faceTexture';
  * that skin it. Sharing one tab meant clicking SKIN silently replaced the
  * shape controls the user was mid-way through adjusting.
  */
-const PRIMARY = ['PRESET', 'HAIR', 'FACE', 'BODY', 'EQUIPMENT', 'VOICE', 'ZODIAC'] as const;
+const PRIMARY = ['PRESET', 'HAIR', 'FACE', 'BODY', 'VOICE', 'ZODIAC'] as const;
 /** Sub-tabs only exist under FACE; they switch which part the panel lists. */
 const SECONDARY = ['SKIN', 'EYES', 'LASHES', 'BROWS', 'MOUTH', 'MAKEUP', 'TATTOO', 'WRINKLE'] as const;
 
@@ -23,15 +23,14 @@ const SECONDARY = ['SKIN', 'EYES', 'LASHES', 'BROWS', 'MOUTH', 'MAKEUP', 'TATTOO
  * Which asset category each tab opens in the panel.
  *
  * The sub-tabs were a highlight and nothing else: MAKEUP lit up and the asset
- * panel went on listing skins. BODY and EQUIPMENT have their own flows, so
- * they leave the current one alone rather than emptying the panel.
+ * panel went on listing skins. BODY has its own flows, so
+ * it leaves the current one alone rather than emptying the panel.
  */
 const PRIMARY_CATEGORY: Partial<Record<(typeof PRIMARY)[number], UiCategory>> = {
   PRESET: 'preset',
   HAIR: 'hair',
   FACE: 'skin',
   BODY: 'body',
-  EQUIPMENT: 'equipment',
 };
 
 const SECONDARY_CATEGORY: Record<(typeof SECONDARY)[number], UiCategory> = {
@@ -61,6 +60,8 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
      light a hair section from a stale texture category. */
   const hairTab = useCharacter((s) => s.hairTab);
   const setHairTab = useCharacter((s) => s.setHairTab);
+  const bodyTab = useCharacter((s) => s.bodyTab);
+  const setBodyTab = useCharacter((s) => s.setBodyTab);
   const stats = useCharacter((s) => s.stats);
   const previewMode = useCharacter((s) => s.previewMode);
   const setPreviewMode = useCharacter((s) => s.setPreviewMode);
@@ -73,15 +74,17 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
     HAIR: { distance: 1.15, targetY: -0.05 },
     FACE: { distance: 0.70, targetY: 0.06 },
     BODY: { distance: 3.8, targetY: -0.65 },
-    EQUIPMENT: { distance: 3.8, targetY: -0.65 },
   };
 
   useEffect(() => {
     if (primaryTab === 'FACE SHAPE' || primaryTab === 'VOICE' || primaryTab === 'ZODIAC') {
       setPrimaryTab('FACE');
       setActiveCategory('skin');
+    } else if (primaryTab === 'EQUIPMENT') {
+      setPrimaryTab('BODY');
+      setBodyTab('gear');
     }
-  }, [primaryTab, setPrimaryTab, setActiveCategory]);
+  }, [primaryTab, setPrimaryTab, setActiveCategory, setBodyTab]);
 
   return (
     <header className="pointer-events-none absolute inset-x-0 top-0 z-30">
@@ -113,12 +116,14 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                     aria-disabled={disabled}
                     onClick={() => {
                       if (disabled) return;
-                      const wasBodyFramed =
-                        (primaryTab === 'EQUIPMENT' || primaryTab === 'BODY') &&
-                        (item === 'EQUIPMENT' || item === 'BODY');
+                      const wasBodyFramed = primaryTab === 'BODY' && item === 'BODY';
                       setPrimaryTab(item);
-                      const kind = PRIMARY_CATEGORY[item];
-                      if (kind) setActiveCategory(kind);
+                      if (item === 'BODY') {
+                        setActiveCategory(bodyTab === 'gear' ? 'equipment' : 'body');
+                      } else {
+                        const kind = PRIMARY_CATEGORY[item];
+                        if (kind) setActiveCategory(kind);
+                      }
                       const pose = FRAMING_BY_TAB[item];
                       if (pose && !wasBodyFramed) triggerCameraPose(pose);
                     }}
@@ -217,58 +222,50 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
           {/* HAIR's own secondary row. It highlights a scroll target in the
               hair controller rather than picking an asset category, so it is
               deliberately separate from FACE's `subTab`. */}
-          {(primaryTab === 'EQUIPMENT' || primaryTab === 'BODY') && (
+          {primaryTab === 'BODY' && (
             <div className="mt-[2px] flex max-w-full items-center gap-[6px] overflow-x-auto overflow-y-hidden py-[2px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
               {/* GEAR SLOTS */}
               <div className="flex items-center gap-[6px]">
-                {primaryTab === 'EQUIPMENT' && (
+                {bodyTab === 'gear' && (
                   <span className="mr-[1px] inline-block h-[3px] w-[3px] rounded-full bg-[#d4b483]" />
                 )}
                 <button
                   type="button"
                   onClick={() => {
-                    const wasBodyFramed = primaryTab === 'EQUIPMENT' || primaryTab === 'BODY';
-                    setPrimaryTab('EQUIPMENT');
+                    setBodyTab('gear');
                     setActiveCategory('equipment');
-                    if (!wasBodyFramed) {
-                      triggerCameraPose({ distance: 3.8, targetY: -0.65 });
-                    }
                   }}
                   className={cn(
                     'whitespace-nowrap text-[10px] tracking-[0.11em] transition-colors duration-200',
-                    primaryTab === 'EQUIPMENT'
+                    bodyTab === 'gear'
                       ? 'font-medium text-[#d8c39c]'
                       : 'font-light text-[#a8a294]/52 hover:text-[#d5cdbd]',
                   )}
                 >
-                  GEAR SLOTS{primaryTab === 'EQUIPMENT' ? ' [ACTIVE]' : ''}
+                  GEAR SLOTS{bodyTab === 'gear' ? ' [ACTIVE]' : ''}
                 </button>
                 <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
               </div>
 
-              {/* BODY SKIN */}
+              {/* BODY SKIN / PHYSIQUE & WEIGHT */}
               <div className="flex items-center gap-[6px]">
-                {primaryTab === 'BODY' && (
+                {bodyTab === 'physique' && (
                   <span className="mr-[1px] inline-block h-[3px] w-[3px] rounded-full bg-[#d4b483]" />
                 )}
                 <button
                   type="button"
                   onClick={() => {
-                    const wasBodyFramed = primaryTab === 'EQUIPMENT' || primaryTab === 'BODY';
-                    setPrimaryTab('BODY');
+                    setBodyTab('physique');
                     setActiveCategory('body');
-                    if (!wasBodyFramed) {
-                      triggerCameraPose({ distance: 3.8, targetY: -0.65 });
-                    }
                   }}
                   className={cn(
                     'whitespace-nowrap text-[10px] tracking-[0.11em] transition-colors duration-200',
-                    primaryTab === 'BODY'
+                    bodyTab === 'physique'
                       ? 'font-medium text-[#d8c39c]'
                       : 'font-light text-[#a8a294]/52 hover:text-[#d5cdbd]',
                   )}
                 >
-                  PHYSIQUE & WEIGHT{primaryTab === 'BODY' ? ' [ACTIVE]' : ''}
+                  PHYSIQUE & WEIGHT{bodyTab === 'physique' ? ' [ACTIVE]' : ''}
                 </button>
                 <span className="text-[10px] font-extralight text-[#8c8477]/28">/</span>
               </div>
@@ -401,8 +398,8 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
               [SETTINGS]
             </button>
 
-            {/* Wardrobe Drawer (Contextual on EQUIPMENT) */}
-            {primaryTab === 'EQUIPMENT' && (
+            {/* Wardrobe Drawer (Contextual on BODY -> GEAR SLOTS) */}
+            {primaryTab === 'BODY' && bodyTab === 'gear' && (
               <button
                 type="button"
                 onClick={() => setWorkspace(workspace === 'wardrobe' ? 'edit' : 'wardrobe')}
@@ -418,8 +415,8 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
               </button>
             )}
 
-            {/* Body Weight & Soft-Body Physics Drawer (Contextual on BODY) */}
-            {primaryTab === 'BODY' && (
+            {/* Body Weight & Soft-Body Physics Drawer (Contextual on BODY -> PHYSIQUE & WEIGHT) */}
+            {primaryTab === 'BODY' && bodyTab === 'physique' && (
               <button
                 type="button"
                 onClick={() => setWorkspace(workspace === 'physics' ? 'edit' : 'physics')}
