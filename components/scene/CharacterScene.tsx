@@ -269,10 +269,11 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
   const lighting = useCharacter((s) => s.lighting);
   const dirs = rigDirections(lighting);
   const hair = useCharacter((s) => s.primaryTab === 'HAIR');
-  /* Pack mode's outfit runs to y ≈ −1.4, far outside the head framing. Only
-     the BODY tab pulls back; every other tab (and legacy MO2) is unchanged. */
+  /* Pack mode's outfit runs to y ≈ −1.4, far outside the head framing.
+     Both BODY (Physique) and EQUIPMENT (Gear Slots) tabs pull back to full-body;
+     every other tab (and legacy MO2) is unchanged. */
   const primaryTab = useCharacter((s) => s.primaryTab);
-  const bodyFraming = manifest?.sourceLayout === 'pack' && primaryTab === 'BODY';
+  const bodyFraming = manifest?.sourceLayout === 'pack' && (primaryTab === 'BODY' || primaryTab === 'EQUIPMENT');
   const backgroundMode = useCharacter((s) => s.backgroundMode);
   const customBackgroundUrl = useCharacter((s) => s.customBackgroundUrl);
 

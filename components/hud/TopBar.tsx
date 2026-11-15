@@ -72,8 +72,8 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
     PRESET: { distance: 1.15, targetY: -0.05 },
     HAIR: { distance: 1.15, targetY: -0.05 },
     FACE: { distance: 0.70, targetY: 0.06 },
-    BODY: { distance: 3.2, targetY: -0.60 },
-    EQUIPMENT: { distance: 3.2, targetY: -0.60 },
+    BODY: { distance: 3.8, targetY: -0.65 },
+    EQUIPMENT: { distance: 3.8, targetY: -0.65 },
   };
 
   useEffect(() => {
@@ -113,11 +113,14 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                     aria-disabled={disabled}
                     onClick={() => {
                       if (disabled) return;
+                      const wasBodyFramed =
+                        (primaryTab === 'EQUIPMENT' || primaryTab === 'BODY') &&
+                        (item === 'EQUIPMENT' || item === 'BODY');
                       setPrimaryTab(item);
                       const kind = PRIMARY_CATEGORY[item];
                       if (kind) setActiveCategory(kind);
                       const pose = FRAMING_BY_TAB[item];
-                      if (pose) triggerCameraPose(pose);
+                      if (pose && !wasBodyFramed) triggerCameraPose(pose);
                     }}
                     className={cn(
                       'group relative whitespace-nowrap text-[10px] tracking-[0.1em] transition-colors duration-200',
@@ -224,9 +227,12 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                 <button
                   type="button"
                   onClick={() => {
+                    const wasBodyFramed = primaryTab === 'EQUIPMENT' || primaryTab === 'BODY';
                     setPrimaryTab('EQUIPMENT');
                     setActiveCategory('equipment');
-                    triggerCameraPose({ distance: 3.2, targetY: -0.60 });
+                    if (!wasBodyFramed) {
+                      triggerCameraPose({ distance: 3.8, targetY: -0.65 });
+                    }
                   }}
                   className={cn(
                     'whitespace-nowrap text-[10px] tracking-[0.11em] transition-colors duration-200',
@@ -248,9 +254,12 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                 <button
                   type="button"
                   onClick={() => {
+                    const wasBodyFramed = primaryTab === 'EQUIPMENT' || primaryTab === 'BODY';
                     setPrimaryTab('BODY');
                     setActiveCategory('body');
-                    triggerCameraPose({ distance: 3.2, targetY: -0.60 });
+                    if (!wasBodyFramed) {
+                      triggerCameraPose({ distance: 3.8, targetY: -0.65 });
+                    }
                   }}
                   className={cn(
                     'whitespace-nowrap text-[10px] tracking-[0.11em] transition-colors duration-200',
