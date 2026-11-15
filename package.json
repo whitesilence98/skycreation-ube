@@ -31,7 +31,8 @@
     "check:skeleton": "node scripts/check_skeleton_hierarchy.cjs",
     "check:jslot": "node scripts/check_dynamic_jslot_import.cjs",
     "check:nif": "node scripts/check_nif_import.cjs",
-    "check:equip": "node scripts/check_equipment_thumbnails.cjs"
+    "check:equip": "node scripts/check_equipment_thumbnails.cjs",
+    "check:hair": "node scripts/check_hair_thumbnails.cjs"
   },
   "dependencies": {
     "@react-three/drei": "10.7.9",

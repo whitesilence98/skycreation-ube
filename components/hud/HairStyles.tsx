@@ -7,6 +7,7 @@ import { convertUrl, fetchCatalogue } from '@/lib/mo2/client';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { cn } from '@/lib/cn';
 import { buildHairGroups, findHairGroupForPartId, type HairBrand, type HairGroup } from '@/lib/hair';
+import { HairThumbnail } from '@/components/hud/HairThumbnail';
 
 /** Below this, the shipped head hides the mesh — see `visibility`. */
 const VISIBLE_MIN = 0.55;
@@ -323,26 +324,20 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
                       </span>
                     )}
 
-                    {g.pairedTextureId ? (
-                      <img
-                        src={convertUrl({ kind: 'hair', id: g.pairedTextureId, mode: 'thumb' })}
-                        alt=""
-                        loading="lazy"
-                        className={cn(
-                          'h-full w-full object-cover transition-transform duration-200 group-hover:scale-105',
-                          isSelected ? 'opacity-100' : 'opacity-85 group-hover:opacity-100',
-                        )}
-                      />
-                    ) : (
-                      <span
-                        className={cn(
-                          'text-[8px] tracking-[0.06em] text-center px-0.5 font-mono uppercase',
-                          isUnt ? 'text-[#c9b184]/80' : 'text-[#b6ad9c]/60',
-                        )}
-                      >
-                        {isUnt ? 'NO ATLAS' : 'MESH'}
-                      </span>
-                    )}
+                    <HairThumbnail
+                      id={g.id}
+                      meshUrls={g.parts.map((p) =>
+                        (p.raw && 'meshUrl' in p.raw && typeof p.raw.meshUrl === 'string'
+                          ? p.raw.meshUrl
+                          : convertUrl({ kind: 'hairMesh', id: p.id, mode: 'mesh' }))
+                      )}
+                      label={g.label}
+                      hairTone={hair.tone}
+                      className={cn(
+                        'h-full w-full transition-transform duration-200 group-hover:scale-105',
+                        isSelected ? 'opacity-100' : 'opacity-85 group-hover:opacity-100',
+                      )}
+                    />
 
                     <span className="pointer-events-none absolute bottom-[1px] right-[2px] text-[8px] font-mono tracking-tight text-[#eadcc0]/75">
                       {String(i + 1).padStart(2, '0')}
