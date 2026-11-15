@@ -15,7 +15,6 @@ import { WardrobeDrawer } from '@/components/hud/WardrobeDrawer';
 import { BrowProperties } from '@/components/hud/BrowProperties';
 import { HairProperties } from '@/components/hud/HairProperties';
 import { SkinProperties } from '@/components/hud/SkinProperties';
-import { EyeProperties } from '@/components/hud/EyeProperties';
 import { MakeupProperties } from '@/components/hud/MakeupProperties';
 import { GizmoTooltip } from '@/components/hud/GizmoTooltip';
 import {
@@ -70,9 +69,8 @@ export function Hud({ manifest }: HudProps) {
   const isBrowsTab = primaryTab === 'FACE' && subTab === 'BROWS';
   const isHairTab = primaryTab === 'HAIR';
   const isSkinTab = (primaryTab === 'FACE' && subTab === 'SKIN') || primaryTab === 'BODY';
-  const isEyesTab = primaryTab === 'FACE' && subTab === 'EYES';
   const isMakeupTab = primaryTab === 'FACE' && subTab === 'MAKEUP';
-  const isDualStudioTab = isBrowsTab || isHairTab || isSkinTab || isEyesTab || isMakeupTab;
+  const isDualStudioTab = isBrowsTab || isHairTab || isSkinTab || isMakeupTab;
   const isRightDrawerActive = chrome && (workspace !== 'edit' || isDualStudioTab);
   const rightTitle = isBrowsTab
     ? 'BROW COLOR & PROPERTIES'
@@ -80,11 +78,9 @@ export function Hud({ manifest }: HudProps) {
       ? 'HAIR COLOR & PROPERTIES'
       : isSkinTab
         ? 'SKIN COLOR & PROPERTIES'
-        : isEyesTab
-          ? 'EYE COLOR & PROPERTIES'
-          : isMakeupTab
-            ? 'MAKEUP & TINT'
-            : workspace === 'camera'
+        : isMakeupTab
+          ? 'MAKEUP & TINT'
+          : workspace === 'camera'
       ? 'CAMERA STUDIO'
       : workspace === 'graphics'
         ? 'GRAPHICS & SHADERS'
@@ -320,8 +316,6 @@ export function Hud({ manifest }: HudProps) {
               <HairProperties />
             ) : isSkinTab ? (
               <SkinProperties />
-            ) : isEyesTab ? (
-              <EyeProperties />
             ) : isMakeupTab ? (
               <MakeupProperties />
             ) : (

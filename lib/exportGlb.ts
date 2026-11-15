@@ -51,6 +51,43 @@ export async function exportCharacterGlb(
 }
 
 /**
+ * Computes the vertical distance needed to lift the character so that the
+ * lowest point of the soles sits precisely at Y = 0.0 on the ground plane.
+ */
+function computeGroundOffset(character: THREE.Object3D): number {
+  let minY = Infinity;
+  const tempVec = new THREE.Vector3();
+
+  character.traverse((child) => {
+    if (
+      (child as THREE.Mesh).isMesh &&
+      child.visible &&
+      child.name !== 'face-gizmo' &&
+      child.name !== 'mesh-overlay' &&
+      !child.userData?.isHelper
+    ) {
+      const mesh = child as THREE.Mesh;
+      const geo = mesh.geometry;
+      if (!geo || !geo.attributes || !geo.attributes.position) return;
+      const pos = geo.attributes.position;
+      const arr = pos.array;
+      const mat = mesh.matrixWorld;
+      for (let i = 0; i < arr.length; i += 3) {
+        tempVec.set(arr[i], arr[i + 1], arr[i + 2]).applyMatrix4(mat);
+        if (tempVec.y < minY) {
+          minY = tempVec.y;
+        }
+      }
+    }
+  });
+
+  if (Number.isFinite(minY) && minY < -0.3) {
+    return -minY;
+  }
+  return 1.554;
+}
+
+/**
  * Traverses skinned meshes to collect all bones with non-zero vertex weights,
  * plus all their ancestor bones up to the root.
  */
@@ -170,6 +207,10 @@ export async function exportCharacterScene(
   if (!character) {
     throw new Error('Character model not found in scene.');
   }
+
+  const origPos = character.position.clone();
+  const origRot = character.rotation.clone();
+  const origName = character.name;
 
   // ── Discovery: read-only, may throw, nothing has been mutated yet ───────
   const skeletonGroup = character.getObjectByName('SkeletonRoot');
@@ -312,7 +353,14 @@ export async function exportCharacterScene(
       }
     });
 
-    // 5. Ensure matrices are updated.
+    // 5. Apply ground elevation (feet soles at Y = 0.0) and 180° rotation (facing front)
+    const rawName = customName || 'Character';
+    const safeName = rawName.trim().replace(/[^a-zA-Z0-9_\-]/g, '_') || 'Character';
+    character.name = safeName;
+
+    const groundOffset = computeGroundOffset(character);
+    character.position.set(0, groundOffset, 0);
+    character.rotation.set(0, Math.PI, 0);
     character.updateMatrixWorld(true);
 
     /* 6. Build the clips the exporter will emit. Only the active pose is
@@ -337,14 +385,17 @@ export async function exportCharacterScene(
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const rawName = customName || 'Character';
-    const safeName = rawName.trim().replace(/[^a-zA-Z0-9_\-]/g, '_') || 'Character';
     a.download = `${safeName}.glb`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   } finally {
+    // Guaranteed restoration of live scene transforms
+    character.position.copy(origPos);
+    character.rotation.copy(origRot);
+    character.name = origName;
+    character.updateMatrixWorld(true);
     // Cleanup is itself failure-tolerant: one bad restore must not leave the
     // rest un-undone, so each step is isolated.
     for (const restore of restoreMeshSkeletons) {
