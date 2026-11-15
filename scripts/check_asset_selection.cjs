@@ -18,6 +18,7 @@ vm.runInNewContext(ts.transpileModule(source, {
   exports: moduleObject.exports, module: moduleObject,
   require: (id) => {
     if (id === '@/lib/equipment') return equipmentModule.exports;
+    if (id === '@/lib/head/dynamicSculpt') return { getDynamicSculptHeads: () => [] };
     assert.equal(id, '@/lib/mo2/client');
     return { convertUrl: (options) => `/api/mo2/convert?${new URLSearchParams(options)}` };
   },

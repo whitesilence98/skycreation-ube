@@ -5,6 +5,7 @@ import type {
 import type { CatalogueEntry } from '@/lib/mo2/types';
 import { convertUrl } from '@/lib/mo2/client';
 import { EQUIP_SLOTS, isWholeOutfit, equipSlotOf, type EquipSelection, type EquipSlot } from '@/lib/equipment';
+import { getDynamicSculptHeads } from '@/lib/head/dynamicSculpt';
 
 export type PartMeshKind = 'headMesh' | 'eyeMesh' | 'lashesMesh' | 'browsMesh' | 'mouthMesh' | 'bodyMesh' | 'handsMesh' | 'feetMesh' | 'hairMesh' | 'clothingMesh';
 export type AssetKind = PartMeshKind | 'skin' | 'eyes' | 'lashes' | 'brows' | 'mouth' | 'body' | 'hair' | 'clothing'
@@ -63,7 +64,12 @@ export function assetOptions(manifest: Mo2Manifest | null, kind: AssetKind): Mo2
 export function assetOptions(manifest: Mo2Manifest | null, kind: AssetKind): Mo2AssetOption[] {
   if (isOverlayKind(kind)) return [];
   const assets = manifest?.assets as Partial<Record<AssetKind, Mo2AssetOption[]>> | undefined;
-  return assets?.[kind] ?? [];
+  const list = assets?.[kind] ?? [];
+  if (kind === 'headMesh') {
+    const dynamicHeads = getDynamicSculptHeads();
+    return dynamicHeads.length ? [...dynamicHeads, ...list] : list;
+  }
+  return list;
 }
 export function defaultAssetId(manifest: Mo2Manifest | null, kind: AssetKind): string | undefined {
   return assetOptions(manifest, kind)[0]?.id;
@@ -230,6 +236,7 @@ export function resolveManifest(
   const companionEyeMesh = (head as { eyeMeshUrl?: string })?.eyeMeshUrl;
   const companionLashesMesh = (head as { lashesMeshUrl?: string })?.lashesMeshUrl;
   const companionBrowsMesh = (head as { browsMeshUrl?: string })?.browsMeshUrl;
+  const companionMouthMesh = (head as { mouthMeshUrl?: string })?.mouthMeshUrl;
 
   const part = (
     name: 'mouth' | 'brows' | 'lashes' | 'body' | 'hands' | 'feet' | 'hair' | 'clothing',
@@ -286,7 +293,7 @@ export function resolveManifest(
       : (usableTexture?.roughnessTexture ?? fallback?.roughnessTexture);
     return {
       ...(fallback ?? {}), ...(usableTexture ?? {}),
-      meshUrl: (name === 'lashes' ? companionLashesMesh : name === 'brows' ? companionBrowsMesh : undefined)
+      meshUrl: (name === 'lashes' ? companionLashesMesh : name === 'brows' ? companionBrowsMesh : name === 'mouth' ? companionMouthMesh : undefined)
         ?? (name === 'hair' || name === 'clothing'
           ? usableMesh?.meshUrl
           : usableMesh?.meshUrl ?? fallback?.meshUrl ?? (name === 'body' ? body?.meshUrl : undefined)),
@@ -389,6 +396,7 @@ export function resolveManifest(
       eyeMeshUrl: companionEyeMesh,
       lashesMeshUrl: companionLashesMesh,
       browsMeshUrl: companionBrowsMesh,
+      mouthMeshUrl: companionMouthMesh,
     } : manifest.headMesh,
     skeleton: skel ? {
       file: skel.file, version: skel.version, bytes: skel.bytes, nodes: skel.nodes, isGltf: false,

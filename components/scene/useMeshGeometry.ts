@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { getDynamicMesh } from '@/lib/head/dynamicSculpt';
 
 export interface MeshGroup {
   start: number;
@@ -93,7 +94,7 @@ const isNumbers = (v: unknown): v is ArrayLike<number> =>
  *  mesh payload is either a corrupt file or an attempt to widen the renderer's
  *  network reach, and is rejected rather than fetched. */
 function isLocalAssetUrl(v: unknown): v is string {
-  return typeof v === 'string' && (v.startsWith('/assets/') || v.startsWith('/api/mo2/convert?'));
+  return typeof v === 'string' && (v.startsWith('/assets/') || v.startsWith('/api/mo2/convert?') || v.startsWith('dynamic://'));
 }
 
 function isOptionalUrl(v: unknown): boolean {
@@ -339,8 +340,8 @@ export function useMeshResource(url: string | undefined, label: string): MeshRes
       setStatus({ error: null, settled: true });
     };
 
-    // Check memory cache for instant 0ms swap
-    const cached = MESH_DATA_CACHE.get(url);
+    // Check memory cache or dynamic sculpt cache for instant 0ms swap
+    const cached = MESH_DATA_CACHE.get(url) ?? getDynamicMesh(url);
     if (cached) {
       try {
         void handleSuccess(cached);
@@ -348,6 +349,13 @@ export function useMeshResource(url: string | undefined, label: string): MeshRes
       } catch {
         // Fall back to network fetch if cached object was corrupted
       }
+    }
+
+    if (url.startsWith('dynamic://')) {
+      const message = `${label}: dynamic mesh not found: ${url}`;
+      console.error(`[HeadModel] ${message}`);
+      setStatus({ error: message, settled: true });
+      return;
     }
 
     fetch(url)

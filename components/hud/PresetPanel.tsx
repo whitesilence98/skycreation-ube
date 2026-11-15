@@ -5,6 +5,7 @@ import { useCharacter } from '@/lib/store';
 import { parsePreset, payloadFromMorphs, presetFileName } from '@/lib/presetIO';
 import { exportCharacterGlb } from '@/lib/exportGlb';
 import { assetOptions, sculptHeadFor } from '@/lib/manifestSelect';
+import { resolveOrBuildSculptHead } from '@/lib/head/dynamicSculpt';
 import { fetchCatalogue } from '@/lib/mo2/client';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest, Mo2PresetOption } from '@/lib/head/faceTexture';
@@ -202,7 +203,8 @@ export function PresetPanel({ manifest }: PresetPanelProps) {
     try {
       const text = await file.text();
       const payload = parsePreset(text, file.name);
-      const head = sculptHeadFor(manifest, payload.sourceFile);
+      const dynamicHead = await resolveOrBuildSculptHead(manifest, text, file.name);
+      const head = dynamicHead ?? sculptHeadFor(manifest, payload.sourceFile);
       loadPreset(
         payload.source === 'racemenu' && head?.origin === 'racemenu-export'
           ? { ...payload, regions: payloadFromMorphs([], { baked: true }).regions }

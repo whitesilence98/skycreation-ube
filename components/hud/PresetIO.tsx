@@ -5,6 +5,7 @@ import { useCharacter } from '@/lib/store';
 import { parsePreset, payloadFromMorphs, presetFileName } from '@/lib/presetIO';
 import { exportCharacterGlb } from '@/lib/exportGlb';
 import { sculptHeadFor } from '@/lib/manifestSelect';
+import { resolveOrBuildSculptHead } from '@/lib/head/dynamicSculpt';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
@@ -76,9 +77,11 @@ export function PresetIO({ manifest }: PresetIOProps) {
   const readFile = async (file: File) => {
     setBusy(true);
     try {
-      const payload = parsePreset(await file.text(), file.name);
-      // Select only a head explicitly linked to this preset's filename.
-      const head = sculptHeadFor(manifest, payload.sourceFile);
+      const text = await file.text();
+      const payload = parsePreset(text, file.name);
+      // Select an explicitly linked baked head or dynamically rebuild the sculpt on UBE base head
+      const dynamicHead = await resolveOrBuildSculptHead(manifest, text, file.name);
+      const head = dynamicHead ?? sculptHeadFor(manifest, payload.sourceFile);
       // Exports already contain FaceGen morphs; do not deform them a second time.
       loadPreset(payload.source === 'racemenu' && head?.origin === 'racemenu-export'
         ? { ...payload, regions: payloadFromMorphs([], { baked: true }).regions }

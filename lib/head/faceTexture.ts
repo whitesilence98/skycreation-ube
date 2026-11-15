@@ -173,6 +173,7 @@ export interface Mo2MeshOption extends Mo2AssetOption {
   eyeMeshUrl?: string;
   lashesMeshUrl?: string;
   browsMeshUrl?: string;
+  mouthMeshUrl?: string;
 }
 
 export interface Mo2SkeletonOption extends Mo2AssetOption {
@@ -255,6 +256,7 @@ export interface Mo2Manifest {
     eyeMeshUrl?: string;
     lashesMeshUrl?: string;
     browsMeshUrl?: string;
+    mouthMeshUrl?: string;
   };
   skeleton?: {
     file: string;

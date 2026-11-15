@@ -147,8 +147,16 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const lashesGeo = useMeshGeometry(lashesMeshUrl, 'lashes')?.geometry ?? null;
 
   // ── real mouth, brows and body meshes from MO2 ────────────────────
-  const mouthMeshUrl = parts?.mouth?.meshUrl ?? (packMode ? undefined : '/assets/mo2/mouth/ube-mouth.json');
-  const browsMeshUrl = parts?.brows?.meshUrl ?? (packMode ? undefined : '/assets/mo2/brows/ube-brows.json');
+  const mouthMeshUrl =
+    parts?.mouth?.meshUrl ??
+    (manifest?.headMesh as { mouthMeshUrl?: string } | undefined)?.mouthMeshUrl ??
+    (manifest?.assets?.mouthMesh?.[0] as { meshUrl?: string })?.meshUrl ??
+    (packMode ? '/assets/preset-pack/meshes/mouthMesh-479b956af5879125.json' : '/assets/mo2/mouth/ube-mouth.json');
+  const browsMeshUrl =
+    parts?.brows?.meshUrl ??
+    (manifest?.headMesh as { browsMeshUrl?: string } | undefined)?.browsMeshUrl ??
+    (manifest?.assets?.browsMesh?.[0] as { meshUrl?: string })?.meshUrl ??
+    (packMode ? '/assets/preset-pack/meshes/browsMesh-81d3235798cd7065.json' : '/assets/mo2/brows/ube-brows.json');
   const bodyMeshUrl =
     parts?.body?.meshUrl ?? manifest?.body?.meshUrl ?? (packMode ? undefined : '/assets/mo2/body/ube-body.json');
   const mouthGeo = useMeshGeometry(mouthMeshUrl, 'mouth')?.geometry ?? null;
