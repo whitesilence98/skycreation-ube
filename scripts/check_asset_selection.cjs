@@ -12,12 +12,18 @@ const equipmentModule = { exports: {} };
 vm.runInNewContext(ts.transpileModule(equipmentSource, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, { exports: equipmentModule.exports, module: equipmentModule });
+const hairSource = fs.readFileSync(path.join(__dirname, '../lib/hair.ts'), 'utf8');
+const hairModule = { exports: {} };
+vm.runInNewContext(ts.transpileModule(hairSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText, { exports: hairModule.exports, module: hairModule });
 vm.runInNewContext(ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, {
   exports: moduleObject.exports, module: moduleObject,
   require: (id) => {
     if (id === '@/lib/equipment') return equipmentModule.exports;
+    if (id === '@/lib/hair') return hairModule.exports;
     if (id === '@/lib/head/dynamicSculpt') return { getDynamicSculptHeads: () => [] };
     assert.equal(id, '@/lib/mo2/client');
     return { convertUrl: (options) => `/api/mo2/convert?${new URLSearchParams(options)}` };

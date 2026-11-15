@@ -28,6 +28,7 @@ import { FaceGizmo } from '@/components/scene/FaceGizmo';
 import { AuthoredPart } from '@/components/scene/AuthoredPart';
 import { SkinnedPart } from '@/components/scene/SkinnedPart';
 import { EquippedGarment } from '@/components/scene/EquippedGarment';
+import { EquippedHairPart } from '@/components/scene/EquippedHairPart';
 import { SkeletonRegistry, applySkeletonWeight } from '@/lib/character/skeleton';
 import { BodyPhysics } from '@/components/scene/BodyPhysics';
 import { AnimationDirector } from '@/components/scene/AnimationDirector';
@@ -203,10 +204,11 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const handsMesh = handsResource.mesh;
   const feetMesh = feetResource.mesh;
 
-  // Authored hair/outfit: their own shapes and material arrays.
-  const hairMeshUrl = parts?.hair?.meshUrl;
-  const hairResource = useMeshResource(hairMeshUrl, 'hair mesh');
-  const hairAuthored = hairResource.mesh;
+  // Authored hair/outfit: multi-part hair and clothing resources.
+  const hairParts = useMemo(
+    () => parts?.hairParts ?? (parts?.hair?.meshUrl ? [parts.hair] : []),
+    [parts?.hairParts, parts?.hair],
+  );
   const clothingMeshUrl = parts?.clothing?.meshUrl;
   const clothingResource = useWeightedMeshResource(
     parts?.clothing?.weightVariants,
@@ -472,7 +474,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     return () => {
       cancelled = true;
     };
-  }, [skeletonRegistry, bodyPoseId, poseIntensity, rig, weight, headBuild, bodyMesh, handsMesh, feetMesh, clothingResource.mesh, hairResource.mesh, onDirty, syncFollow, applyFollow]);
+  }, [skeletonRegistry, bodyPoseId, poseIntensity, rig, weight, headBuild, bodyMesh, handsMesh, feetMesh, clothingResource.mesh, hairParts, onDirty, syncFollow, applyFollow]);
 
   /* Dev-only: the paired-bone naming bug left every eyebrow and cheek bone
      unresolvable for the entire life of this app and nothing logged. Cheap
@@ -1203,18 +1205,6 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         {browsGeo && (
           <mesh name="Brows" geometry={browsGeo} material={partMaterial(browsTexState, browsMaterial)} renderOrder={4} />
         )}
-        {hairAuthored && !hairAuthored.bones?.length && (
-          <AuthoredPart
-            key="hair"
-            name="Hair"
-            mesh={hairAuthored}
-            defaultRole="hair"
-            fallbackTexture={hairSrc}
-            fallbackNormalByRole={hairNormalFallback}
-            hair={hairSettings}
-            renderOrder={6}
-          />
-        )}
       </primitive>
       {bodyGeo && bodyMesh ? (
         bodyMesh.bones?.length || autoRigUnskinned ? (
@@ -1356,19 +1346,20 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           renderOrder={0}
         />
       ))}
-      {hairAuthored && hairAuthored.bones?.length ? (
-        <SkinnedPart
-          key="hair"
-          name="Hair"
-          mesh={hairAuthored}
+      {hairParts.map((part, index) => (
+        <EquippedHairPart
+          key={`hair:${part.id || part.meshUrl || index}`}
+          part={part}
           registry={skeletonRegistry}
+          rigDonor={bodyMesh ?? undefined}
+          rigRoot={rig?.root}
           defaultRole="hair"
           fallbackTexture={hairSrc}
           fallbackNormalByRole={hairNormalFallback}
           hair={hairSettings}
-          renderOrder={6}
+          renderOrder={6 + index}
         />
-      ) : null}
+      ))}
       <MeshOverlay rig={rig} headBuild={headBuild} />
       <FaceGizmo rig={rig} />
     </group>

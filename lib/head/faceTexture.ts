@@ -237,6 +237,8 @@ export interface Mo2Manifest {
      *  slot it occupies and, when the NIF ships `_0`/`_1` halves, the weight
      *  pair the renderer blends between. */
     equipment?: Array<Mo2PartOption & { slot: string }>;
+    /** Resolved companion NIF parts for multi-part hairstyles (e.g. HairStyleA1, HairStyleA2...). */
+    hairParts?: Mo2PartOption[];
   };
   /** The active hair atlas's per-group strand blocks, when it needed remapping. */
   hairGroups?: Partial<

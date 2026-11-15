@@ -1,0 +1,153 @@
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+const assert = require('assert');
+const ts = require('typescript');
+
+const root = path.resolve(__dirname, '..');
+const cache = new Map();
+function load(name) {
+  const file = path.join(root, name + '.ts');
+  if (cache.has(file)) return cache.get(file).exports;
+  const module = { exports: {} };
+  cache.set(file, module);
+  vm.runInNewContext(
+    ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+    }).outputText,
+    {
+      module,
+      exports: module.exports,
+      console,
+      process,
+      URLSearchParams,
+      require: (id) => {
+        if (id.startsWith('@/')) return load(id.slice(2));
+        if (id.startsWith('.')) {
+          const rel = path.relative(root, path.resolve(path.dirname(file), id)).split(path.sep).join('/');
+          return load(rel);
+        }
+        return require(id);
+      },
+    },
+    { filename: file },
+  );
+  return module.exports;
+}
+
+// 1. Test parsing rules
+const hairMod = load('lib/hair');
+const { parseHairLabel, buildHairGroups, findHairGroupForPartId } = hairMod;
+
+console.log('=== Test 1: Hair Label Parsing Rules ===');
+const testCases = [
+  { input: 'AsterionM', expectedGroup: 'AsterionM', expectedPart: 0, expectedHL: false },
+  { input: 'AsterionM2', expectedGroup: 'AsterionM', expectedPart: 2, expectedHL: false },
+  { input: 'AsterionM3', expectedGroup: 'AsterionM', expectedPart: 3, expectedHL: false },
+  { input: 'AsterionMHL', expectedGroup: 'AsterionMHL', expectedPart: 0, expectedHL: true },
+  { input: 'AsterionM2HL', expectedGroup: 'AsterionMHL', expectedPart: 2, expectedHL: true },
+  { input: 'AsterionM3HL', expectedGroup: 'AsterionMHL', expectedPart: 3, expectedHL: true },
+  { input: 'Flute', expectedGroup: 'Flute', expectedPart: 0, expectedHL: false },
+  { input: 'Flute1', expectedGroup: 'Flute', expectedPart: 1, expectedHL: false },
+  { input: 'Flute1HL', expectedGroup: 'FluteHL', expectedPart: 1, expectedHL: true },
+  { input: 'FluteHL', expectedGroup: 'FluteHL', expectedPart: 0, expectedHL: true },
+  { input: 'Maeve2HL', expectedGroup: 'MaeveHL', expectedPart: 2, expectedHL: true },
+  { input: 'Azathoth5', expectedGroup: 'Azathoth', expectedPart: 5, expectedHL: false },
+];
+
+for (const tc of testCases) {
+  const res = parseHairLabel(tc.input);
+  assert.strictEqual(res.groupKey, tc.expectedGroup, `Group mismatch for ${tc.input}: got ${res.groupKey}, expected ${tc.expectedGroup}`);
+  assert.strictEqual(res.partNumber, tc.expectedPart, `Part mismatch for ${tc.input}: got ${res.partNumber}, expected ${tc.expectedPart}`);
+  assert.strictEqual(res.isHL, tc.expectedHL, `HL mismatch for ${tc.input}: got ${res.isHL}, expected ${tc.expectedHL}`);
+  console.log(`  ✓ ${tc.input.padEnd(14)} -> Group: ${res.groupKey.padEnd(14)} Part: ${res.partNumber} HL: ${res.isHL}`);
+}
+
+console.log('\n=== Test 2: Full Catalogue Hairstyle Grouping ===');
+const hairMeshes = JSON.parse(fs.readFileSync('public/assets/preset-pack/catalogue/hairMesh.json', 'utf8'));
+const groups = buildHairGroups(hairMeshes);
+
+console.log(`  Total raw NIF meshes: ${hairMeshes.length}`);
+console.log(`  Consolidated hairstyles: ${groups.length}`);
+assert(groups.length >= 980 && groups.length <= 1000, `Expected ~990 groups, got ${groups.length}`);
+
+// Check AsterionM
+const asterion = groups.find(g => g.groupKey.toLowerCase() === 'asterionm');
+assert(asterion, 'AsterionM group must exist');
+assert.strictEqual(asterion.parts.length, 3, `AsterionM must have 3 parts, got ${asterion.parts.length}`);
+assert.strictEqual(asterion.isHL, false, 'AsterionM isHL must be false');
+console.log(`  ✓ AsterionM: ${asterion.parts.length} parts (${asterion.parts.map(p => p.label).join(', ')})`);
+
+// Check AsterionMHL
+const asterionHL = groups.find(g => g.groupKey.toLowerCase() === 'asterionmhl');
+assert(asterionHL, 'AsterionMHL group must exist');
+assert.strictEqual(asterionHL.parts.length, 3, `AsterionMHL must have 3 parts, got ${asterionHL.parts.length}`);
+assert.strictEqual(asterionHL.isHL, true, 'AsterionMHL isHL must be true');
+console.log(`  ✓ AsterionMHL (Hairline): ${asterionHL.parts.length} parts (${asterionHL.parts.map(p => p.label).join(', ')})`);
+
+// Verify companion texture sharing
+assert.strictEqual(asterion.pairedTextureId, 'hair-8b69474d84bdeb20', 'AsterionM must have paired texture Asterion.dds');
+assert.strictEqual(asterionHL.pairedTextureId, 'hair-8b69474d84bdeb20', 'AsterionMHL must have paired texture Asterion.dds');
+console.log(`  ✓ Shared texture: AsterionM & AsterionMHL both share texture ${asterion.pairedTextureId}`);
+
+console.log('\n=== Test 3: Backward-Compatible Sub-Part Lookup ===');
+// Selecting AsterionM2 directly should resolve the entire AsterionM group
+const subpart = findHairGroupForPartId(groups, 'hairMesh-297f0c89e8e030f0'); // AsterionM2
+assert(subpart, 'Sub-part AsterionM2 must resolve to a group');
+assert.strictEqual(subpart.groupKey, 'AsterionM', 'Sub-part AsterionM2 must resolve to AsterionM group');
+assert.strictEqual(subpart.parts.length, 3, 'Resolved group must contain all 3 parts');
+console.log(`  ✓ Sub-part AsterionM2 resolves to full group [${subpart.groupKey}] with ${subpart.parts.length} parts`);
+
+// Selecting AsterionM3HL directly should resolve the entire AsterionMHL group
+const subpartHL = findHairGroupForPartId(groups, 'hairMesh-b2858135b5478d46'); // AsterionM3HL
+assert(subpartHL, 'Sub-part AsterionM3HL must resolve to a group');
+assert.strictEqual(subpartHL.groupKey, 'AsterionMHL', 'Sub-part AsterionM3HL must resolve to AsterionMHL group');
+assert.strictEqual(subpartHL.parts.length, 3, 'Resolved group must contain all 3 parts');
+console.log(`  ✓ Sub-part AsterionM3HL resolves to full group [${subpartHL.groupKey}] with ${subpartHL.parts.length} parts`);
+
+console.log('\n=== Test 4: Manifest Resolution & Multi-Part Output ===');
+const sel = load('lib/manifestSelect');
+const { resolveManifest } = sel;
+const manifest = JSON.parse(fs.readFileSync('public/assets/preset-pack/manifest.json', 'utf8'));
+
+const hairTextures = JSON.parse(fs.readFileSync('public/assets/preset-pack/catalogue/hair.json', 'utf8'));
+
+// Resolve manifest selecting AsterionM with hairMesh and hair catalogues
+const resolved = resolveManifest(
+  manifest,
+  { hairMesh: asterion.id },
+  { hairMesh: hairMeshes, hair: hairTextures }
+);
+
+assert(resolved, 'Resolved manifest must not be null');
+assert(resolved.parts, 'Resolved manifest must have parts');
+assert(Array.isArray(resolved.parts.hairParts), 'resolved.parts.hairParts must be an array');
+assert.strictEqual(resolved.parts.hairParts.length, 3, `Expected 3 hair parts in manifest, got ${resolved.parts.hairParts.length}`);
+
+for (let i = 0; i < resolved.parts.hairParts.length; i++) {
+  const p = resolved.parts.hairParts[i];
+  assert(p.meshUrl && p.meshUrl.includes('/api/mo2/convert'), `Part ${i + 1} (${p.label}) must have a valid meshUrl: ${p.meshUrl}`);
+  assert(p.texture, `Part ${i + 1} (${p.label}) must inherit texture: ${p.texture}`);
+  console.log(`  ✓ Part ${i + 1} [${p.label}]: meshUrl=${p.meshUrl} texture=${p.texture}`);
+}
+
+console.log('\n=== Test 5: HairLine Manifest Resolution (AsterionMHL) ===');
+const resolvedHL = resolveManifest(
+  manifest,
+  { hairMesh: asterionHL.id },
+  { hairMesh: hairMeshes, hair: hairTextures }
+);
+
+assert(resolvedHL, 'Resolved manifest must not be null');
+assert(resolvedHL.parts, 'Resolved manifest must have parts');
+assert(Array.isArray(resolvedHL.parts.hairParts), 'resolvedHL.parts.hairParts must be an array');
+assert.strictEqual(resolvedHL.parts.hairParts.length, 3, `Expected 3 hair parts in HL manifest, got ${resolvedHL.parts.hairParts.length}`);
+
+for (let i = 0; i < resolvedHL.parts.hairParts.length; i++) {
+  const p = resolvedHL.parts.hairParts[i];
+  assert(p.meshUrl && p.meshUrl.includes('/api/mo2/convert'), `HL Part ${i + 1} (${p.label}) must have a valid meshUrl: ${p.meshUrl}`);
+  assert(p.texture, `HL Part ${i + 1} (${p.label}) must inherit texture: ${p.texture}`);
+  console.log(`  ✓ HL Part ${i + 1} [${p.label}]: meshUrl=${p.meshUrl} texture=${p.texture}`);
+}
+
+console.log('\n>>> ALL 5 MULTI-PART HAIR VERIFICATION CHECKS PASSED SUCCESSFULLY! <<<');

@@ -3,14 +3,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCharacter } from '@/lib/store';
 import { assetOptions, isRenderableMeshRow } from '@/lib/manifestSelect';
-import { convertUrl, fetchCatalogue, matchesQuery } from '@/lib/mo2/client';
+import { convertUrl, fetchCatalogue } from '@/lib/mo2/client';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { cn } from '@/lib/cn';
-import { IconSparkle } from '@/components/hud/Icons';
+import { buildHairGroups, findHairGroupForPartId, type HairBrand, type HairGroup } from '@/lib/hair';
 
 /** Below this, the shipped head hides the mesh — see `visibility`. */
 const VISIBLE_MIN = 0.55;
 
+type HairCategoryFilter = 'ALL' | 'HAIR' | 'HL';
 type HairBrandFilter = 'ALL' | 'BDOR' | 'KSHAIR' | 'OTHER';
 
 const HAIR_PALETTE = [
@@ -41,7 +42,8 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
   const setHair = useCharacter((s) => s.setHair);
 
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<HairBrandFilter>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<HairCategoryFilter>('ALL');
+  const [brandFilter, setBrandFilter] = useState<HairBrandFilter>('ALL');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
   const visible = (e: { visibility?: number }) =>
     e.visibility === undefined || e.visibility >= VISIBLE_MIN;
 
-  const options = useMemo(() => {
+  const rawOptions = useMemo(() => {
     return [
       ...curated.map((m) => ({
         ...m,
@@ -76,46 +78,45 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
     ];
   }, [curated, archive]);
 
-  const unique = useMemo(() => {
-    const fingerprint = (m: (typeof options)[number]) =>
-      'bytes' in m && m.bytes !== undefined ? `${m.bytes}/${m.mtime}` : `id:${m.id}`;
-    return options.filter(
-      (m, i) => options.findIndex((o) => fingerprint(o) === fingerprint(m)) === i,
-    );
-  }, [options]);
+  // Group raw fragmented NIF files into consolidated multi-part hairstyles
+  const hairGroups = useMemo(() => {
+    return buildHairGroups(rawOptions);
+  }, [rawOptions]);
 
-  const selected =
-    selection.hairMesh ??
-    (unique.find((m) => isRenderableMeshRow(m) && m.untextured !== true) ?? unique[0])?.id;
+  const totalCount = hairGroups.length;
+  const hairCount = useMemo(() => hairGroups.filter((g) => !g.isHL).length, [hairGroups]);
+  const hlCount = useMemo(() => hairGroups.filter((g) => g.isHL).length, [hairGroups]);
 
-  const untextured = (m: (typeof options)[number]) => m.untextured === true;
-
-  const getBrand = (m: (typeof unique)[number]): 'BDOR' | 'KSHAIR' | 'OTHER' => {
-    const rel = (m.rel || m.file || '').toLowerCase();
-    const mod = (m.mod || '').toLowerCase();
-    if (rel.includes('bdor') || rel.includes('dint') || mod.includes('bdor')) return 'BDOR';
-    if (rel.includes('ks hair') || rel.includes('kash') || mod.includes('ks hair')) return 'KSHAIR';
-    return 'OTHER';
-  };
-
-  const bdorCount = useMemo(() => unique.filter((m) => getBrand(m) === 'BDOR').length, [unique]);
-  const ksCount = useMemo(() => unique.filter((m) => getBrand(m) === 'KSHAIR').length, [unique]);
-  const otherCount = unique.length - bdorCount - ksCount;
+  const bdorCount = useMemo(() => hairGroups.filter((g) => g.brand === 'BDOR').length, [hairGroups]);
+  const ksCount = useMemo(() => hairGroups.filter((g) => g.brand === 'KSHAIR').length, [hairGroups]);
+  const otherCount = useMemo(() => hairGroups.filter((g) => g.brand === 'OTHER').length, [hairGroups]);
 
   const filtered = useMemo(() => {
-    return unique.filter((m) => {
-      const brand = getBrand(m);
-      if (filter === 'BDOR' && brand !== 'BDOR') return false;
-      if (filter === 'KSHAIR' && brand !== 'KSHAIR') return false;
-      if (filter === 'OTHER' && brand !== 'OTHER') return false;
+    return hairGroups.filter((g) => {
+      if (categoryFilter === 'HAIR' && g.isHL) return false;
+      if (categoryFilter === 'HL' && !g.isHL) return false;
+
+      if (brandFilter === 'BDOR' && g.brand !== 'BDOR') return false;
+      if (brandFilter === 'KSHAIR' && g.brand !== 'KSHAIR') return false;
+      if (brandFilter === 'OTHER' && g.brand !== 'OTHER') return false;
 
       if (!query.trim()) return true;
-      return matchesQuery(m as Parameters<typeof matchesQuery>[0], query);
+      const q = query.toLowerCase().trim();
+      return (
+        g.label.toLowerCase().includes(q) ||
+        g.groupKey.toLowerCase().includes(q) ||
+        (g.mod && g.mod.toLowerCase().includes(q)) ||
+        g.parts.some((p) => p.label.toLowerCase().includes(q))
+      );
     });
-  }, [unique, filter, query]);
+  }, [hairGroups, categoryFilter, brandFilter, query]);
 
-  const activeStyle = unique.find((m) => m.id === selected);
-  const activeStyleLabel = activeStyle?.label || 'Default Hair';
+  const activeGroup = useMemo(() => {
+    return findHairGroupForPartId(hairGroups, selection.hairMesh) ?? hairGroups[0];
+  }, [hairGroups, selection.hairMesh]);
+
+  const selectedGroupId = activeGroup?.id;
+  const activeLabel = activeGroup ? activeGroup.label : 'Default Hair';
 
   const activeColor = HAIR_PALETTE.find((c) => c.hex.toLowerCase() === hair.tone.toLowerCase());
   const currentColorName = hair.tone === '#ffffff' ? 'Original Atlas' : activeColor?.name || hair.tone.toUpperCase();
@@ -154,20 +155,60 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
               HAIRSTYLE
             </span>
             <span className="text-[9.5px] font-mono tracking-tight text-[#8f8778]">
-              {loading ? 'LOADING…' : `${unique.length} STYLES`}
+              {loading ? 'LOADING…' : `${hairGroups.length} STYLES (${filtered.length} SHOWN)`}
             </span>
           </div>
 
-          {/* Sub-brand Segmented Filters */}
+          {/* Row 1: Category Filter (ALL / HAIR / HAIRLINE) */}
           <div className="flex items-stretch border border-[#d4b483]/22 bg-black/40 text-[9.5px] tracking-[0.08em]">
             <button
               type="button"
-              onClick={() => setFilter('ALL')}
+              onClick={() => setCategoryFilter('ALL')}
               className={cn(
                 'flex-1 py-[3px] text-center transition-colors',
-                filter === 'ALL'
+                categoryFilter === 'ALL'
                   ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
                   : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
+              )}
+            >
+              ALL ({totalCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('HAIR')}
+              className={cn(
+                'flex-1 border-l border-[#d4b483]/22 py-[3px] text-center transition-colors',
+                categoryFilter === 'HAIR'
+                  ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
+                  : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
+              )}
+            >
+              HAIR ({hairCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('HL')}
+              className={cn(
+                'flex-1 border-l border-[#d4b483]/22 py-[3px] text-center transition-colors',
+                categoryFilter === 'HL'
+                  ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
+                  : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
+              )}
+            >
+              HAIRLINE ({hlCount})
+            </button>
+          </div>
+
+          {/* Row 2: Sub-brand Segmented Filters */}
+          <div className="flex items-stretch border border-[#d4b483]/16 bg-black/30 text-[9px] tracking-[0.06em]">
+            <button
+              type="button"
+              onClick={() => setBrandFilter('ALL')}
+              className={cn(
+                'flex-1 py-[2px] text-center transition-colors',
+                brandFilter === 'ALL'
+                  ? 'bg-[#d4b483]/16 font-medium text-[#f0dfbe]'
+                  : 'text-[#8f8778]/60 hover:text-[#c4b9a3]',
               )}
             >
               ALL
@@ -175,43 +216,43 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
             {bdorCount > 0 && (
               <button
                 type="button"
-                onClick={() => setFilter('BDOR')}
+                onClick={() => setBrandFilter('BDOR')}
                 className={cn(
-                  'flex-1 border-l border-[#d4b483]/22 py-[3px] text-center transition-colors',
-                  filter === 'BDOR'
-                    ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
-                    : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
+                  'flex-1 border-l border-[#d4b483]/16 py-[2px] text-center transition-colors',
+                  brandFilter === 'BDOR'
+                    ? 'bg-[#d4b483]/16 font-medium text-[#f0dfbe]'
+                    : 'text-[#8f8778]/60 hover:text-[#c4b9a3]',
                 )}
               >
-                BDOR
+                BDOR ({bdorCount})
               </button>
             )}
             {ksCount > 0 && (
               <button
                 type="button"
-                onClick={() => setFilter('KSHAIR')}
+                onClick={() => setBrandFilter('KSHAIR')}
                 className={cn(
-                  'flex-1 border-l border-[#d4b483]/22 py-[3px] text-center transition-colors',
-                  filter === 'KSHAIR'
-                    ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
-                    : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
+                  'flex-1 border-l border-[#d4b483]/16 py-[2px] text-center transition-colors',
+                  brandFilter === 'KSHAIR'
+                    ? 'bg-[#d4b483]/16 font-medium text-[#f0dfbe]'
+                    : 'text-[#8f8778]/60 hover:text-[#c4b9a3]',
                 )}
               >
-                KS HAIR
+                KS HAIR ({ksCount})
               </button>
             )}
             {otherCount > 0 && (
               <button
                 type="button"
-                onClick={() => setFilter('OTHER')}
+                onClick={() => setBrandFilter('OTHER')}
                 className={cn(
-                  'flex-1 border-l border-[#d4b483]/22 py-[3px] text-center transition-colors',
-                  filter === 'OTHER'
-                    ? 'bg-[#d4b483]/20 font-medium text-[#f0dfbe]'
-                    : 'text-[#8f8778]/70 hover:text-[#c4b9a3]',
+                  'flex-1 border-l border-[#d4b483]/16 py-[2px] text-center transition-colors',
+                  brandFilter === 'OTHER'
+                    ? 'bg-[#d4b483]/16 font-medium text-[#f0dfbe]'
+                    : 'text-[#8f8778]/60 hover:text-[#c4b9a3]',
                 )}
               >
-                UBE
+                UBE ({otherCount})
               </button>
             )}
           </div>
@@ -239,22 +280,23 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
           </div>
 
           {/* Hairstyle Grid */}
-          <div className="thin-scroll grid max-h-[180px] grid-cols-4 gap-[6px] overflow-y-auto pr-[2px]">
-            {filtered.map((m, i) => {
-              const isSelected = selected === m.id;
-              const isUnt = untextured(m);
+          <div className="thin-scroll grid max-h-[190px] grid-cols-4 gap-[6px] overflow-y-auto pr-[2px]">
+            {filtered.map((g, i) => {
+              const isSelected = selectedGroupId === g.id;
+              const rep = g.representative;
+              const isUnt = rep.untextured === true;
 
               return (
                 <button
-                  key={m.id}
+                  key={g.id}
                   type="button"
-                  aria-label={`${m.label} — ${m.mod}${isUnt ? ' (untextured)' : ''}`}
+                  aria-label={`${g.label} — ${g.mod || g.brand}${g.partCount > 1 ? ` (${g.partCount} Parts)` : ''}`}
                   aria-pressed={isSelected}
-                  title={`${m.label}\nMod: ${m.mod}\nPath: ${m.rel}${isUnt ? `\n${m.reason ?? 'No atlas — drawn flat grey'}` : ''}`}
+                  title={`${g.label}\nBrand: ${g.brand}\nParts: ${g.partCount} (${g.parts.map((p) => p.label).join(', ')})\nMod: ${g.mod || 'preset-pack'}${isUnt ? '\nNo atlas — drawn flat grey' : ''}`}
                   onClick={() =>
                     setAssets({
-                      hairMesh: m.id,
-                      ...(m.pairedTextureId ? { hair: m.pairedTextureId } : {}),
+                      hairMesh: g.id,
+                      ...(g.pairedTextureId ? { hair: g.pairedTextureId } : {}),
                     })
                   }
                   className="group relative flex min-w-0 flex-col items-center text-left"
@@ -267,9 +309,23 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
                         : 'border-[#d4b483]/25 bg-[#0b0a08]/80 group-hover:border-[#d4b483]/60 group-hover:bg-[#16120e]',
                     )}
                   >
-                    {m.pairedTextureId ? (
+                    {/* Multi-part count badge */}
+                    {g.partCount > 1 && (
+                      <span className="pointer-events-none absolute top-[2px] right-[2px] z-10 rounded-[1px] border border-[#eac87f]/50 bg-black/80 px-[3px] py-[0.5px] font-mono text-[7px] font-medium tracking-tight text-[#f2dfbe] shadow-xs">
+                        {g.partCount}P
+                      </span>
+                    )}
+
+                    {/* Hairline variant badge */}
+                    {g.isHL && (
+                      <span className="pointer-events-none absolute top-[2px] left-[2px] z-10 rounded-[1px] border border-[#7fb0ea]/50 bg-black/80 px-[3px] py-[0.5px] font-mono text-[7px] font-medium tracking-tight text-[#bfdbfe] shadow-xs">
+                        HL
+                      </span>
+                    )}
+
+                    {g.pairedTextureId ? (
                       <img
-                        src={convertUrl({ kind: 'hair', id: m.pairedTextureId, mode: 'thumb' })}
+                        src={convertUrl({ kind: 'hair', id: g.pairedTextureId, mode: 'thumb' })}
                         alt=""
                         loading="lazy"
                         className={cn(
@@ -280,7 +336,7 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
                     ) : (
                       <span
                         className={cn(
-                          'text-[8.5px] tracking-[0.06em] text-center px-0.5 font-mono uppercase',
+                          'text-[8px] tracking-[0.06em] text-center px-0.5 font-mono uppercase',
                           isUnt ? 'text-[#c9b184]/80' : 'text-[#b6ad9c]/60',
                         )}
                       >
@@ -288,7 +344,7 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
                       </span>
                     )}
 
-                    <span className="pointer-events-none absolute bottom-[1px] right-[2px] text-[8.5px] font-mono tracking-tight text-[#eadcc0]/75">
+                    <span className="pointer-events-none absolute bottom-[1px] right-[2px] text-[8px] font-mono tracking-tight text-[#eadcc0]/75">
                       {String(i + 1).padStart(2, '0')}
                     </span>
 
@@ -299,22 +355,27 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
 
                   <span
                     className={cn(
-                      'mt-[2px] w-full truncate text-center text-[9.5px] tracking-[0.04em] transition-colors',
+                      'mt-[2px] w-full truncate text-center text-[9px] tracking-[0.04em] transition-colors',
                       isSelected
                         ? 'font-medium text-[#f0e2ca]'
                         : 'text-[#a9a192]/70 group-hover:text-[#d5ccbb]',
                     )}
                   >
-                    {m.label}
+                    {g.label}
                   </span>
                 </button>
               );
             })}
           </div>
 
-          <div className="text-center">
-            <span className="text-[9.5px] font-mono tracking-tight text-[#8f8778]">
-              [{activeStyleLabel}]
+          {/* Active selection footer */}
+          <div className="flex items-center justify-between px-1 text-[9px] font-mono tracking-tight text-[#8f8778]">
+            <span className="truncate max-w-[200px] text-[#e2d8c6]">
+              [{activeLabel}]
+            </span>
+            <span className="shrink-0 text-[#c4b595]">
+              {activeGroup ? `${activeGroup.partCount} ${activeGroup.partCount === 1 ? 'Part' : 'Parts'}` : ''}
+              {activeGroup?.isHL ? ' • HL' : ''}
             </span>
           </div>
         </div>
@@ -467,7 +528,7 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
           />
         </div>
 
-        {/* ── 4. Decorative curve arc at the bottom ─────────────────── */}
+        {/* Decorative curve arc at the bottom */}
         <div className="flex justify-center pt-1">
           <svg className="h-5 w-14 text-[#d4b483]/30" viewBox="0 0 100 40" fill="none" stroke="currentColor" strokeWidth="1">
             <path d="M 10 38 Q 50 5 90 38" />

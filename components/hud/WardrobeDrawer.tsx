@@ -9,11 +9,13 @@ import {
   type EquipSlot,
 } from '@/lib/equipment';
 import { assetOptions } from '@/lib/manifestSelect';
-import { matchesQuery } from '@/lib/mo2/client';
+import { matchesQuery, convertUrl } from '@/lib/mo2/client';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { IconCheck, IconHanger, IconSparkle } from '@/components/hud/Icons';
 import type { CatalogueEntry } from '@/lib/mo2/types';
+import { SlotIcon } from '@/components/hud/SlotIcon';
+import { GarmentThumbnail } from '@/components/hud/GarmentThumbnail';
 
 interface ClothingItem {
   id: string;
@@ -27,6 +29,7 @@ interface ClothingItem {
   weightVariants?: { w0: string; w1: string };
   weightKey?: string;
   weightDefault?: number;
+  meshUrl?: string;
 }
 
 function cleanGarmentName(name: string): string {
@@ -37,75 +40,6 @@ function cleanGarmentName(name: string): string {
     .replace(/^FB_/i, '')
     .replace(/_/g, ' ')
     .trim();
-}
-
-function SlotIcon({ slot, className }: { slot: EquipSlot; className?: string }) {
-  const cls = cn('h-4 w-4 fill-none stroke-current stroke-[1.2]', className);
-  switch (slot) {
-    case 'outfit':
-      return (
-        <svg viewBox="0 0 24 24" className={cls}>
-          <path d="M8 3 L12 6 L16 3 L19 7 L16 9 L17 21 L7 21 L8 9 L5 7 Z" />
-        </svg>
-      );
-    case 'top':
-      return (
-        <svg viewBox="0 0 24 24" className={cls}>
-          <path d="M8 4 L12 6 L16 4 L20 8 L17 11 L16 19 L8 19 L7 11 L4 8 Z" />
-        </svg>
-      );
-    case 'bottom':
-      return (
-        <svg viewBox="0 0 24 24" className={cls}>
-          <path d="M7 4 L17 4 L18 13 L14 13 L12 8 L10 13 L6 13 Z" />
-          <path d="M7 4 L6 20 L10.5 20 L12 11 L13.5 20 L18 20 L17 4" />
-        </svg>
-      );
-    case 'bra':
-      return (
-        <svg viewBox="0 0 24 24" className={cls}>
-          <circle cx="8" cy="13" r="3.5" />
-          <circle cx="16" cy="13" r="3.5" />
-          <path d="M11.5 13 L12.5 13 M4.5 12 L2 10 M19.5 12 L22 10 M8 9.5 L8 5 M16 9.5 L16 5" />
-        </svg>
-      );
-    case 'panties':
-      return (
-        <svg viewBox="0 0 24 24" className={cls}>
-          <path d="M5 8 L19 8 L17 17 C15 19, 13 19, 12 19 C11 19, 9 19, 7 17 Z" />
-          <path d="M7 8 C8 12, 10 15, 12 15 C14 15, 16 12, 17 8" strokeDasharray="1.5 1.5" />
-        </svg>
-      );
-    case 'stockings':
-      return (
-        <svg viewBox="0 0 24 24" className={cls}>
-          <path d="M8 4 L11 4 L10 18 L12 20 L9 20 L7 16 Z" />
-          <path d="M16 4 L13 4 L14 18 L12 20 L15 20 L17 16 Z" />
-          <line x1="8" y1="7" x2="11" y2="7" />
-          <line x1="16" y1="7" x2="13" y2="7" />
-        </svg>
-      );
-    case 'hands':
-      return (
-        <svg viewBox="0 0 24 24" className={cls}>
-          <path d="M7 19 L7 12 C7 10, 8 10, 9 10 L9 7 C9 6, 10 6, 11 6 L11 5 C11 4, 12 4, 13 5 L13 10 C14 10, 15 11, 15 12 L17 14 C17 17, 16 19, 14 19 Z" />
-        </svg>
-      );
-    case 'feet':
-      return (
-        <svg viewBox="0 0 24 24" className={cls}>
-          <path d="M8 4 L13 4 L12 14 L17 16 L17 20 L7 20 L7 14 Z" />
-        </svg>
-      );
-    case 'accessories':
-      return (
-        <svg viewBox="0 0 24 24" className={cls}>
-          <path d="M6 7 C5 4, 8 3, 10 6 C9 8, 8 10, 8 12" />
-          <path d="M18 7 C19 4, 16 3, 14 6 C15 8, 16 10, 16 12" />
-          <circle cx="12" cy="15" r="4.5" />
-        </svg>
-      );
-  }
 }
 
 export function WardrobeDrawer({ manifest }: { manifest: Mo2Manifest | null }) {
@@ -356,14 +290,18 @@ export function WardrobeDrawer({ manifest }: { manifest: Mo2Manifest | null }) {
                       : 'border-[#d4b483]/22 bg-black/40 hover:border-[#d4b483]/60 hover:bg-[#14120e] hover:scale-[1.02]',
                   )}
                 >
-                  {/* Card Visual Icon */}
-                  <div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-black/50">
-                    <SlotIcon
+                  {/* Card 3D Garment Thumbnail Preview */}
+                  <div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-xs bg-black/60 p-1">
+                    <GarmentThumbnail
+                      id={item.weightVariants?.w1 ?? item.id}
+                      meshUrl={item.weightVariants ? convertUrl({ kind: 'clothingMesh', id: item.weightVariants.w1, mode: 'mesh' }) : undefined}
+                      label={label}
                       slot={unrestrictedSlots ? itemSlot : currentSlot}
-                      className={cn(
+                      iconClassName={cn(
                         'h-7 w-7 transition-transform group-hover:scale-110',
                         isWorn ? 'text-[#f2dfbe]' : 'text-[#d4b483]/60',
                       )}
+                      imgClassName="transition-transform duration-200 group-hover:scale-105"
                     />
 
                     {/* Unrestricted Inferred Slot Tag */}

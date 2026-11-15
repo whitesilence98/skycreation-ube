@@ -6,6 +6,7 @@ import type { CatalogueEntry } from '@/lib/mo2/types';
 import { convertUrl } from '@/lib/mo2/client';
 import { EQUIP_SLOTS, isWholeOutfit, equipSlotOf, type EquipSelection, type EquipSlot } from '@/lib/equipment';
 import { getDynamicSculptHeads } from '@/lib/head/dynamicSculpt';
+import { buildHairGroups, findHairGroupForPartId } from '@/lib/hair';
 
 export type PartMeshKind = 'headMesh' | 'eyeMesh' | 'lashesMesh' | 'browsMesh' | 'mouthMesh' | 'bodyMesh' | 'handsMesh' | 'feetMesh' | 'hairMesh' | 'clothingMesh';
 export type AssetKind = PartMeshKind | 'skin' | 'eyes' | 'lashes' | 'brows' | 'mouth' | 'body' | 'hair' | 'clothing'
@@ -164,7 +165,7 @@ export function resolveManifest(
 ): Mo2Manifest | null {
   if (!manifest) return null;
   const resolveMeshUrl = (kind: string, option: PartOption | undefined): PartOption | undefined => {
-    if (!option || option.meshUrl || !option.onDemand) return option;
+    if (!option || option.meshUrl) return option;
     const id = option.catalogueId ?? option.id;
     /* Undecodable rows are never served; an `untextured` row is decodable but
        has no atlas, and the worker will emit geometry with no texture URLs. */
@@ -354,9 +355,52 @@ export function resolveManifest(
       ...(weightVariants ? { weightVariants } : { weightVariants: undefined }),
     });
   }
+
+  /**
+   * Multi-part companion NIF resolution for hair.
+   *
+   * In Skyrim hair mods, high-poly hairstyles are authored across multiple NIFs
+   * (e.g. `AsterionM.nif` + `AsterionM2.nif` + `AsterionM3.nif`). We group all
+   * companion parts together and emit `parts.hairParts`, sharing the active
+   * hair texture and material maps.
+   */
+  const hairMeshRows = assetOptions(manifest, 'hairMesh') as PartOption[];
+  const allHairMeshes: PartOption[] = [
+    ...hairMeshRows,
+    ...((catalogues.hairMesh ?? []).filter(
+      (e) => isRenderableMeshRow(e) && !hairMeshRows.some((c) => c.rel === e.rel),
+    ) as PartOption[]),
+  ];
+  const hairGroups = buildHairGroups(allHairMeshes);
+  const activeHairId = selection.hairMesh ?? parts.hair?.id;
+  const activeHairGroup = findHairGroupForPartId(hairGroups, activeHairId);
+
+  const resolvedHairParts: Mo2PartOption[] = [];
+  if (activeHairGroup && activeHairGroup.parts.length > 0) {
+    for (const p of activeHairGroup.parts) {
+      const resolved = resolveMeshUrl('hairMesh', p.raw);
+      if (resolved?.meshUrl) {
+        resolvedHairParts.push({
+          ...resolved,
+          id: p.id,
+          label: p.label,
+          texture: parts.hair?.texture,
+          normalTexture: parts.hair?.normalTexture,
+          roughnessTexture: parts.hair?.roughnessTexture,
+        });
+      }
+    }
+  } else if (parts.hair?.meshUrl) {
+    resolvedHairParts.push(parts.hair);
+  }
+
   return {
     ...manifest, mods,
-    parts: equipmentParts.length ? { ...parts, equipment: equipmentParts } : parts,
+    parts: {
+      ...parts,
+      ...(equipmentParts.length ? { equipment: equipmentParts } : {}),
+      hairParts: resolvedHairParts.length ? resolvedHairParts : (parts.hair?.meshUrl ? [parts.hair] : undefined),
+    },
     textures: {
       ...manifest.textures,
       skin: head?.headTextureMissing ? undefined : skin?.texture ?? manifest.textures?.skin,

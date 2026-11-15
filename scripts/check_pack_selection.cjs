@@ -14,6 +14,7 @@ const transpile = (file) => ts.transpileModule(fs.readFileSync(path.join(__dirna
 }).outputText;
 const fakeRequire = (id) => {
   if (id === '@/lib/equipment') return equipmentModule();
+  if (id === '@/lib/hair') return hairModule();
   if (id === '@/lib/head/dynamicSculpt') return { getDynamicSculptHeads: () => [] };
   assert.equal(id, '@/lib/mo2/client');
   return { convertUrl: (options) => `/api/mo2/convert?${new URLSearchParams(options)}` };
@@ -26,8 +27,10 @@ const loadModule = (file) => {
   return moduleObject.exports;
 };
 let equipmentCache;
+let hairCache;
 /** `manifestSelect` imports the slot vocabulary as values, so the vm needs it. */
 const equipmentModule = () => (equipmentCache ??= loadModule('../lib/equipment.ts'));
+const hairModule = () => (hairCache ??= loadModule('../lib/hair.ts'));
 const { resolveManifest, assetOptions, CATEGORY_MAP } = loadModule('../lib/manifestSelect.ts');
 const { EQUIP_SLOTS, isEquipSelection, equipSlotOf, normalizeEquipSlot } = equipmentModule();
 
