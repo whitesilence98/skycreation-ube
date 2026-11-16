@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { cn } from '@/lib/cn';
 
 export interface StudioCardProps {
@@ -8,6 +8,8 @@ export interface StudioCardProps {
   badge?: string;
   headerTrailing?: React.ReactNode;
   onClose?: () => void;
+  allowMinimize?: boolean;
+  defaultMinimized?: boolean;
   footerLeading?: React.ReactNode;
   footerTrailing?: React.ReactNode;
   showSparkle?: boolean;
@@ -20,38 +22,72 @@ export function StudioCard({
   badge,
   headerTrailing,
   onClose,
+  allowMinimize = true,
+  defaultMinimized = false,
   footerLeading,
   footerTrailing,
   showSparkle = false,
   className,
   children,
 }: StudioCardProps) {
-  const hasHeader = Boolean(title || badge || headerTrailing || onClose);
-  const hasFooter = Boolean(footerLeading || footerTrailing || showSparkle);
+  const [minimized, setMinimized] = useState(defaultMinimized);
+  const hasHeader = Boolean(title || badge || headerTrailing || onClose || allowMinimize);
+  const hasFooter = Boolean(!minimized && (footerLeading || footerTrailing || showSparkle));
 
   return (
     <div
       className={cn(
-        'relative flex w-full max-w-[276px] flex-col select-none text-[#e6e1d8]',
+        'relative flex w-full max-w-[276px] flex-col select-none text-[#e6e1d8] transition-all duration-200',
         className,
       )}
     >
-      <div className="flex flex-col gap-2.5 rounded-[2px] border border-[#463a2e] bg-[#161311]/92 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.65)] backdrop-blur-md">
+      <div
+        className={cn(
+          'flex flex-col rounded-[2px] border border-[#463a2e] bg-[#161311]/92 shadow-[0_16px_40px_rgba(0,0,0,0.65)] backdrop-blur-md transition-all duration-200',
+          minimized ? 'p-2.5 pb-2 bg-[#161311]/96' : 'p-3 gap-2.5',
+        )}
+      >
         {/* Header */}
         {hasHeader && (
           <div className="flex items-center justify-between pb-0.5">
-            {title && (
-              <h2 className="text-[11px] font-medium tracking-[0.14em] text-[#d8c39c] uppercase font-mono truncate">
-                {title}
-              </h2>
-            )}
-            <div className="flex items-center gap-2 shrink-0">
+            <div
+              className={cn(
+                'flex min-w-0 items-center gap-1.5',
+                minimized && 'cursor-pointer hover:opacity-90',
+              )}
+              onClick={minimized ? () => setMinimized(false) : undefined}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-[#eac87f] shadow-[0_0_5px_rgba(234,200,127,0.7)] shrink-0" />
+              {title && (
+                <h2 className="text-[11px] font-medium tracking-[0.14em] text-[#d8c39c] uppercase font-mono truncate">
+                  {title}
+                </h2>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
               {badge && (
                 <span className="text-[9.5px] font-mono tracking-wider text-[#8f8778]">
                   {badge}
                 </span>
               )}
               {headerTrailing}
+              {allowMinimize && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMinimized((v) => !v);
+                  }}
+                  aria-label={minimized ? 'Expand panel' : 'Minimize panel'}
+                  title={minimized ? 'Expand panel' : 'Minimize panel'}
+                  className="flex h-[18px] w-[18px] items-center justify-center rounded-[2px] border border-[#d4b483]/22 text-[#a89b85] transition-all hover:border-[#d4b483]/60 hover:text-[#f0e6d4] hover:bg-[#d4b483]/10"
+                >
+                  <span className="text-[11px] leading-none select-none font-mono">
+                    {minimized ? '＋' : '−'}
+                  </span>
+                </button>
+              )}
               {onClose && (
                 <button
                   type="button"
@@ -68,7 +104,7 @@ export function StudioCard({
         )}
 
         {/* Content Body */}
-        {children}
+        {!minimized && children}
 
         {/* Footer */}
         {hasFooter && (

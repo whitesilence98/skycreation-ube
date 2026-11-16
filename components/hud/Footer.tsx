@@ -3,6 +3,7 @@
 import { IconArrowRight, IconChevronLeft, IconMouse, IconScroll } from '@/components/hud/Icons';
 import { PresetIO } from '@/components/hud/PresetIO';
 import { useCharacter } from '@/lib/store';
+import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
 interface FooterProps {
@@ -12,6 +13,8 @@ interface FooterProps {
 export function Footer({ manifest }: FooterProps) {
   const region = useCharacter((s) => s.activeRegion);
   const primaryTab = useCharacter((s) => s.primaryTab);
+  const cameraFraming = useCharacter((s) => s.cameraFraming);
+  const setCameraFraming = useCharacter((s) => s.setCameraFraming);
 
   return (
     <footer className="pointer-events-none absolute inset-x-0 bottom-0 z-30">
@@ -68,6 +71,40 @@ export function Footer({ manifest }: FooterProps) {
               </span>
             </>
           )}
+        </div>
+
+        {/* ── center: quick camera framing island ─────────────────── */}
+        <div className="pointer-events-auto flex items-center justify-center">
+          <div className="flex items-center gap-1 rounded-full border border-[#d4b483]/22 bg-[#120f0c]/85 p-1 shadow-[0_4px_16px_rgba(0,0,0,0.55)] backdrop-blur-md">
+            <span className="ml-1.5 mr-0.5 text-[8.5px] font-mono tracking-wider text-[#8c8477]/70">CAM:</span>
+            {(['face', 'bust', 'body'] as const).map((mode) => {
+              const active = cameraFraming === mode;
+              const label = mode === 'face' ? 'FACE' : mode === 'bust' ? 'BUST' : 'BODY';
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setCameraFraming(mode)}
+                  className={cn(
+                    'flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-mono tracking-wider transition-all duration-150',
+                    active
+                      ? 'border border-[#eac87f] bg-[#d4b483]/25 font-medium text-[#f2dfbe] shadow-[0_0_8px_rgba(234,200,127,0.3)] ring-1 ring-[#eac87f]/60'
+                      : 'border border-transparent text-[#a8a294]/70 hover:border-[#d4b483]/30 hover:bg-[#d4b483]/10 hover:text-[#e4d8c2]',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'rounded-full transition-all duration-150',
+                      active
+                        ? 'h-1.5 w-1.5 bg-[#eac87f] shadow-[0_0_5px_#eac87f]'
+                        : 'h-1 w-1 bg-[#8c8477]/40',
+                    )}
+                  />
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* ── actions ────────────────────────────────────────────── */}

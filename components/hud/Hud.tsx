@@ -37,13 +37,6 @@ interface HudProps {
 /** Below this the docked rails become edge drawers. Mirrors Tailwind's `lg`. */
 const NARROW = 1024;
 
-const WORKSPACES: Array<{ id: Workspace; label: string; Icon: (p: { className?: string }) => React.JSX.Element }> = [
-  { id: 'edit', label: 'EDIT', Icon: IconMove },
-  { id: 'assets', label: 'ASSETS', Icon: IconAlbum },
-  { id: 'camera', label: 'CAMERA', Icon: IconCamera },
-  { id: 'graphics', label: 'GRAPHICS', Icon: IconGear },
-];
-
 /**
  * Full-bleed overlay above the canvas. The shell is inert
  * (pointer-events-none) so the 3D viewport keeps LMB/RMB/scroll; each control
@@ -197,87 +190,6 @@ export function Hud({ manifest }: HudProps) {
 
       {chrome && <TopBar manifest={manifest} />}
 
-      {/* ── left workspace dock ─────────────────────────────────────── */}
-      <div className={cn(
-        "pointer-events-auto fixed left-2 top-[112px] z-[60] flex flex-col gap-1 lg:top-[104px]",
-        isDedicatedTab && 'opacity-0 pointer-events-none'
-      )}>
-        {chrome && WORKSPACES.map(({ id, label, Icon }) => {
-          const active = workspace === id && leftOpen;
-          return (
-            <button
-              key={id}
-              ref={(node) => { if (workspace === id) leftTrigger.current = node; }}
-              type="button"
-              onClick={(event) => {
-                leftTrigger.current = event.currentTarget;
-                if (leftOpen && workspace === id) {
-                  setLeftOpen(false);
-                  return;
-                }
-                pendingFocus.current = true;
-                openWorkspace(id);
-              }}
-              aria-expanded={leftOpen && workspace === id}
-              aria-controls="hud-left-rail"
-              aria-label={`${label} workspace`}
-              title={`${label} workspace`}
-              className={cn(
-                'flex w-[46px] flex-col items-center gap-[2px] border px-[2px] py-[5px] text-[10px] tracking-[0.08em] backdrop-blur-[6px] transition-colors duration-200 hud-focus',
-                active
-                  ? 'border-[#d4b483]/78 bg-[#d4b483]/16 text-[#f0dfb9] shadow-[0_0_12px_rgba(212,180,131,0.22)]'
-                  : 'border-[#d4b483]/30 bg-black/46 text-[#c3b698]/85 hover:border-[#d4b483]/62 hover:text-[#f0e6d4]',
-              )}
-            >
-              <Icon className="h-[15px] w-[15px]" />
-              <span className="leading-none">{label}</span>
-            </button>
-          );
-        })}
-        <span className="my-[2px] h-px w-full bg-[#d4b483]/24" />
-        <button
-          type="button"
-          onClick={() => setPreviewMode(!previewMode)}
-          aria-pressed={previewMode}
-          aria-label={previewMode ? 'Exit preview' : 'Hide interface preview'}
-          title={previewMode ? 'Exit preview (Esc)' : 'Hide the interface'}
-          className={cn(
-            'flex w-[46px] flex-col items-center gap-[2px] border px-[2px] py-[5px] text-[10px] tracking-[0.08em] backdrop-blur-[6px] transition-colors duration-200 hud-focus',
-            previewMode
-              ? 'border-[#c9a86a]/60 bg-[#c9a86a]/14 text-[#f0dfb9]'
-              : 'border-[#d4b483]/30 bg-black/46 text-[#c3b698]/85 hover:border-[#d4b483]/62 hover:text-[#f0e6d4]',
-          )}
-        >
-          <IconEye className="h-[15px] w-[15px]" />
-          <span className="leading-none">VIEW</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (workspace === 'poses' && rightOpen) {
-              setRightOpen(false);
-            } else {
-              setWorkspace('poses');
-              setLeftOpen(false);
-              setRightOpen(true);
-            }
-          }}
-          aria-expanded={workspace === 'poses' && rightOpen}
-          aria-controls="hud-right-rail"
-          aria-label="Poses workspace"
-          title="Poses & Animations"
-          className={cn(
-            'flex w-[46px] flex-col items-center gap-[2px] border px-[2px] py-[5px] text-[10px] tracking-[0.08em] backdrop-blur-[6px] transition-colors duration-200 hud-focus',
-            workspace === 'poses' && rightOpen
-              ? 'border-[#d4b483]/78 bg-[#d4b483]/16 text-[#f0dfb9] shadow-[0_0_12px_rgba(212,180,131,0.22)]'
-              : 'border-[#d4b483]/30 bg-black/46 text-[#c3b698]/85 hover:border-[#d4b483]/62 hover:text-[#f0e6d4]',
-          )}
-        >
-          <IconPose className="h-[15px] w-[15px]" />
-          <span className="leading-none">POSES</span>
-        </button>
-      </div>
-
       {/* ── left rail: always shows LeftPanel flush-left ────── */}
       <aside
         id="hud-left-rail"
@@ -285,9 +197,8 @@ export function Hud({ manifest }: HudProps) {
         aria-hidden={!leftOpen || !chrome}
         inert={!leftOpen || !chrome}
         className={cn(
-          'pointer-events-auto fixed bottom-[96px] left-[60px] top-[108px] z-50 flex w-[min(calc(100vw-76px),340px)] select-none flex-col border-r border-[#d4b483]/25 bg-[#0a0907]/94 shadow-[0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-xl transition-transform duration-300 motion-reduce:transition-none',
-          'lg:bottom-[72px] lg:left-[60px] lg:top-[96px] lg:z-30 lg:w-[290px] lg:border lg:border-[#d4b483]/22 lg:bg-[#0a0907]/82 lg:shadow-[0_14px_38px_rgba(0,0,0,0.42)]',
-          isDedicatedTab && '!left-[16px] lg:!left-[24px]',
+          'pointer-events-auto fixed bottom-[96px] left-[16px] top-[84px] z-50 flex w-[min(calc(100vw-76px),340px)] select-none flex-col border-r border-[#d4b483]/25 bg-[#0a0907]/94 shadow-[0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur-xl transition-transform duration-300 motion-reduce:transition-none',
+          'lg:bottom-[72px] lg:left-[20px] lg:top-[84px] lg:z-30 lg:w-[290px] lg:border lg:border-[#d4b483]/22 lg:bg-[#0a0907]/82 lg:shadow-[0_14px_38px_rgba(0,0,0,0.42)]',
           leftOpen && chrome ? 'translate-x-0' : 'invisible -translate-x-[130%]',
           isStudioLeftTab && '!left-[20px] !top-[84px] !w-[276px] lg:!left-[20px] lg:!top-[84px] lg:!w-[276px] !bg-transparent !border-0 !shadow-none !backdrop-blur-none',
         )}
