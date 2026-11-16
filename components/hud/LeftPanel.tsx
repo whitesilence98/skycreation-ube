@@ -11,7 +11,6 @@ import { SkinPicker } from '@/components/hud/SkinPicker';
 import { MakeupPicker } from '@/components/hud/MakeupPicker';
 import { PosePanel } from '@/components/hud/PosePanel';
 import { EquipmentPanel } from '@/components/hud/EquipmentPanel';
-import { PresetIO } from '@/components/hud/PresetIO';
 import { PresetPanel } from '@/components/hud/PresetPanel';
 import { AssetPanel } from '@/components/hud/AssetPanel';
 import { BodyPanel } from '@/components/hud/BodyPanel';

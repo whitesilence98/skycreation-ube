@@ -186,9 +186,24 @@ export function createHeadSkinnedMesh(
   const skeleton = new THREE.Skeleton([rootBone, headBone], boneInverses);
 
   // Clone material and assign explicit semantic name so exporters preserve it
-  const origMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-  const mat = origMat ? origMat.clone() : new THREE.MeshStandardMaterial();
-  mat.name = name;
+  const origMat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial | undefined;
+  const isSkin = name === 'Face' || name === 'Head' || name === 'Mouth';
+  const isEyes = name === 'Eyes';
+  const isAlpha = name === 'Lashes' || name === 'Brows';
+
+  const mat = new THREE.MeshStandardMaterial({
+    name,
+    color: origMat?.color ? origMat.color.clone() : new THREE.Color(1, 1, 1),
+    map: origMat?.map ?? null,
+    normalMap: origMat?.normalMap ?? null,
+    normalScale: origMat?.normalScale ? origMat.normalScale.clone() : new THREE.Vector2(1, 1),
+    roughness: isEyes ? 0.1 : (isSkin ? 0.58 : (origMat?.roughness ?? 0.6)),
+    metalness: 0.0,
+    transparent: isAlpha || origMat?.transparent || false,
+    opacity: origMat?.opacity ?? 1.0,
+    alphaTest: isAlpha ? 0.2 : (origMat?.alphaTest ?? 0),
+    side: isAlpha ? THREE.DoubleSide : (origMat?.side ?? THREE.FrontSide),
+  });
 
   const skinned = new THREE.SkinnedMesh(geo, mat);
   skinned.name = name;
@@ -376,17 +391,58 @@ export async function exportCharacterScene(
       }
     });
 
-    // 4.5. Normalize single-material arrays on meshes so exporters never drop them.
+    // 4.5. Sanitize materials on all meshes for clean standard PBR glTF export.
+    // Replaces physical materials (carrying clearcoat & sheen) and materials with
+    // roughnessMap (which triggers three-stdlib's bug baking metallic=1.0 into the blue channel)
+    // with clean MeshStandardMaterials having metallic: 0.0, natural roughness, and proper maps.
     character.traverse((child) => {
       if ((child as any).isMesh) {
         const mesh = child as THREE.Mesh;
-        if (
-          Array.isArray(mesh.material) &&
-          mesh.material.length === 1 &&
-          (!mesh.geometry.groups || mesh.geometry.groups.length === 0)
-        ) {
-          restoreMaterials.push({ mesh, origMaterial: mesh.material });
-          mesh.material = mesh.material[0];
+        if (!mesh.material) return;
+
+        const origMat = mesh.material;
+        restoreMaterials.push({ mesh, origMaterial: origMat });
+
+        const sanitize = (m: THREE.Material): THREE.Material => {
+          if (!(m as any).isMeshStandardMaterial) return m;
+          const std = m as THREE.MeshStandardMaterial;
+          const matName = std.name || mesh.name || '';
+          const lower = matName.toLowerCase();
+          const isSkin =
+            lower.includes('base') ||
+            lower.includes('body') ||
+            lower.includes('hand') ||
+            lower.includes('feet') ||
+            lower.includes('foot') ||
+            lower.includes('head') ||
+            lower.includes('face') ||
+            lower.includes('mouth');
+          const isEyes = lower.includes('eye');
+          const isHair = lower.includes('hair') || lower.includes('s4studio') || lower.includes('ace');
+
+          return new THREE.MeshStandardMaterial({
+            name: std.name || mesh.name,
+            color: std.color ? std.color.clone() : new THREE.Color(1, 1, 1),
+            map: std.map ?? null,
+            normalMap: std.normalMap ?? null,
+            normalScale: std.normalScale ? std.normalScale.clone() : new THREE.Vector2(1, 1),
+            roughness: isEyes ? 0.1 : (isSkin ? 0.58 : (isHair ? 0.62 : (std.roughness ?? 0.55))),
+            metalness: isSkin || isHair || isEyes ? 0.0 : (std.metalness ?? 0.0),
+            transparent: std.transparent || isHair,
+            opacity: std.opacity ?? 1.0,
+            alphaTest: std.alphaTest ?? (isHair ? 0.25 : 0),
+            side: std.side,
+          });
+        };
+
+        if (Array.isArray(origMat)) {
+          if (origMat.length === 1 && (!mesh.geometry.groups || mesh.geometry.groups.length === 0)) {
+            mesh.material = sanitize(origMat[0]);
+          } else {
+            mesh.material = origMat.map((m) => sanitize(m));
+          }
+        } else {
+          mesh.material = sanitize(origMat);
         }
       }
     });

@@ -48,6 +48,57 @@ export async function exportCharacterPackage(
 }
 
 /**
+ * Classifies a mesh or material name into canonical asset roles:
+ * 'Face', 'Mouth', 'Eyes', 'Lashes', 'Brows', 'Outfit', 'Hands', 'Feet', 'Body', 'Hair'.
+ * Order is strictly prioritized to eliminate false-positive substring matches:
+ *  - 'Face' before 'Hair' (prevents 'face' containing 'ace' from becoming 'Hair')
+ *  - 'Outfit' before 'Body' (prevents 'bodysuit' containing 'body' from becoming 'Body')
+ */
+function classifySemanticMaterial(name: string | undefined): string {
+  const n = (name || '').toLowerCase();
+  if (!n) return '';
+
+  // 1. Facial parts first (exact / prefix)
+  if (n.includes('head') || n.includes('face') || n.includes('femalehead')) return 'Face';
+  if (n.includes('mouth')) return 'Mouth';
+  if (n.includes('eye')) return 'Eyes';
+  if (n.includes('lash')) return 'Lashes';
+  if (n.includes('brow')) return 'Brows';
+
+  // 2. Outfit / Garments (MUST precede 'body' because 'bodysuit' contains 'body'!)
+  if (
+    n.includes('bodysuit') ||
+    n.includes('onepiece') ||
+    n.includes('cloth') ||
+    n.includes('outfit') ||
+    n.includes('garment') ||
+    n.includes('suit') ||
+    n.includes('dress') ||
+    n.includes('costume') ||
+    n.includes('armor')
+  ) return 'Outfit';
+
+  // 3. Extremities
+  if (n.includes('hand')) return 'Hands';
+  if (n.includes('feet') || n.includes('foot')) return 'Feet';
+
+  // 4. Body skin
+  if (n.includes('baseshape') || n.includes('body')) return 'Body';
+
+  // 5. Hair (MUST follow face because 'face' contains 'ace'!)
+  if (
+    n.includes('hair') ||
+    n.includes('s4studio') ||
+    n.includes('shadow') ||
+    n.includes('empressof') ||
+    n.includes('asterion') ||
+    /\bace\b/.test(n)
+  ) return 'Hair';
+
+  return '';
+}
+
+/**
  * Extracts all embedded PNG/JPEG texture buffers directly from the GLB binary buffer.
  * Runs in under 3ms with zero canvas/CORS overhead.
  */
@@ -82,17 +133,8 @@ function extractTexturesFromGlb(glbBuffer: ArrayBuffer): {
   }
 
   function classifyMaterial(name: string | undefined, index: number): string {
-    const n = (name || '').toLowerCase();
-    if (n.includes('head') || n.includes('face') || n.includes('femalehead')) return 'Face';
-    if (n.includes('mouth')) return 'Mouth';
-    if (n.includes('eye')) return 'Eyes';
-    if (n.includes('lash')) return 'Lashes';
-    if (n.includes('brow')) return 'Brows';
-    if (n.includes('baseshape') || n.includes('body')) return 'Body';
-    if (n.includes('hand')) return 'Hands';
-    if (n.includes('feet') || n.includes('foot')) return 'Feet';
-    if (n.includes('onepiece') || n.includes('cloth') || n.includes('outfit') || n.includes('garment') || n.includes('bodysuit')) return 'Outfit';
-    if (n.includes('s4studio') || n.includes('hair') || n.includes('shadow') || n.includes('empressof') || n.includes('ace')) return 'Hair';
+    const semantic = classifySemanticMaterial(name);
+    if (semantic) return semantic;
     return name || `Material_${index}`;
   }
 
@@ -245,19 +287,10 @@ function exportCharacterMeshesToObj(
 
   function getMeshMaterialName(mesh: THREE.Mesh): string {
     const rawMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-    const rawName = `${rawMat?.name || ''} ${mesh.name || ''}`.toLowerCase();
-
-    if (rawName.includes('baseshape') || rawName.includes('body')) return 'Body';
-    if (rawName.includes('hand')) return 'Hands';
-    if (rawName.includes('feet') || rawName.includes('foot')) return 'Feet';
-    if (rawName.includes('onepiece') || rawName.includes('cloth') || rawName.includes('outfit') || rawName.includes('garment') || rawName.includes('bodysuit')) return 'Outfit';
-    if (rawName.includes('hair') || rawName.includes('s4studio') || rawName.includes('shadow') || rawName.includes('empressof') || rawName.includes('asterion') || rawName.includes('ace')) return 'Hair';
-    if (rawName.includes('head') || rawName.includes('face') || rawName.includes('femalehead')) return 'Face';
-    if (rawName.includes('mouth')) return 'Mouth';
-    if (rawName.includes('eye')) return 'Eyes';
-    if (rawName.includes('lash')) return 'Lashes';
-    if (rawName.includes('brow')) return 'Brows';
-
+    const fromMat = classifySemanticMaterial(rawMat?.name);
+    if (fromMat) return fromMat;
+    const fromMesh = classifySemanticMaterial(mesh.name);
+    if (fromMesh) return fromMesh;
     return materialDefs[0]?.name || 'Body';
   }
 
@@ -427,58 +460,40 @@ Character Name: ${name}
 Export Date: ${new Date().toISOString()}
 
 INCLUDED FILES:
-  • ${name}.glb       : Rigged & animated 3D model with skeletal XP32 rig & embedded textures.
-  • ${name}.obj       : Static 3D mesh (T-pose / biped) for Mixamo or sculpt software.
-  • ${name}.mtl       : Material and texture mapping definitions for the OBJ.
+  • ${name}.obj       : 3D character mesh with active pose for Mixamo, Blender, Maya, or ZBrush.
+  • ${name}.mtl       : Material and texture mapping definitions with alpha transparency.
   • textures/         : All high-resolution (2K) PBR textures in lossless PNG format.
   • preset.json       : Full character morphs, slider positions, and color settings.
+
+  * Note: For the standalone rigged & animated XP32 skeleton model (.glb),
+    use the "EXPORT .GLB" button in the CC-Kit bottom toolbar.
 
 ------------------------------------------------------------------------
 1. HOW TO IMPORT INTO BLENDER
 ------------------------------------------------------------------------
 1. Open Blender.
-2. Go to File > Import > glTF 2.0 (.glb/.gltf) and select "${name}.glb".
-3. NOTE: Blender defaults to "Solid View" (solid white/grey clay).
-   To see all textures, hover over the 3D viewport and press 'Z',
-   then select "Material Preview" (or click the preview sphere in the top-right).
-4. The skeletal rig and stance animations (Idle / Pose) are immediately ready to use!
+2. Go to File > Import > Wavefront (.obj) and select "${name}.obj".
+   (Blender will automatically load "${name}.mtl" and the "textures/" folder).
+3. To view all textures and transparency, press 'Z' and select "Material Preview".
+   All face maps, eyelashes, eyebrows, hair, and outfit textures are already connected!
+4. If you need the rigged/animated skeletal mesh instead, export "${name}.glb"
+   using the "EXPORT .GLB" button in CC-Kit and import via File > Import > glTF 2.0.
 
 ------------------------------------------------------------------------
 2. HOW TO RIG & ANIMATE IN ADOBE MIXAMO
 ------------------------------------------------------------------------
-Option A (Fastest):
 - Upload this entire "${name}_Package.zip" directly to Mixamo.com!
   (Mixamo automatically reads the .obj, .mtl, and textures/ folder).
-- Or upload a zip containing "${name}.obj", "${name}.mtl", and the "textures" folder.
-- On Mixamo.com, click "Upload Character" and drop the file.
+- On Mixamo.com, click "Upload Character" and drop this .zip file.
 - Place the 5 auto-rig markers (Chin, Wrists, Elbows, Knees, Groin).
 - Mixamo will auto-rig your character with full textures in 30 seconds!
 
-Option B (Retargeting existing rig):
-- Note that "${name}.glb" already contains a complete humanoid skeleton.
-  You can also retarget Mixamo animation FBXs directly onto this skeleton in
-  Blender, Unity, or Unreal Engine.
-
 ------------------------------------------------------------------------
-3. HOW TO IMPORT INTO UNITY
+3. HOW TO IMPORT INTO UNITY / UNREAL ENGINE
 ------------------------------------------------------------------------
-1. Drag "${name}.glb" and the "textures" folder into your Unity Project window.
-2. Select "${name}.glb" in the Project window:
-   - In the Inspector, click the "Rig" tab.
-   - Set "Animation Type" to "Humanoid".
-   - Click "Apply".
-3. Any Unity Humanoid animation will now work seamlessly on this character.
-4. You can also assign the loose textures from the "textures/" folder to
-   URP or HDRP Lit materials for advanced shader rendering.
-
-------------------------------------------------------------------------
-4. HOW TO IMPORT INTO UNREAL ENGINE 5
-------------------------------------------------------------------------
-1. Drag "${name}.glb" and the "textures" folder into your Content Browser.
-2. Unreal will import the Skeletal Mesh, Skeleton, and PBR textures.
-3. Open or create a Material Instance, and plug the Diffuse and Normal maps
-   from the "textures/" folder into the material slots.
-4. Use Unreal's IK Retargeter to retarget Manny/Quinn animations.
+1. Drag the "${name}.obj" and "textures/" folder into your project.
+2. The PBR maps (Face, Body, Lashes, Brows, Hair, Outfit) are standard PNGs
+   ready for URP/HDRP Lit materials in Unity or Material Instances in UE5.
 ========================================================================
 `;
 }
@@ -637,17 +652,58 @@ export async function exportCharacterPackageScene(
       }
     });
 
-    // 5. Normalize single-material arrays on meshes so exporters never drop them.
+    // 5. Sanitize materials on all meshes for clean standard PBR glTF export.
+    // Replaces physical materials (carrying clearcoat & sheen) and materials with
+    // roughnessMap (which triggers three-stdlib's bug baking metallic=1.0 into the blue channel)
+    // with clean MeshStandardMaterials having metallic: 0.0, natural roughness, and proper maps.
     character.traverse((child) => {
       if ((child as any).isMesh) {
         const mesh = child as THREE.Mesh;
-        if (
-          Array.isArray(mesh.material) &&
-          mesh.material.length === 1 &&
-          (!mesh.geometry.groups || mesh.geometry.groups.length === 0)
-        ) {
-          restoreMaterials.push({ mesh, origMaterial: mesh.material });
-          mesh.material = mesh.material[0];
+        if (!mesh.material) return;
+
+        const origMat = mesh.material;
+        restoreMaterials.push({ mesh, origMaterial: origMat });
+
+        const sanitize = (m: THREE.Material): THREE.Material => {
+          if (!(m as any).isMeshStandardMaterial) return m;
+          const std = m as THREE.MeshStandardMaterial;
+          const matName = std.name || mesh.name || '';
+          const lower = matName.toLowerCase();
+          const isSkin =
+            lower.includes('base') ||
+            lower.includes('body') ||
+            lower.includes('hand') ||
+            lower.includes('feet') ||
+            lower.includes('foot') ||
+            lower.includes('head') ||
+            lower.includes('face') ||
+            lower.includes('mouth');
+          const isEyes = lower.includes('eye');
+          const isHair = lower.includes('hair') || lower.includes('s4studio') || lower.includes('ace');
+
+          return new THREE.MeshStandardMaterial({
+            name: std.name || mesh.name,
+            color: std.color ? std.color.clone() : new THREE.Color(1, 1, 1),
+            map: std.map ?? null,
+            normalMap: std.normalMap ?? null,
+            normalScale: std.normalScale ? std.normalScale.clone() : new THREE.Vector2(1, 1),
+            roughness: isEyes ? 0.1 : (isSkin ? 0.58 : (isHair ? 0.62 : (std.roughness ?? 0.55))),
+            metalness: isSkin || isHair || isEyes ? 0.0 : (std.metalness ?? 0.0),
+            transparent: std.transparent || isHair,
+            opacity: std.opacity ?? 1.0,
+            alphaTest: std.alphaTest ?? (isHair ? 0.25 : 0),
+            side: std.side,
+          });
+        };
+
+        if (Array.isArray(origMat)) {
+          if (origMat.length === 1 && (!mesh.geometry.groups || mesh.geometry.groups.length === 0)) {
+            mesh.material = sanitize(origMat[0]);
+          } else {
+            mesh.material = origMat.map((m) => sanitize(m));
+          }
+        } else {
+          mesh.material = sanitize(origMat);
         }
       }
     });
@@ -690,8 +746,8 @@ export async function exportCharacterPackageScene(
     const readmeText = buildReadmeContent(safeName);
 
     // 11. Package into ZIP synchronously with level 0 (instantaneous ~200ms)
+    // Note: The rigged .glb is exported standalone via the "EXPORT .GLB" button.
     const zipTree: Record<string, any> = {
-      [`${safeName}.glb`]: [new Uint8Array(glbBuffer), { level: 0 }],
       [`${safeName}.obj`]: [strToU8(objText), { level: 0 }],
       [`${safeName}.mtl`]: [strToU8(mtlText), { level: 0 }],
       'preset.json': [strToU8(presetText), { level: 0 }],
