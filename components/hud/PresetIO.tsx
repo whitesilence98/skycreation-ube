@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useCharacter } from '@/lib/store';
 import { presetFileName } from '@/lib/presetIO';
 import { exportCharacterGlb } from '@/lib/exportGlb';
+import { exportCharacterPackage } from '@/lib/exportPackage';
 import { importPresetFromFiles } from '@/lib/head/nifImport';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
@@ -37,6 +38,7 @@ export function PresetIO({ manifest }: PresetIOProps) {
   const [busy, setBusy] = useState(false);
   const characterName = useCharacter((s) => s.name);
   const [exportingGlb, setExportingGlb] = useState(false);
+  const [exportingPackage, setExportingPackage] = useState(false);
 
   const onExportGlb = async () => {
     setExportingGlb(true);
@@ -49,6 +51,20 @@ export function PresetIO({ manifest }: PresetIOProps) {
       flash({ kind: 'error', text: err instanceof Error ? err.message : 'GLB export failed' });
     } finally {
       setExportingGlb(false);
+    }
+  };
+
+  const onExportPackage = async () => {
+    setExportingPackage(true);
+    flash({ kind: 'ok', text: 'PACKAGING MODEL & TEXTURES (.ZIP)...' });
+    try {
+      await exportCharacterPackage(characterName, { animated: true });
+      const safeName = (characterName || 'Character').trim().replace(/[^a-zA-Z0-9_\-]/g, '_') || 'Character';
+      flash({ kind: 'ok', text: `EXPORTED ${safeName}_Package.zip` });
+    } catch (err) {
+      flash({ kind: 'error', text: err instanceof Error ? err.message : 'Asset package export failed' });
+    } finally {
+      setExportingPackage(false);
     }
   };
 
@@ -134,12 +150,23 @@ export function PresetIO({ manifest }: PresetIOProps) {
       <button
         type="button"
         onClick={onExportGlb}
-        disabled={exportingGlb}
+        disabled={exportingGlb || exportingPackage}
         title="Export complete 3D model with skeletal rig (.glb) for Blender"
         className="group flex items-center gap-[4px] text-[10px] tracking-[0.13em] text-[#b6ad9d]/80 transition-colors hover:text-[#eee2ca] disabled:opacity-40"
       >
         <IconCube className="h-[9px] w-[9px] opacity-70 transition-transform group-hover:scale-110" />
         <span>{exportingGlb ? 'EXPORTING...' : 'EXPORT .GLB'}</span>
+      </button>
+      <span className="h-[9px] w-px bg-[#d4b483]/20" />
+      <button
+        type="button"
+        onClick={onExportPackage}
+        disabled={exportingPackage || exportingGlb}
+        title="Export full game asset package (.zip) with model, rig, Mixamo OBJ, and loose PNG textures for Unity / Unreal / Blender"
+        className="group flex items-center gap-[4px] text-[10px] tracking-[0.13em] text-[#b6ad9d]/80 transition-colors hover:text-[#eee2ca] disabled:opacity-40"
+      >
+        <IconPackage className="h-[9px] w-[9px] opacity-70 transition-transform group-hover:scale-110" />
+        <span>{exportingPackage ? 'PACKAGING...' : 'EXPORT .ZIP'}</span>
       </button>
 
       {status && (
@@ -183,6 +210,15 @@ function IconCube({ className }: { className?: string }) {
     <svg viewBox="0 0 12 12" fill="none" className={className} aria-hidden>
       <path d="M6 1.2 10.2 3.6v4.8L6 10.8 1.8 8.4V3.6L6 1.2Z" stroke="currentColor" strokeWidth="0.9" strokeLinejoin="round" />
       <path d="M6 6v4.8M6 6 1.8 3.6M6 6l4.2-2.4" stroke="currentColor" strokeWidth="0.9" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconPackage({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 12 12" fill="none" className={className} aria-hidden>
+      <path d="M2 3.5 6 1.5l4 2v5l-4 2-4-2v-5Z" stroke="currentColor" strokeWidth="0.9" strokeLinejoin="round" />
+      <path d="M2 3.5 6 5.5l4-2M6 5.5v5M3.5 2.25l5 2.5" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

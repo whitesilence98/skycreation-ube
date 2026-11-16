@@ -43,10 +43,16 @@ export function StudioCard({
     >
       <div
         className={cn(
-          'flex flex-col rounded-[2px] border border-[#463a2e] bg-[#161311]/92 shadow-[0_16px_40px_rgba(0,0,0,0.65)] backdrop-blur-md transition-all duration-200',
+          'relative flex flex-col rounded-[2px] border border-[#463a2e] bg-[#161311]/92 shadow-[0_16px_40px_rgba(0,0,0,0.65)] backdrop-blur-md transition-all duration-200',
           minimized ? 'p-2.5 pb-2 bg-[#161311]/96' : 'p-3 gap-2.5',
         )}
       >
+        {/* Ornate Nordic Antique Corner Brackets */}
+        <span className="pointer-events-none absolute -top-[1px] -left-[1px] h-[6px] w-[6px] border-t border-l border-[#d4b483]/60" />
+        <span className="pointer-events-none absolute -top-[1px] -right-[1px] h-[6px] w-[6px] border-t border-r border-[#d4b483]/60" />
+        <span className="pointer-events-none absolute -bottom-[1px] -left-[1px] h-[6px] w-[6px] border-b border-l border-[#d4b483]/60" />
+        <span className="pointer-events-none absolute -bottom-[1px] -right-[1px] h-[6px] w-[6px] border-b border-r border-[#d4b483]/60" />
+
         {/* Header */}
         {hasHeader && (
           <div className="flex items-center justify-between pb-0.5">

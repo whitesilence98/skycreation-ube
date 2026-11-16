@@ -11,6 +11,7 @@ import {
 import { assetOptions } from '@/lib/manifestSelect';
 import { matchesQuery, convertUrl } from '@/lib/mo2/client';
 import { StudioCard } from '@/components/hud/common/StudioCard';
+import { SearchInput } from '@/components/hud/common/SearchInput';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { IconCheck, IconHanger, IconSparkle } from '@/components/hud/Icons';
@@ -58,6 +59,7 @@ export function WardrobeDrawer({ manifest, onClose }: WardrobeDrawerProps) {
   const unrestrictedSlots = useCharacter((s) => s.unrestrictedSlots);
   const toggleUnrestrictedSlots = useCharacter((s) => s.toggleUnrestrictedSlots);
   const showGroundMeshes = useCharacter((s) => s.showGroundMeshes);
+  const showToast = useCharacter((s) => s.showToast);
 
   const [query, setQuery] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
@@ -145,19 +147,23 @@ export function WardrobeDrawer({ manifest, onClose }: WardrobeDrawerProps) {
 
   const toggleGarment = (item: ClothingItem) => {
     const isWorn = isEquipped(item);
+    const itemName = cleanGarmentName(item.label || item.file);
     if (isWorn) {
       setEquip({ [currentSlot]: null });
       if (currentSlot === 'outfit') setAssets({ clothingMesh: null });
+      showToast(`UNEQUIPPED: ${itemName}`);
     } else {
       const targetId = item.weightVariants?.w1 ?? item.id;
       setEquip({ [currentSlot]: targetId });
       if (currentSlot === 'outfit') setAssets({ clothingMesh: targetId });
+      showToast(`EQUIPPED [${EQUIP_SLOT_LABEL[currentSlot]}]: ${itemName}`);
     }
   };
 
   const unequipCurrent = () => {
     setEquip({ [currentSlot]: null });
     if (currentSlot === 'outfit') setAssets({ clothingMesh: null });
+    showToast(`UNEQUIPPED: ${EQUIP_SLOT_LABEL[currentSlot]}`);
   };
 
   return (
@@ -242,25 +248,12 @@ export function WardrobeDrawer({ manifest, onClose }: WardrobeDrawerProps) {
       </div>
 
       {/* ── Search Input ────────────────────────────────────────────── */}
-      <div className="relative mb-2">
-        <input
-          type="text"
+      <div className="mb-2">
+        <SearchInput
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={setQuery}
           placeholder={unrestrictedSlots ? 'Search all clothing & accessories…' : `Search ${EQUIP_SLOT_LABEL[currentSlot].toLowerCase()} pieces…`}
-          aria-label="Search garments"
-          className="w-full border border-[#d4b483]/26 bg-black/48 px-2.5 py-1.5 text-[9.5px] tracking-[0.06em] text-[#e2d8c6] placeholder-[#8f8778]/55 outline-none transition-colors focus:border-[#d4b483]/60"
         />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery('')}
-            aria-label="Clear search"
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-[#8f8778] hover:text-[#e2d8c6]"
-          >
-            ×
-          </button>
-        )}
       </div>
 
       {/* ── Spacious Garments Grid ─────────────────────────────────── */}

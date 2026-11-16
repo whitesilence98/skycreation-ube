@@ -6,6 +6,12 @@ import { GLTFExporter } from 'three-stdlib';
 import * as THREE from 'three';
 import { useCharacter } from '@/lib/store';
 import { buildExportClips, restInverses } from '@/lib/character/animation';
+import {
+  registerPackageExportHandler,
+  unregisterPackageExportHandler,
+  exportCharacterPackageScene,
+  type PackageExportOptions,
+} from '@/lib/exportPackage';
 
 export interface ExportOptions {
   /** Include the `Pose` + `Idle` clips. `false` (or omitted) is a static mesh. */
@@ -23,6 +29,14 @@ let activeHandler: ExportHandler | null = null;
  * `finally`, including on failure.
  */
 let exportInFlight = false;
+
+export function isExportInFlight(): boolean {
+  return exportInFlight;
+}
+
+export function setExportInFlight(val: boolean): void {
+  exportInFlight = val;
+}
 
 export function registerExportHandler(handler: ExportHandler) {
   activeHandler = handler;
@@ -54,7 +68,7 @@ export async function exportCharacterGlb(
  * Computes the vertical distance needed to lift the character so that the
  * lowest point of the soles sits precisely at Y = 0.0 on the ground plane.
  */
-function computeGroundOffset(character: THREE.Object3D): number {
+export function computeGroundOffset(character: THREE.Object3D): number {
   let minY = Infinity;
   const tempVec = new THREE.Vector3();
 
@@ -91,7 +105,7 @@ function computeGroundOffset(character: THREE.Object3D): number {
  * Traverses skinned meshes to collect all bones with non-zero vertex weights,
  * plus all their ancestor bones up to the root.
  */
-function findEssentialBones(
+export function findEssentialBones(
   skinnedMeshes: THREE.SkinnedMesh[],
   headBone: THREE.Bone | null,
   rootBone: THREE.Bone | null,
@@ -145,7 +159,7 @@ function findEssentialBones(
 /**
  * Binds a mesh to the single head bone of the unified skeleton.
  */
-function createHeadSkinnedMesh(
+export function createHeadSkinnedMesh(
   mesh: THREE.Mesh,
   name: string,
   rootBone: THREE.Bone,
@@ -256,6 +270,7 @@ export async function exportCharacterScene(
   };
   const restoreMeshSkeletons: (() => void)[] = [];
   const tempFacialMeshes: THREE.SkinnedMesh[] = [];
+  const restoreMaterials: Array<{ mesh: THREE.Mesh; origMaterial: THREE.Material | THREE.Material[] }> = [];
 
   exportInFlight = true;
   try {
@@ -353,6 +368,21 @@ export async function exportCharacterScene(
       }
     });
 
+    // 4.5. Normalize single-material arrays on meshes so exporters never drop them.
+    character.traverse((child) => {
+      if ((child as any).isMesh) {
+        const mesh = child as THREE.Mesh;
+        if (
+          Array.isArray(mesh.material) &&
+          mesh.material.length === 1 &&
+          (!mesh.geometry.groups || mesh.geometry.groups.length === 0)
+        ) {
+          restoreMaterials.push({ mesh, origMaterial: mesh.material });
+          mesh.material = mesh.material[0];
+        }
+      }
+    });
+
     // 5. Apply ground elevation (feet soles at Y = 0.0) and 180° rotation (facing front)
     const rawName = customName || 'Character';
     const safeName = rawName.trim().replace(/[^a-zA-Z0-9_\-]/g, '_') || 'Character';
@@ -398,6 +428,9 @@ export async function exportCharacterScene(
     character.updateMatrixWorld(true);
     // Cleanup is itself failure-tolerant: one bad restore must not leave the
     // rest un-undone, so each step is isolated.
+    for (const { mesh, origMaterial } of restoreMaterials) {
+      mesh.material = origMaterial;
+    }
     for (const restore of restoreMeshSkeletons) {
       try {
         restore();
@@ -431,9 +464,15 @@ export function GlbExportBridge() {
   useEffect(() => {
     const handler = (customName?: string, options?: ExportOptions) =>
       exportCharacterScene(scene as THREE.Scene, customName || name, options);
+    const pkgHandler = (customName?: string, options?: PackageExportOptions) =>
+      exportCharacterPackageScene(scene as THREE.Scene, customName || name, options);
 
     registerExportHandler(handler);
-    return () => unregisterExportHandler();
+    registerPackageExportHandler(pkgHandler);
+    return () => {
+      unregisterExportHandler();
+      unregisterPackageExportHandler();
+    };
   }, [scene, name]);
 
   return null;

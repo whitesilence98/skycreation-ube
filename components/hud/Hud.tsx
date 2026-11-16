@@ -66,6 +66,7 @@ export function Hud({ manifest }: HudProps) {
   const isDualStudioTab = isBrowsTab || isHairTab || isSkinTab || isMakeupTab;
   const isStudioLeftTab = isDualStudioTab || primaryTab === 'BODY' || (primaryTab === 'FACE' && subTab === 'EYES');
   const isRightDrawerActive = chrome && (workspace !== 'edit' || isDualStudioTab);
+  const toast = useCharacter((s) => s.toast);
   const rightTitle = isBrowsTab
     ? 'BROW COLOR & PROPERTIES'
     : isHairTab
@@ -251,6 +252,20 @@ export function Hud({ manifest }: HudProps) {
       {/* Screen-space companion to the 3D gizmo; coordinates are already
           canvas pixels, so no layer scale is applied. */}
       {chrome && <GizmoTooltip />}
+
+      {/* ── ambient studio HUD feedback toast ──────────────────────── */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none fixed bottom-[72px] right-[24px] z-[70] flex items-center gap-2 rounded-full border border-[#eac87f]/50 bg-[#16120e]/95 px-3.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.7)] backdrop-blur-md transition-all duration-200"
+        >
+          <span className="text-[12px] text-[#eac87f] drop-shadow-[0_0_6px_rgba(234,200,127,0.8)]">✧</span>
+          <span className="text-[10px] font-mono tracking-wider text-[#f2dfbe]">
+            {toast}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

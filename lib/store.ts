@@ -427,6 +427,8 @@ export interface CharacterState {
   setCameraFraming: (framing: CameraFraming) => void;
   triggerCameraPose: (pose: Omit<CameraPoseRequest, 'nonce'>) => void;
   resetCameraView: () => void;
+  toast: string | null;
+  showToast: (msg: string) => void;
 }
 
 /**
@@ -718,6 +720,18 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         nonce: (s.cameraPoseRequest?.nonce ?? 0) + 1,
       },
     })),
+
+  toast: null,
+  showToast: (msg: string) => {
+    set({ toast: msg });
+    if (typeof window !== 'undefined') {
+      const w = window as unknown as { __toastTimer?: ReturnType<typeof setTimeout> };
+      if (w.__toastTimer) clearTimeout(w.__toastTimer);
+      w.__toastTimer = setTimeout(() => {
+        set({ toast: null });
+      }, 2600);
+    }
+  },
 
   setSlider: (id, value) =>
     set((s) => {

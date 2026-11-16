@@ -549,7 +549,8 @@ export function SkinnedPart({
   );
 
   useEffect(() => {
-    object.material = renderMaterials;
+    const isSingle = renderMaterials.length === 1 && (!effectiveMesh.groups?.length || !effectiveMesh.materials?.length);
+    object.material = isSingle ? renderMaterials[0] : renderMaterials;
     object.renderOrder = renderOrder;
     /* A grey stand-in has no `map` for the shadow pass to alpha-test, so an
        unloaded hair card would cast a solid quad. Cast only when every slot

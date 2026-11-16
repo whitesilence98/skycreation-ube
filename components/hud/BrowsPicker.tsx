@@ -7,6 +7,7 @@ import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import type { CatalogueEntry } from '@/lib/mo2/types';
 import { cn } from '@/lib/cn';
 import { StudioCard } from '@/components/hud/common/StudioCard';
+import { SearchInput } from '@/components/hud/common/SearchInput';
 import { IconSparkle } from '@/components/hud/Icons';
 
 type FilterTab = 'ALL' | 'CLASSIC' | 'ILV';
@@ -228,28 +229,11 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
           </div>
 
           {/* ── Search Input ───────────────────────────────────────────── */}
-          <div className="relative flex items-center">
-            <span className="pointer-events-none absolute left-[8px] text-[10px] text-[#7d7364]">
-              🔍
-            </span>
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search brows by style or morph..."
-              aria-label="Search brows"
-              className="w-full rounded-[3px] border border-[#443729] bg-[#221c17]/95 pl-[24px] pr-[22px] py-[4px] text-[10px] font-mono tracking-[0.04em] text-[#e2d8c6] placeholder-[#7d7364] outline-none transition-colors focus:border-[#7a6952]"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery('')}
-                className="absolute right-[6px] top-1/2 -translate-y-1/2 text-[11px] text-[#7d7364] hover:text-[#e2d8c6]"
-              >
-                ×
-              </button>
-            )}
-          </div>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search brows by style or morph…"
+          />
 
           {/* ── Eyebrows Grid (2 columns of 2.1:1 horizontal cards) ──────── */}
           <div className="thin-scroll grid max-h-[268px] grid-cols-2 gap-1.5 overflow-y-auto pr-[2px]">

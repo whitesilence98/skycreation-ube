@@ -8,6 +8,7 @@ import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { cn } from '@/lib/cn';
 import { buildHairGroups, findHairGroupForPartId, type HairBrand, type HairGroup } from '@/lib/hair';
 import { StudioCard } from '@/components/hud/common/StudioCard';
+import { SearchInput } from '@/components/hud/common/SearchInput';
 
 /** Below this, the shipped head hides the mesh — see `visibility`. */
 const VISIBLE_MIN = 0.55;
@@ -217,26 +218,11 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
           </div>
 
           {/* Search Input with Clear Button */}
-          <div className="relative">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search hairstyles…"
-              aria-label="Search hairstyles"
-              className="w-full border border-[#d4b483]/26 bg-black/48 px-[7px] py-[3px] text-[10px] tracking-[0.06em] text-[#e2d8c6] placeholder-[#8f8778]/55 outline-none transition-colors focus:border-[#d4b483]/60"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery('')}
-                aria-label="Clear search"
-                className="absolute right-[6px] top-1/2 -translate-y-1/2 text-[10px] text-[#8f8778] hover:text-[#e2d8c6]"
-              >
-                ×
-              </button>
-            )}
-          </div>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search hairstyles…"
+          />
 
           {/* Hairstyle List */}
           <div className="thin-scroll flex max-h-[220px] flex-col gap-1 overflow-y-auto pr-[2px]">

@@ -94,12 +94,24 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
 
       {/* Reference: title baseline at y ≈ 39, x 35–190; nav starts x 312. */}
       <div className="relative grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-2 px-4 pt-3 pb-2 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-        {/* ── left: wordmark ─────────────────────────────────────── */}
-        <div className="flex h-[18px] items-center">
+        {/* ── left: wordmark + character name ───────────────────────── */}
+        <div className="flex items-center gap-3">
           <h1 className="whitespace-nowrap text-[11px] font-normal tracking-[0.075em] text-[#efece6]/92">
             <span className="font-medium">CHARACTER</span>{' '}
             <span className="font-light text-[#e6e2da]/78">CREATION</span>
           </h1>
+
+          <label className="group flex h-[24px] items-center gap-1.5 rounded-full border border-[#d4b483]/28 bg-[#161311]/85 px-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.5)] backdrop-blur-md transition-all focus-within:border-[#eac87f] focus-within:shadow-[0_0_10px_rgba(234,200,127,0.35)]">
+            <span className="shrink-0 text-[8.5px] font-mono tracking-wider text-[#d4b483]/80">NAME:</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value.toUpperCase().slice(0, 14))}
+              spellCheck={false}
+              className="w-[74px] bg-transparent text-[9.5px] font-mono tracking-widest text-[#f2dfbe] outline-none placeholder:text-[#8c8477]/40"
+              placeholder="LYRA"
+              aria-label="Character name"
+            />
+          </label>
         </div>
 
         {/* ── centre: nav stacks ─────────────────────────────────── */}
@@ -146,7 +158,7 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                     )}
                   </button>
                   {i < PRIMARY.length - 1 && (
-                    <span className="text-[11px] font-extralight text-[#8c8477]/38">/</span>
+                    <span className="text-[7px] text-[#d4b483]/35 select-none">◆</span>
                   )}
                 </div>
               );
@@ -295,22 +307,15 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
           )}
         </div>
 
-        {/* ── right: stats + name ─────────────────────────────────── */}
-        <div className="pointer-events-auto col-start-2 row-start-1 flex items-start justify-end gap-[11px] xl:col-start-3">
-          <dl className="num pointer-events-none absolute right-4 top-[112px] flex flex-col items-end gap-[1px] text-[10px] leading-[1.3] tracking-[0.04em] text-[#a49c8d]/72 lg:static lg:mt-[2px]">
-            <div className="flex items-baseline gap-[5px]">
-              <dt className="text-[#8d8577]/62">Faces:</dt>
-              <dd>{stats.faces.toLocaleString('en-US')}</dd>
-            </div>
-            <div className="flex items-baseline gap-[5px]">
-              <dt className="text-[#8d8577]/62">Verts:</dt>
-              <dd>{stats.verts.toLocaleString('en-US')}</dd>
-            </div>
-            <div className="flex items-baseline gap-[5px]">
-              <dt className="text-[#8d8577]/62">Tris:</dt>
-              <dd>{stats.tris.toLocaleString('en-US')}</dd>
-            </div>
-          </dl>
+        {/* ── right: telemetry pill + toolstrip ───────────────────── */}
+        <div className="pointer-events-auto col-start-2 row-start-1 flex items-center justify-end gap-2 xl:col-start-3">
+          <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-[#d4b483]/20 bg-black/45 px-2.5 py-[3px] text-[8.5px] font-mono tracking-wider text-[#a89e8f]/75 backdrop-blur-md shadow-[0_2px_8px_rgba(0,0,0,0.4)]">
+            <span title="Active Face Mesh Polygons">{stats.faces.toLocaleString('en-US')} F</span>
+            <span className="text-[#d4b483]/30">·</span>
+            <span title="Vertices">{stats.verts.toLocaleString('en-US')} V</span>
+            <span className="text-[#d4b483]/30">·</span>
+            <span title="Triangles">{stats.tris.toLocaleString('en-US')} T</span>
+          </div>
 
           {/* POST-FX / ENV / ROT / GLOSS live in the graphics panel on the
               left gutter now; the header carries only the readout and the
@@ -447,18 +452,6 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
               <span>VIEW</span>
             </button>
           </div>
-
-          <label className="group flex h-[28px] w-[128px] items-center gap-[5px] border border-[#d4b483]/32 bg-black/34 px-[6px] backdrop-blur-[6px] transition-colors focus-within:border-[#d4b483]/62">
-            <span className="shrink-0 text-[10px] tracking-[0.12em] text-[#b0a795]/78">NAME:</span>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value.toUpperCase().slice(0, 14))}
-              spellCheck={false}
-              className="w-full min-w-0 bg-transparent text-[10px] tracking-[0.14em] text-[#f1ece0] outline-none placeholder:text-[#8c8477]/40"
-              placeholder="LYRA"
-              aria-label="Character name"
-            />
-          </label>
         </div>
       </div>
     </header>

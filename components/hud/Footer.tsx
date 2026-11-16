@@ -15,6 +15,7 @@ export function Footer({ manifest }: FooterProps) {
   const primaryTab = useCharacter((s) => s.primaryTab);
   const cameraFraming = useCharacter((s) => s.cameraFraming);
   const setCameraFraming = useCharacter((s) => s.setCameraFraming);
+  const showToast = useCharacter((s) => s.showToast);
 
   return (
     <footer className="pointer-events-none absolute inset-x-0 bottom-0 z-30">
@@ -77,14 +78,18 @@ export function Footer({ manifest }: FooterProps) {
         <div className="pointer-events-auto flex items-center justify-center">
           <div className="flex items-center gap-1 rounded-full border border-[#d4b483]/22 bg-[#120f0c]/85 p-1 shadow-[0_4px_16px_rgba(0,0,0,0.55)] backdrop-blur-md">
             <span className="ml-1.5 mr-0.5 text-[8.5px] font-mono tracking-wider text-[#8c8477]/70">CAM:</span>
-            {(['face', 'bust', 'body'] as const).map((mode) => {
+            {(['auto', 'face', 'bust', 'body'] as const).map((mode) => {
               const active = cameraFraming === mode;
-              const label = mode === 'face' ? 'FACE' : mode === 'bust' ? 'BUST' : 'BODY';
+              const label = mode === 'auto' ? 'AUTO' : mode === 'face' ? 'FACE' : mode === 'bust' ? 'BUST' : 'BODY';
               return (
                 <button
                   key={mode}
                   type="button"
-                  onClick={() => setCameraFraming(mode)}
+                  onClick={() => {
+                    setCameraFraming(mode);
+                    showToast(`CAMERA: ${label} FRAMING`);
+                  }}
+                  title={`Set camera framing to ${label}`}
                   className={cn(
                     'flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-mono tracking-wider transition-all duration-150',
                     active
