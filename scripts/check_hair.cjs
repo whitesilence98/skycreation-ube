@@ -50,10 +50,27 @@ assert.equal(useCharacter.getState().assetSelection.hair, 'hair-test-atlas');
 
 store.setHair({ tone: '#abcdef' });
 assert.equal(useCharacter.getState().hair.tone, '#abcdef');
+assert.equal(useCharacter.getState().browColor, '#abcdef',
+  'browColor must synchronize with hair tone by default when linked');
 assert.equal(useCharacter.getState().assetSelection.hair, 'hair-test-atlas',
   'recolouring must not drop the chosen atlas');
 assert.equal(useCharacter.getState().assetSelection.hairMesh, 'hairMesh-test',
   'recolouring must not drop the chosen mesh');
+
+// ── brow and hair color link / unlink / relink behavior ─────────────────────
+assert.equal(useCharacter.getState().linkBrowToHair, true, 'linkBrowToHair is true by default');
+// Manually changing brow color to a custom tint unlinks it
+store.setBrowColor('#998877');
+assert.equal(useCharacter.getState().browColor, '#998877');
+assert.equal(useCharacter.getState().linkBrowToHair, false, 'manual brow color unlinks from hair');
+// Changing hair tone while unlinked does not touch custom brow color
+store.setHair({ tone: '#334455' });
+assert.equal(useCharacter.getState().hair.tone, '#334455');
+assert.equal(useCharacter.getState().browColor, '#998877', 'custom brow color preserved while unlinked');
+// Relinking snaps brow color back to current hair tone
+store.setLinkBrowToHair(true);
+assert.equal(useCharacter.getState().linkBrowToHair, true);
+assert.equal(useCharacter.getState().browColor, '#334455', 'relinking snaps brow color to hair tone');
 
 // ── preset round-trip ───────────────────────────────────────────────────────
 const exported = useCharacter.getState().snapshotPreset();

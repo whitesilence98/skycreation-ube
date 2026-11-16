@@ -296,6 +296,9 @@ export interface CharacterState {
   /** Eyebrow tint `#rrggbb`. Default '#2B1A0A' matching Skyrim creation studio. */
   browColor: string;
   setBrowColor: (c: string) => void;
+  /** Whether eyebrow color synchronizes with hair color by default (Skyrim RaceMenu parity). */
+  linkBrowToHair: boolean;
+  setLinkBrowToHair: (link: boolean) => void;
   /** Eyebrow opacity [0..1]. Default 1.0 (100%). */
   browOpacity: number;
   setBrowOpacity: (v: number) => void;
@@ -451,8 +454,13 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   setHairTab: (hairTab) => set({ hairTab }),
   setHair: (patch) => set((s) => {
     const shapeKeys = ['lengthCm', 'bangs', 'side', 'back', 'volume', 'curl', 'wave', 'wispiness', 'asymmetry'];
-    return { hair: coerceHair({ ...s.hair, ...patch,
-      style: shapeKeys.some((key) => key in patch) ? 'custom' : s.hair.style }) };
+    const nextHair = coerceHair({ ...s.hair, ...patch,
+      style: shapeKeys.some((key) => key in patch) ? 'custom' : s.hair.style });
+    // Synchronize brow color with hair tone when linked (Skyrim RaceMenu parity)
+    const nextBrowColor = (s.linkBrowToHair && patch.tone)
+      ? (patch.tone.toLowerCase() === '#ffffff' ? '#2B1A0A' : patch.tone)
+      : s.browColor;
+    return { hair: nextHair, browColor: nextBrowColor };
   }),
   applyHairStyle: (id) => set((s) => {
     const hair = hairStyle(s.hair, id);
@@ -576,7 +584,24 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   skinSheen: 0.2,
   skinColor: '#ffffff',
   browColor: '#2B1A0A',
-  setBrowColor: (browColor) => set({ browColor }),
+  setBrowColor: (browColor) => set((s) => {
+    // If the user manually picks a custom brow color that differs from hair tone,
+    // unlink linkBrowToHair so their custom choice is preserved
+    const isDifferent = s.hair.tone && s.hair.tone.toLowerCase() !== '#ffffff'
+      ? s.hair.tone.toLowerCase() !== browColor.toLowerCase()
+      : browColor.toLowerCase() !== '#2b1a0a';
+    return {
+      browColor,
+      linkBrowToHair: isDifferent ? false : s.linkBrowToHair,
+    };
+  }),
+  linkBrowToHair: true,
+  setLinkBrowToHair: (linkBrowToHair) => set((s) => ({
+    linkBrowToHair,
+    browColor: linkBrowToHair && s.hair.tone && s.hair.tone.toLowerCase() !== '#ffffff'
+      ? s.hair.tone
+      : (linkBrowToHair && (!s.hair.tone || s.hair.tone.toLowerCase() === '#ffffff') ? '#2B1A0A' : s.browColor),
+  })),
   browOpacity: 1.0,
   setBrowOpacity: (browOpacity) => set({ browOpacity: Math.min(1, Math.max(0, browOpacity)) }),
   browGloss: 0.15,
@@ -896,6 +921,11 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
            When BODY_WEIGHT_ENABLED is false, weight is locked at 0. */
         weight: BODY_WEIGHT_ENABLED ? (payload.weight ?? s.weight) : 0,
         linkFaceToWeight: (payload as { linkFaceToWeight?: boolean }).linkFaceToWeight ?? s.linkFaceToWeight,
+        linkBrowToHair: (payload as { linkBrowToHair?: boolean }).linkBrowToHair ?? s.linkBrowToHair,
+        browColor: (payload as { browColor?: string }).browColor
+          ?? (((payload as { linkBrowToHair?: boolean }).linkBrowToHair ?? s.linkBrowToHair) && payload.hair?.tone && payload.hair.tone.toLowerCase() !== '#ffffff'
+            ? payload.hair.tone
+            : s.browColor),
         hair: payload.hair ? coerceHair({ ...s.hair, ...payload.hair }) : s.hair,
         overlayLayers: payload.overlays ?? s.overlayLayers,
         /* A replacement stack invalidates the panel's `kind:id` selection; a
@@ -923,6 +953,11 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
       equipment: s.equipment,
       weight: s.weight,
       hair: { ...s.hair },
+      browColor: s.browColor,
+      browOpacity: s.browOpacity,
+      browGloss: s.browGloss,
+      browGlossy: s.browGlossy,
+      linkBrowToHair: s.linkBrowToHair,
       overlays: s.overlayLayers,
     });
   },

@@ -59,6 +59,11 @@ export interface PresetFile {
   weight?: number;
   /** The makeup / tattoo / wrinkle stack, in draw order. */
   hair?: HairSettings;
+  browColor?: string;
+  browOpacity?: number;
+  browGloss?: number;
+  browGlossy?: number;
+  linkBrowToHair?: boolean;
   overlays?: OverlayLayer[];
 }
 
@@ -196,6 +201,11 @@ export interface PresetPayload {
   weight?: number;
   /** Makeup / tattoo / wrinkle layers, when the file records them. */
   hair?: HairSettings;
+  browColor?: string;
+  browOpacity?: number;
+  browGloss?: number;
+  browGlossy?: number;
+  linkBrowToHair?: boolean;
   overlays?: OverlayLayer[];
 }
 
@@ -347,6 +357,11 @@ export function buildPresetFile(args: {
   equipment?: EquipSelection;
   weight?: number;
   hair?: HairSettings;
+  browColor?: string;
+  browOpacity?: number;
+  browGloss?: number;
+  browGlossy?: number;
+  linkBrowToHair?: boolean;
   overlays?: OverlayLayer[];
 }): PresetFile {
   return {
@@ -364,6 +379,11 @@ export function buildPresetFile(args: {
     equipment: args.equipment,
     weight: args.weight,
     hair: args.hair,
+    browColor: args.browColor,
+    browOpacity: args.browOpacity,
+    browGloss: args.browGloss,
+    browGlossy: args.browGlossy,
+    linkBrowToHair: args.linkBrowToHair,
     overlays: args.overlays,
   };
 }
@@ -522,6 +542,11 @@ export function parsePreset(text: string, fileName?: string): PresetPayload {
       equipment: isEquipSelection(obj.equipment) ? obj.equipment : undefined,
       weight: coerceWeight(obj.weight),
       hair: obj.hair && typeof obj.hair === 'object' && !Array.isArray(obj.hair) ? coerceHair(obj.hair) : undefined,
+      browColor: typeof obj.browColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(obj.browColor) ? obj.browColor : undefined,
+      browOpacity: typeof obj.browOpacity === 'number' && Number.isFinite(obj.browOpacity) ? Math.min(1, Math.max(0.05, obj.browOpacity)) : undefined,
+      browGloss: typeof obj.browGloss === 'number' && Number.isFinite(obj.browGloss) ? Math.min(1, Math.max(0, obj.browGloss)) : undefined,
+      browGlossy: typeof obj.browGlossy === 'number' && Number.isFinite(obj.browGlossy) ? Math.min(1, Math.max(0, obj.browGlossy)) : undefined,
+      linkBrowToHair: typeof obj.linkBrowToHair === 'boolean' ? obj.linkBrowToHair : undefined,
       overlays: isOverlayLayers(obj.overlays) ? obj.overlays : undefined,
     };
   }

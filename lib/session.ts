@@ -114,6 +114,11 @@ export interface PersistedSession {
   skinDetail: number;
   skinSheen: number;
   skinColor: string;
+  browColor?: string;
+  browOpacity?: number;
+  browGloss?: number;
+  browGlossy?: number;
+  linkBrowToHair?: boolean;
   toneMapping: ToneMappingId;
   sliders: Record<RegionId, SliderValues>;
   poses: Record<RegionId, GizmoPose>;
@@ -275,6 +280,11 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     skinDetail: clamp(finite(o.skinDetail, defaults.skinDetail), 0, 1),
     skinSheen: clamp(finite(o.skinSheen, defaults.skinSheen), 0, 1),
     skinColor: typeof o.skinColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.skinColor) ? o.skinColor : (defaults.skinColor ?? '#ffffff'),
+    browColor: typeof o.browColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.browColor) ? o.browColor : (defaults.browColor ?? '#2B1A0A'),
+    browOpacity: clamp(finite(o.browOpacity, defaults.browOpacity ?? 1.0), 0.05, 1.0),
+    browGloss: clamp(finite(o.browGloss, defaults.browGloss ?? 0.15), 0, 1),
+    browGlossy: clamp(finite(o.browGlossy, defaults.browGlossy ?? 0.15), 0, 1),
+    linkBrowToHair: bool(o.linkBrowToHair, defaults.linkBrowToHair ?? true),
     toneMapping: isOneOf(TONE_MAPPINGS, o.toneMapping) ? o.toneMapping : defaults.toneMapping,
     sliders,
     poses,
@@ -341,6 +351,11 @@ export function pickSession(s: PersistedSession): PersistedSession {
     skinDetail: s.skinDetail,
     skinSheen: s.skinSheen,
     skinColor: s.skinColor,
+    browColor: s.browColor ?? '#2B1A0A',
+    browOpacity: s.browOpacity ?? 1.0,
+    browGloss: s.browGloss ?? 0.15,
+    browGlossy: s.browGlossy ?? 0.15,
+    linkBrowToHair: s.linkBrowToHair ?? true,
     toneMapping: s.toneMapping,
     sliders: Object.fromEntries(
       Object.entries(s.sliders).map(([id, values]) => [id, { ...values }]),

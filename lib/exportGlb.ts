@@ -184,7 +184,13 @@ export function createHeadSkinnedMesh(
     restHeadWorld.clone().invert(),
   ];
   const skeleton = new THREE.Skeleton([rootBone, headBone], boneInverses);
-  const skinned = new THREE.SkinnedMesh(geo, mesh.material);
+
+  // Clone material and assign explicit semantic name so exporters preserve it
+  const origMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+  const mat = origMat ? origMat.clone() : new THREE.MeshStandardMaterial();
+  mat.name = name;
+
+  const skinned = new THREE.SkinnedMesh(geo, mat);
   skinned.name = name;
   skinned.castShadow = true;
   skinned.receiveShadow = true;
@@ -340,9 +346,11 @@ export async function exportCharacterScene(
       headRoot.traverse((child) => {
         if ((child as any).isMesh && child.name && child.name !== 'SkyrimHeadRoot') {
           const mesh = child as THREE.Mesh;
+          const semanticName =
+            mesh.name === 'FemaleHead_hph' || mesh.name === 'Head' ? 'Face' : mesh.name;
           const tempMesh = createHeadSkinnedMesh(
             mesh,
-            mesh.name === 'FemaleHead_hph' ? 'Head' : mesh.name,
+            semanticName,
             rootBone!,
             headBone,
             restHeadWorld,
