@@ -13,6 +13,7 @@ import {
   setExportInFlight,
   patchGlbIor,
   type ExportOptions,
+  type ExportTransform,
 } from '@/lib/exportGlb';
 
 export type PackageExportOptions = ExportOptions;
@@ -232,10 +233,11 @@ function buildMtlContent(materials: Array<{ name: string; diffuseMap?: string; n
  * Bypasses three-stdlib's bug with BufferGeometry on Line objects, and ensures
  * only valid 3D polygon meshes with proper MTL material names are exported for Mixamo & Blender.
  */
-function exportCharacterMeshesToObj(
+export function exportCharacterMeshesToObj(
   character: THREE.Object3D,
   materialDefs: Array<{ name: string; diffuseMap?: string; normalMap?: string }>,
   safeName: string,
+  exportTransform?: THREE.Matrix4,
 ): string {
   let output = `# CC-Kit Skyrim Character Creator - 3D Mesh (Mixamo / Blender / Game Ready)\n`;
   output += `mtllib ${safeName}.mtl\n\n`;
@@ -379,6 +381,10 @@ function exportCharacterMeshesToObj(
         v.copy(rawPos).applyMatrix4(mesh.matrixWorld);
       }
 
+      if (exportTransform) {
+        v.applyMatrix4(exportTransform);
+      }
+
       output += `v ${v.x.toFixed(5)} ${v.y.toFixed(5)} ${v.z.toFixed(5)}\n`;
     }
 
@@ -422,6 +428,10 @@ function exportCharacterMeshesToObj(
           }
         } else {
           n.copy(rawNorm).applyMatrix3(normalMatrix).normalize();
+        }
+
+        if (exportTransform) {
+          n.transformDirection(exportTransform);
         }
 
         output += `vn ${n.x.toFixed(4)} ${n.y.toFixed(4)} ${n.z.toFixed(4)}\n`;
@@ -770,15 +780,17 @@ export async function exportCharacterPackageScene(
       }
     });
 
-    // 6. Ground elevation (feet soles at Y = 0.0) and 180° rotation (facing front)
+    // 6. Prepare safe name and compute ground elevation (feet soles at Y = 0.0)
+    // Note: We do NOT mutate character.position or character.rotation in the live scene!
+    // Mutating live scene transforms during export shifts the character +1.55m in the viewport,
+    // which caused the camera to look at the feet during the 1-3 seconds export.
+    // Instead, elevation and 180° rotation are applied directly to the GLB root node via patchGlbIor,
+    // and applied to the OBJ vertices/normals via exportTransform.
     const rawName = customName || 'Character';
     const safeName = rawName.trim().replace(/[^a-zA-Z0-9_\-]/g, '_') || 'Character';
     character.name = safeName;
 
     const groundOffset = computeGroundOffset(character);
-    character.position.set(0, groundOffset, 0);
-    character.rotation.set(0, Math.PI, 0);
-    character.updateMatrixWorld(true);
 
     // 7. Generate GLB binary
     const keep = new Set(essentialList.flatMap((bone) => [bone.uuid, bone.name]));
@@ -793,13 +805,20 @@ export async function exportCharacterPackageScene(
       animations: clips,
       maxTextureSize: 4096,
     });
-    const glbBuffer = patchGlbIor(gltf as ArrayBuffer);
+    const glbBuffer = patchGlbIor(gltf as ArrayBuffer, 1.0, {
+      translation: [0, groundOffset, 0],
+      rotation: [0, 1, 0, 0],
+      rootName: safeName,
+    });
 
     // 8. Extract textures from GLB binary (instantaneous, 100% reliable)
     const { textureFiles, materialDefs } = extractTexturesFromGlb(glbBuffer);
 
-    // 9. Generate OBJ and MTL text
-    const objText = exportCharacterMeshesToObj(character, materialDefs, safeName);
+    // 9. Generate OBJ and MTL text with ground elevation & front-facing rotation
+    const exportTransform = new THREE.Matrix4()
+      .makeTranslation(0, groundOffset, 0)
+      .multiply(new THREE.Matrix4().makeRotationY(Math.PI));
+    const objText = exportCharacterMeshesToObj(character, materialDefs, safeName, exportTransform);
     const mtlText = buildMtlContent(materialDefs);
 
     // 10. Generate Preset JSON & README

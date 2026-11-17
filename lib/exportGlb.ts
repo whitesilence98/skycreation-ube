@@ -18,12 +18,26 @@ export interface ExportOptions {
   animated?: boolean;
 }
 
+export interface ExportTransform {
+  translation?: [number, number, number];
+  rotation?: [number, number, number, number];
+  rootName?: string;
+}
+
 /**
  * Injects `KHR_materials_ior` (ior=1.0) into every material of a GLB binary so
  * Blender's Principled BSDF uses IOR=1.0 instead of its 1.5 default.
  * Without this extension Blender adds extra specular that makes skin look plastic.
+ *
+ * Also injects root elevation (soles at Y=0.0) and front-facing rotation directly
+ * into the glTF root node, eliminating the need to mutate the live character in
+ * the Three.js viewport (which would cause the camera to snap/look down at the feet).
  */
-export function patchGlbIor(glbBuffer: ArrayBuffer, ior = 1.0): ArrayBuffer {
+export function patchGlbIor(
+  glbBuffer: ArrayBuffer,
+  ior = 1.0,
+  transform?: ExportTransform,
+): ArrayBuffer {
   const view = new DataView(glbBuffer);
   const jsonLen = view.getUint32(12, true);
   const jsonStart = 20;
@@ -31,6 +45,9 @@ export function patchGlbIor(glbBuffer: ArrayBuffer, ior = 1.0): ArrayBuffer {
   const json = JSON.parse(new TextDecoder().decode(jsonBytes)) as {
     materials?: Array<{ extensions?: Record<string, unknown> }>;
     extensionsUsed?: string[];
+    nodes?: Array<{ name?: string; translation?: number[]; rotation?: number[]; [key: string]: unknown }>;
+    scenes?: Array<{ nodes?: number[]; [key: string]: unknown }>;
+    scene?: number;
   };
 
   if (json.materials) {
@@ -42,6 +59,33 @@ export function patchGlbIor(glbBuffer: ArrayBuffer, ior = 1.0): ArrayBuffer {
   json.extensionsUsed = [
     ...new Set([...(json.extensionsUsed ?? []), 'KHR_materials_ior']),
   ];
+
+  if (transform && json.nodes && json.nodes.length > 0) {
+    let rootNode: { name?: string; translation?: number[]; rotation?: number[]; [key: string]: unknown } | undefined;
+    if (transform.rootName) {
+      rootNode = json.nodes.find((n) => n.name === transform.rootName);
+    }
+    if (!rootNode && json.scenes && json.scenes.length > 0) {
+      const activeScene = json.scenes[json.scene ?? 0];
+      if (activeScene && activeScene.nodes && activeScene.nodes.length > 0) {
+        rootNode = json.nodes[activeScene.nodes[0]];
+      }
+    }
+    if (!rootNode) {
+      rootNode = json.nodes[0];
+    }
+    if (rootNode) {
+      if (transform.translation) {
+        rootNode.translation = transform.translation;
+      }
+      if (transform.rotation) {
+        rootNode.rotation = transform.rotation;
+      }
+      if (transform.rootName) {
+        rootNode.name = transform.rootName;
+      }
+    }
+  }
 
   const newJsonEncoded = new TextEncoder().encode(JSON.stringify(json));
   // Pad to 4-byte alignment with spaces (0x20) as required by glTF spec
@@ -531,15 +575,16 @@ export async function exportCharacterScene(
       }
     });
 
-    // 5. Apply ground elevation (feet soles at Y = 0.0) and 180° rotation (facing front)
+    // 5. Prepare safe export name and compute ground elevation (feet soles at Y = 0.0).
+    // Note: We do NOT mutate character.position or character.rotation in the live scene!
+    // Mutating live scene transforms during export caused the viewport to elevate +1.55m
+    // and face backwards, snapping the user's camera to the feet during the async export.
+    // Instead, elevation and 180° rotation are cleanly injected into the GLB root node via patchGlbIor.
     const rawName = customName || 'Character';
     const safeName = rawName.trim().replace(/[^a-zA-Z0-9_\-]/g, '_') || 'Character';
     character.name = safeName;
 
     const groundOffset = computeGroundOffset(character);
-    character.position.set(0, groundOffset, 0);
-    character.rotation.set(0, Math.PI, 0);
-    character.updateMatrixWorld(true);
 
     /* 6. Build the clips the exporter will emit. Only the active pose is
        snapshotted (never all 72 tracks), and every track is filtered to the
@@ -559,7 +604,16 @@ export async function exportCharacterScene(
       maxTextureSize: 4096,
     });
 
-    const blob = new Blob([patchGlbIor(gltf as ArrayBuffer)], { type: 'model/gltf-binary' });
+    const blob = new Blob(
+      [
+        patchGlbIor(gltf as ArrayBuffer, 1.0, {
+          translation: [0, groundOffset, 0],
+          rotation: [0, 1, 0, 0],
+          rootName: safeName,
+        }),
+      ],
+      { type: 'model/gltf-binary' },
+    );
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
