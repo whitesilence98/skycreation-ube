@@ -11,6 +11,7 @@ import {
   createHeadSkinnedMesh,
   isExportInFlight,
   setExportInFlight,
+  patchGlbIor,
   type ExportOptions,
 } from '@/lib/exportGlb';
 
@@ -48,54 +49,64 @@ export async function exportCharacterPackage(
 }
 
 /**
- * Classifies a mesh or material name into canonical asset roles:
- * 'Face', 'Mouth', 'Eyes', 'Lashes', 'Brows', 'Outfit', 'Hands', 'Feet', 'Body', 'Hair'.
- * Order is strictly prioritized to eliminate false-positive substring matches:
- *  - 'Face' before 'Hair' (prevents 'face' containing 'ace' from becoming 'Hair')
- *  - 'Outfit' before 'Body' (prevents 'bodysuit' containing 'body' from becoming 'Body')
+ * Sanitizes a string into a clean, safe identifier for OBJ / MTL (no spaces or illegal characters).
  */
-function classifySemanticMaterial(name: string | undefined): string {
-  const n = (name || '').toLowerCase();
-  if (!n) return '';
+export function sanitizeMtlName(name: string | undefined, fallback: string = 'Material'): string {
+  if (!name) return fallback;
+  const clean = name.trim().replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_');
+  return clean || fallback;
+}
 
-  // 1. Facial parts first (exact / prefix)
-  if (n.includes('head') || n.includes('face') || n.includes('femalehead')) return 'Face';
-  if (n.includes('mouth')) return 'Mouth';
-  if (n.includes('eye')) return 'Eyes';
-  if (n.includes('lash')) return 'Lashes';
-  if (n.includes('brow')) return 'Brows';
+/**
+ * Resolves a clean, canonical material name for a mesh and material slot, ensuring
+ * that the Three.js material, GLTF material, MTL library, and OBJ `usemtl` statements
+ * match with 100% precision.
+ */
+export function resolveSafeMaterialName(
+  mesh: THREE.Mesh,
+  origMat: THREE.Material | undefined,
+  slotIndex: number = 0,
+): string {
+  const rawName = origMat?.name || mesh.name || `Material_${slotIndex}`;
+  const lower = rawName.toLowerCase();
+  const meshLower = (mesh.name || '').toLowerCase();
 
-  // 2. Outfit / Garments (MUST precede 'body' because 'bodysuit' contains 'body'!)
+  // 1. Facial parts
+  if (lower.includes('femalehead') || lower.includes('head') || lower.includes('face') || meshLower === 'face' || meshLower === 'head') return 'Face';
+  if (lower.includes('mouth') || meshLower === 'mouth') return 'Mouth';
+  if (lower.includes('eye') || meshLower === 'eyes') return 'Eyes';
+  if (lower.includes('lash') || meshLower === 'lashes') return 'Lashes';
+  if (lower.includes('brow') || meshLower === 'brows') return 'Brows';
+
+  // 2. Extremities & Body skin
+  if (meshLower === 'hands' || lower.includes('hand')) return 'Hands';
+  if (meshLower === 'feet' || lower.includes('foot') || lower.includes('feet')) return 'Feet';
+  if (meshLower === 'body' || lower === 'baseshape' || (lower === 'default' && meshLower.includes('body'))) return 'Body';
+
+  // 3. Hair
   if (
-    n.includes('bodysuit') ||
-    n.includes('onepiece') ||
-    n.includes('cloth') ||
-    n.includes('outfit') ||
-    n.includes('garment') ||
-    n.includes('suit') ||
-    n.includes('dress') ||
-    n.includes('costume') ||
-    n.includes('armor')
-  ) return 'Outfit';
+    lower.includes('hair') ||
+    meshLower.includes('hair') ||
+    lower.includes('s4studio') ||
+    lower.includes('shadow') ||
+    lower.includes('empressof') ||
+    lower.includes('asterion')
+  ) {
+    return 'Hair';
+  }
 
-  // 3. Extremities
-  if (n.includes('hand')) return 'Hands';
-  if (n.includes('feet') || n.includes('foot')) return 'Feet';
+  // 4. Garments & Equipment (preserve authored NIF material names like t_shirt_v2, leggings_v1, bodysuit_v1)
+  const cleanMat = sanitizeMtlName(origMat?.name, '');
+  if (cleanMat && cleanMat !== 'default' && cleanMat !== 'Material') {
+    return cleanMat;
+  }
 
-  // 4. Body skin
-  if (n.includes('baseshape') || n.includes('body')) return 'Body';
+  const cleanMesh = sanitizeMtlName(mesh.name, '');
+  if (cleanMesh && cleanMesh !== 'Part' && cleanMesh !== 'Garment') {
+    return cleanMesh;
+  }
 
-  // 5. Hair (MUST follow face because 'face' contains 'ace'!)
-  if (
-    n.includes('hair') ||
-    n.includes('s4studio') ||
-    n.includes('shadow') ||
-    n.includes('empressof') ||
-    n.includes('asterion') ||
-    /\bace\b/.test(n)
-  ) return 'Hair';
-
-  return '';
+  return `Material_${slotIndex}`;
 }
 
 /**
@@ -132,16 +143,10 @@ function extractTexturesFromGlb(glbBuffer: ArrayBuffer): {
     return bin.subarray(byteOffset, byteOffset + bv.byteLength);
   }
 
-  function classifyMaterial(name: string | undefined, index: number): string {
-    const semantic = classifySemanticMaterial(name);
-    if (semantic) return semantic;
-    return name || `Material_${index}`;
-  }
-
   const materials = gltf.materials || [];
   for (let i = 0; i < materials.length; i++) {
     const mat = materials[i];
-    const friendlyName = classifyMaterial(mat.name, i);
+    const safeName = sanitizeMtlName(mat.name, `Material_${i}`);
     const pbr = mat.pbrMetallicRoughness || {};
     let diffuseFile: string | undefined;
     let normalFile: string | undefined;
@@ -153,7 +158,7 @@ function extractTexturesFromGlb(glbBuffer: ArrayBuffer): {
         if (savedImages.has(imgIdx)) {
           diffuseFile = savedImages.get(imgIdx);
         } else {
-          diffuseFile = `${friendlyName}_Diffuse.png`;
+          diffuseFile = `${safeName}_Diffuse.png`;
           const bytes = getImageBytes(imgIdx);
           if (bytes && bytes.length > 0) {
             savedImages.set(imgIdx, diffuseFile);
@@ -170,7 +175,7 @@ function extractTexturesFromGlb(glbBuffer: ArrayBuffer): {
         if (savedImages.has(imgIdx)) {
           normalFile = savedImages.get(imgIdx);
         } else {
-          normalFile = `${friendlyName}_Normal.png`;
+          normalFile = `${safeName}_Normal.png`;
           const bytes = getImageBytes(imgIdx);
           if (bytes && bytes.length > 0) {
             savedImages.set(imgIdx, normalFile);
@@ -180,7 +185,7 @@ function extractTexturesFromGlb(glbBuffer: ArrayBuffer): {
       }
     }
 
-    materialDefs.push({ name: friendlyName, diffuseMap: diffuseFile, normalMap: normalFile });
+    materialDefs.push({ name: safeName, diffuseMap: diffuseFile, normalMap: normalFile });
   }
 
   return { textureFiles, materialDefs };
@@ -285,12 +290,12 @@ function exportCharacterMeshesToObj(
     }
   });
 
-  function getMeshMaterialName(mesh: THREE.Mesh): string {
-    const rawMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-    const fromMat = classifySemanticMaterial(rawMat?.name);
-    if (fromMat) return fromMat;
-    const fromMesh = classifySemanticMaterial(mesh.name);
-    if (fromMesh) return fromMesh;
+  function getMeshMaterialName(mesh: THREE.Mesh, mat?: THREE.Material): string {
+    const rawMat = mat || (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material);
+    const safe = sanitizeMtlName(rawMat?.name);
+    if (safe && safe !== 'Material' && safe !== 'default') return safe;
+    const meshSafe = sanitizeMtlName(mesh.name);
+    if (meshSafe && meshSafe !== 'Part' && meshSafe !== 'Garment') return meshSafe;
     return materialDefs[0]?.name || 'Body';
   }
 
@@ -306,7 +311,7 @@ function exportCharacterMeshesToObj(
     mesh.updateMatrixWorld(true);
     normalMatrix.getNormalMatrix(mesh.matrixWorld);
 
-    output += `o ${mesh.name || 'Part'}\n`;
+    output += `o ${sanitizeMtlName(mesh.name, 'Part')}\n`;
     const matName = getMeshMaterialName(mesh);
     output += `usemtl ${matName}\n`;
 
@@ -377,10 +382,14 @@ function exportCharacterMeshesToObj(
       output += `v ${v.x.toFixed(5)} ${v.y.toFixed(5)} ${v.z.toFixed(5)}\n`;
     }
 
-    // 2. UVs
+    // 2. UVs (Invert V coordinate: GLTFExporter exports images with flipY=true (top-down),
+    // while Wavefront OBJ specification expects bottom-up V coordinates (0 = bottom, 1 = top).
+    // Inverting V here ensures all face, body, hair, and clothing textures map right-side up in Blender & Mixamo.
     if (uv) {
       for (let i = 0; i < uv.count; i++) {
-        output += `vt ${uv.getX(i).toFixed(5)} ${uv.getY(i).toFixed(5)}\n`;
+        const u = uv.getX(i);
+        const v = 1.0 - uv.getY(i);
+        output += `vt ${u.toFixed(5)} ${v.toFixed(5)}\n`;
       }
     }
 
@@ -422,7 +431,36 @@ function exportCharacterMeshesToObj(
     // 4. Faces
     const hasUv = !!uv;
     const hasNorm = !!norm;
-    if (index) {
+    const isMultiMat = Array.isArray(mesh.material);
+    const groups = (mesh.geometry.groups && mesh.geometry.groups.length > 0)
+      ? mesh.geometry.groups.filter((g) => {
+          const matIdx = g.materialIndex ?? 0;
+          const raw = isMultiMat ? (mesh.material as THREE.Material[])[matIdx] : mesh.material;
+          const mat = Array.isArray(raw) ? raw[0] : raw;
+          return mat ? mat.visible !== false : true;
+        })
+      : null;
+
+    if (groups && groups.length > 0 && index) {
+      for (const group of groups) {
+        const matIdx = group.materialIndex ?? 0;
+        const raw = isMultiMat ? (mesh.material as THREE.Material[])[matIdx] : mesh.material;
+        const mat = Array.isArray(raw) ? raw[0] : raw;
+        const subMatName = getMeshMaterialName(mesh, mat);
+        output += `usemtl ${subMatName}\n`;
+        const start = group.start;
+        const count = group.count;
+        for (let i = start; i < start + count; i += 3) {
+          const i0 = index.getX(i) + 1;
+          const i1 = index.getX(i + 1) + 1;
+          const i2 = index.getX(i + 2) + 1;
+          const f0 = `${indexVertex + i0}/${hasUv ? indexUv + i0 : ''}/${hasNorm ? indexNormal + i0 : ''}`;
+          const f1 = `${indexVertex + i1}/${hasUv ? indexUv + i1 : ''}/${hasNorm ? indexNormal + i1 : ''}`;
+          const f2 = `${indexVertex + i2}/${hasUv ? indexUv + i2 : ''}/${hasNorm ? indexNormal + i2 : ''}`;
+          output += `f ${f0} ${f1} ${f2}\n`;
+        }
+      }
+    } else if (index) {
       for (let i = 0; i < index.count; i += 3) {
         const i0 = index.getX(i) + 1;
         const i1 = index.getX(i + 1) + 1;
@@ -563,6 +601,7 @@ export async function exportCharacterPackageScene(
   const restoreMeshSkeletons: (() => void)[] = [];
   const tempFacialMeshes: THREE.SkinnedMesh[] = [];
   const restoreMaterials: Array<{ mesh: THREE.Mesh; origMaterial: THREE.Material | THREE.Material[] }> = [];
+  const restoreGroups: Array<{ mesh: THREE.Mesh; origGroups: THREE.BufferGeometry['groups'] }> = [];
 
   setExportInFlight(true);
   try {
@@ -664,11 +703,11 @@ export async function exportCharacterPackageScene(
         const origMat = mesh.material;
         restoreMaterials.push({ mesh, origMaterial: origMat });
 
-        const sanitize = (m: THREE.Material): THREE.Material => {
-          if (!(m as any).isMeshStandardMaterial) return m;
+        const sanitize = (m: THREE.Material, slotIdx: number = 0): THREE.Material => {
+          if (!(m as any).isMeshStandardMaterial && !(m as any).isMeshPhysicalMaterial) return m;
           const std = m as THREE.MeshStandardMaterial;
-          const matName = std.name || mesh.name || '';
-          const lower = matName.toLowerCase();
+          const safeName = resolveSafeMaterialName(mesh, std, slotIdx);
+          const lower = safeName.toLowerCase();
           const isSkin =
             lower.includes('base') ||
             lower.includes('body') ||
@@ -679,31 +718,54 @@ export async function exportCharacterPackageScene(
             lower.includes('face') ||
             lower.includes('mouth');
           const isEyes = lower.includes('eye');
-          const isHair = lower.includes('hair') || lower.includes('s4studio') || lower.includes('ace');
+          const isHair =
+            !isSkin &&
+            (lower.includes('hair') ||
+              lower.includes('s4studio') ||
+              lower.includes('shadow') ||
+              lower.includes('empressof') ||
+              lower.includes('asterion') ||
+              /\bace\b/.test(lower));
+          const isLashesOrBrows = lower.includes('lash') || lower.includes('brow');
+
+          // Hair and lashes/brows MUST use alphaTest with transparent=false so glTF exports alphaMode="MASK"
+          // (transparent=true forces alphaMode="BLEND" which causes Blender EEVEE alpha sorting failure / ghost hair).
+          const needsAlphaMask = isHair || isLashesOrBrows;
 
           return new THREE.MeshStandardMaterial({
-            name: std.name || mesh.name,
+            name: safeName,
             color: std.color ? std.color.clone() : new THREE.Color(1, 1, 1),
             map: std.map ?? null,
             normalMap: std.normalMap ?? null,
             normalScale: std.normalScale ? std.normalScale.clone() : new THREE.Vector2(1, 1),
             roughness: isEyes ? 0.1 : (isSkin ? 0.58 : (isHair ? 0.62 : (std.roughness ?? 0.55))),
             metalness: isSkin || isHair || isEyes ? 0.0 : (std.metalness ?? 0.0),
-            transparent: std.transparent || isHair,
+            transparent: false,
             opacity: std.opacity ?? 1.0,
-            alphaTest: std.alphaTest ?? (isHair ? 0.25 : 0),
-            side: std.side,
+            alphaTest: isHair ? 0.35 : (isLashesOrBrows ? 0.25 : 0),
+            side: needsAlphaMask ? THREE.DoubleSide : std.side,
+            visible: std.visible, // CRITICAL: preserve hidden status to prevent white untextured embedded body meshes
           });
         };
 
         if (Array.isArray(origMat)) {
           if (origMat.length === 1 && (!mesh.geometry.groups || mesh.geometry.groups.length === 0)) {
-            mesh.material = sanitize(origMat[0]);
+            mesh.material = sanitize(origMat[0], 0);
           } else {
-            mesh.material = origMat.map((m) => sanitize(m));
+            mesh.material = origMat.map((m, idx) => sanitize(m, idx));
+            // Filter geometry.groups so GLTFExporter omits primitives whose material is invisible (e.g. embedded body in clothing)
+            if (mesh.geometry.groups && mesh.geometry.groups.length > 0) {
+              const origGroups = [...mesh.geometry.groups];
+              restoreGroups.push({ mesh, origGroups });
+              mesh.geometry.groups = origGroups.filter((g) => {
+                const matIdx = g.materialIndex ?? 0;
+                const mat = origMat[matIdx];
+                return mat ? mat.visible !== false : true;
+              });
+            }
           }
         } else {
-          mesh.material = sanitize(origMat);
+          mesh.material = sanitize(origMat, 0);
         }
       }
     });
@@ -731,7 +793,7 @@ export async function exportCharacterPackageScene(
       animations: clips,
       maxTextureSize: 4096,
     });
-    const glbBuffer = gltf as ArrayBuffer;
+    const glbBuffer = patchGlbIor(gltf as ArrayBuffer);
 
     // 8. Extract textures from GLB binary (instantaneous, 100% reliable)
     const { textureFiles, materialDefs } = extractTexturesFromGlb(glbBuffer);
@@ -776,6 +838,9 @@ export async function exportCharacterPackageScene(
 
     for (const { mesh, origMaterial } of restoreMaterials) {
       mesh.material = origMaterial;
+    }
+    for (const { mesh, origGroups } of restoreGroups) {
+      mesh.geometry.groups = origGroups;
     }
     for (const restore of restoreMeshSkeletons) {
       try {

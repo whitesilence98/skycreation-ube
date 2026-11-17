@@ -45,6 +45,7 @@ function load(name) {
     Blob,
     document: documentStub,
     TextDecoder,
+    TextEncoder,
     /* Host-realm typed arrays: GLTFExporter compares `array.constructor`
        against its own realm's constructors, so arrays created by code running
        in this sandbox must be host arrays or every attribute is rejected. */

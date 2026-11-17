@@ -450,7 +450,8 @@ export interface CharacterState {
  *   arbitrary JSON; see `coerceSession`.
  */
 export const useCharacter = create<CharacterState>()(persist((set, get) => ({
-  hair: { ...DEFAULT_HAIR },  hairTab: 'STYLE',
+  hair: PRESETS[0].hair ? coerceHair({ ...DEFAULT_HAIR, ...PRESETS[0].hair }) : { ...DEFAULT_HAIR },
+  hairTab: 'STYLE',
   setHairTab: (hairTab) => set({ hairTab }),
   setHair: (patch) => set((s) => {
     const shapeKeys = ['lengthCm', 'bangs', 'side', 'back', 'volume', 'curl', 'wave', 'wispiness', 'asymmetry'];
@@ -583,7 +584,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   skinDetail: 0.45,
   skinSheen: 0.2,
   skinColor: '#ffffff',
-  browColor: '#2B1A0A',
+  browColor: PRESETS[0].browColor ?? '#110E0C',
   setBrowColor: (browColor) => set((s) => {
     // If the user manually picks a custom brow color that differs from hair tone,
     // unlink linkBrowToHair so their custom choice is preserved
@@ -595,18 +596,18 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
       linkBrowToHair: isDifferent ? false : s.linkBrowToHair,
     };
   }),
-  linkBrowToHair: true,
+  linkBrowToHair: PRESETS[0].linkBrowToHair ?? true,
   setLinkBrowToHair: (linkBrowToHair) => set((s) => ({
     linkBrowToHair,
     browColor: linkBrowToHair && s.hair.tone && s.hair.tone.toLowerCase() !== '#ffffff'
       ? s.hair.tone
       : (linkBrowToHair && (!s.hair.tone || s.hair.tone.toLowerCase() === '#ffffff') ? '#2B1A0A' : s.browColor),
   })),
-  browOpacity: 1.0,
+  browOpacity: PRESETS[0].browOpacity ?? 1.0,
   setBrowOpacity: (browOpacity) => set({ browOpacity: Math.min(1, Math.max(0, browOpacity)) }),
-  browGloss: 0.15,
+  browGloss: PRESETS[0].browGloss ?? 0.15,
   setBrowGloss: (browGloss) => set({ browGloss: Math.min(1, Math.max(0, browGloss)) }),
-  browGlossy: 0.15,
+  browGlossy: PRESETS[0].browGlossy ?? 0.15,
   setBrowGlossy: (browGlossy) => set({ browGlossy: Math.min(1, Math.max(0, browGlossy)) }),
   favoriteBrows: [],
   toggleFavoriteBrow: (id) =>
@@ -786,7 +787,9 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
          identical head — every tile measured 0.0 % of face pixels changed. */
       const def = PRESETS.find((p) => p.id === id);
       const assetSelection = { ...s.assetSelection };
-      if (def?.headMeshId) {
+      if (def?.assets) {
+        Object.assign(assetSelection, def.assets);
+      } else if (def?.headMeshId) {
         assetSelection.headMesh = def.headMeshId;
       } else {
         delete assetSelection.headMesh;
@@ -797,6 +800,15 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         sliders: def ? presetSliderBank(def) : buildSliderBank(),
         poses: buildPoseBank(),
         assetSelection,
+        equipment: def?.equipment ? ({ ...def.equipment } as Record<EquipSlot, string>) : s.equipment,
+        hair: def?.hair ? coerceHair({ ...s.hair, ...def.hair }) : s.hair,
+        browColor: def?.browColor ?? s.browColor,
+        browOpacity: def?.browOpacity ?? s.browOpacity,
+        browGloss: def?.browGloss ?? s.browGloss,
+        browGlossy: def?.browGlossy ?? s.browGlossy,
+        linkBrowToHair: def?.linkBrowToHair ?? s.linkBrowToHair,
+        overlayLayers: def?.overlays ? ([...def.overlays] as OverlayLayer[]) : s.overlayLayers,
+        activeOverlay: def?.overlays ? null : s.activeOverlay,
         ...(BODY_WEIGHT_ENABLED && def?.weight !== undefined ? { weight: def.weight } : { weight: 0 }),
       };
     }),

@@ -237,6 +237,7 @@ export function CharacterCreation() {
   const defaultOpened = useCharacter((s) => s.defaultOpened);
   const markDefaultOpened = useCharacter((s) => s.markDefaultOpened);
   const loadPreset = useCharacter((s) => s.loadPreset);
+  const applyPreset = useCharacter((s) => s.applyPreset);
   /**
    * Open on the pack's `Default.jslot` rather than whichever preset sorts
    * first. It is the face a new character starts with, and the panel's first
@@ -259,17 +260,8 @@ export function CharacterCreation() {
        effect in development and a ref would be recreated for the second pass,
        applying the preset (and its camera bump) twice. */
     markDefaultOpened();
-    const head = sculptHeadFor(manifest, preset.file);
-    loadPreset(
-      /* No name: the catalogue's `Default (sculpt only; approximate)` label is
-         producer diagnostics, not something to wear in the top bar. */
-      payloadFromMorphs(head?.origin === 'racemenu-export' ? [] : preset.morphs ?? [], {
-        baked: head?.origin === 'racemenu-export',
-        actorWeight: preset.actor?.weight,
-      }),
-      head?.id,
-    );
-  }, [hydrated, restored, defaultOpened, manifest, loadPreset, markDefaultOpened]);
+    applyPreset('lyra');
+  }, [hydrated, restored, defaultOpened, manifest, loadPreset, markDefaultOpened, applyPreset]);
   /* Settled without an available source — including a network failure, where
      the source is unknown — is a final state, not a longer spinner. */
   const unavailable = manifestSettled && !sceneReady;

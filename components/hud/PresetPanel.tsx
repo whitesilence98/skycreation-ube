@@ -16,7 +16,7 @@ interface PresetCard {
 }
 
 const PRESET_CARDS: PresetCard[] = [
-  { id: 'lyra', label: 'Default', thumb: '/assets/preset-pack/textures/presets/lyra.webp' },
+  { id: 'lyra', label: 'Default', thumb: '/assets/preset-pack/textures/presets/lyra.webp?v=20261117' },
   { id: 'seraphine', label: 'Frau', thumb: '/assets/preset-pack/textures/presets/seraphine.webp' },
   { id: 'isolde', label: 'Iced Coffee', thumb: '/assets/preset-pack/textures/presets/isolde.webp' },
   { id: 'miren', label: 'Lan Xin', thumb: '/assets/preset-pack/textures/presets/miren.webp' },

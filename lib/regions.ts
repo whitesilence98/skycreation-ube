@@ -286,6 +286,27 @@ export interface PresetDef {
   headMeshId?: string;
   /** Actor weight (0.0 .. 1.0) from the preset profile. */
   weight?: number;
+  /** Preset asset selection (skin, hair, eyes, brows, outfit). */
+  assets?: Partial<Record<string, string>>;
+  /** Worn equipment slots (outfit, bottom, etc.). */
+  equipment?: Partial<Record<string, string>>;
+  /** Hair style & physics configuration. */
+  hair?: Record<string, unknown>;
+  /** Brow color and styling. */
+  browColor?: string;
+  browOpacity?: number;
+  browGloss?: number;
+  browGlossy?: number;
+  linkBrowToHair?: boolean;
+  /** Overlay layers (makeup, tattoo, wrinkle). */
+  overlays?: Array<{
+    kind: 'makeup' | 'tattoo' | 'wrinkle';
+    id: string;
+    color: string;
+    opacity: number;
+    coverage?: number;
+    blend?: 'normal' | 'multiply' | 'overlay' | 'soft-light';
+  }>;
 }
 
 export const PRESETS: PresetDef[] = [
@@ -295,14 +316,82 @@ export const PRESETS: PresetDef[] = [
     seed: 0.12,
     bias: { nose: 0.0, jaw: -0.1 },
     sliders: {
-      forehead: { length: 3, width: -5, depth: 2, height: 0.4, angle: 0.12, protrusion: 0.3 },
-      eyebrows: { length: -1, width: 6, depth: 3, height: 0.38, angle: 0.62, protrusion: 0.18 },
-      nose: { length: -3, width: 12, depth: -3, height: 0.55, angle: 0.18, protrusion: 0.22 },
-      cheeks: { length: 0, width: 0, depth: 2, height: 0.5, angle: 0.3, protrusion: 0.26 },
-      lips: { length: -1, width: 1, depth: 1, height: 0.52, angle: 0.28, protrusion: 0.51 },
-      jaw: { length: -2, width: 11, depth: 3, height: 0.46, angle: 0.22, protrusion: 0.2 },
+      forehead: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
+      eyebrows: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
+      nose: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
+      cheeks: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
+      lips: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
+      jaw: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
     },
+    headMeshId: 'preset-279bbfa8f35ce962-face',
     weight: 0.0,
+    assets: {
+      hairMesh: 'hairMesh-75da4390fbefdf93',
+      hair: 'hair-422aa956d2c63dfa',
+      skin: 'skin-zhizhen-ube',
+      headMesh: 'preset-279bbfa8f35ce962-face',
+      preset: 'preset-279bbfa8f35ce962',
+      eyes: 'eyes-8439fa932deee6f8',
+      clothingMesh: 'clothingMesh-dc2ea353a9a15d15',
+      brows: 'brows-3bf459e8e9b3fcc9',
+    },
+    equipment: {
+      outfit: 'clothingMesh-dc2ea353a9a15d15',
+      bottom: 'clothingMesh-129ec05e6dd3c4e2',
+    },
+    hair: {
+      style: 'asymmetrical-bob',
+      lengthCm: 28,
+      bangs: 'side',
+      side: 'straight',
+      back: 'layered',
+      volume: -3,
+      curl: 7,
+      wave: 0.45,
+      wispiness: 0.15,
+      asymmetry: 0.22,
+      tone: '#110E0C',
+      rootShift: 5,
+      midShift: 2,
+      tipShift: 8,
+      gradient: true,
+      highlights: false,
+      gloss: 0.81,
+      alpha: 1,
+    },
+    browColor: '#110E0C',
+    browOpacity: 1,
+    browGloss: 0.15,
+    browGlossy: 0,
+    linkBrowToHair: true,
+    overlays: [
+      {
+        kind: 'makeup',
+        id: 'makeup-2232d0e2c7056918',
+        color: '#541926',
+        opacity: 1,
+        coverage: 1,
+      },
+      {
+        kind: 'makeup',
+        id: 'makeup-85fc36c90dd9cde3',
+        color: '#9c3b4d',
+        opacity: 0.7,
+      },
+      {
+        kind: 'makeup',
+        id: 'makeup-be9746c26d19f3c6',
+        color: '#5c1626',
+        opacity: 0.76,
+        blend: 'overlay',
+      },
+      {
+        kind: 'makeup',
+        id: 'makeup-49d4c3de0f1632e2',
+        color: '#9c3b4d',
+        opacity: 0.21,
+      },
+    ],
   },
   {
     id: 'seraphine',

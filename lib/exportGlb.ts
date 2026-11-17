@@ -18,6 +18,62 @@ export interface ExportOptions {
   animated?: boolean;
 }
 
+/**
+ * Injects `KHR_materials_ior` (ior=1.0) into every material of a GLB binary so
+ * Blender's Principled BSDF uses IOR=1.0 instead of its 1.5 default.
+ * Without this extension Blender adds extra specular that makes skin look plastic.
+ */
+export function patchGlbIor(glbBuffer: ArrayBuffer, ior = 1.0): ArrayBuffer {
+  const view = new DataView(glbBuffer);
+  const jsonLen = view.getUint32(12, true);
+  const jsonStart = 20;
+  const jsonBytes = new Uint8Array(glbBuffer, jsonStart, jsonLen);
+  const json = JSON.parse(new TextDecoder().decode(jsonBytes)) as {
+    materials?: Array<{ extensions?: Record<string, unknown> }>;
+    extensionsUsed?: string[];
+  };
+
+  if (json.materials) {
+    for (const mat of json.materials) {
+      mat.extensions = mat.extensions ?? {};
+      mat.extensions['KHR_materials_ior'] = { ior };
+    }
+  }
+  json.extensionsUsed = [
+    ...new Set([...(json.extensionsUsed ?? []), 'KHR_materials_ior']),
+  ];
+
+  const newJsonEncoded = new TextEncoder().encode(JSON.stringify(json));
+  // Pad to 4-byte alignment with spaces (0x20) as required by glTF spec
+  const paddedLen = Math.ceil(newJsonEncoded.length / 4) * 4;
+  const paddedJson = new Uint8Array(paddedLen).fill(0x20);
+  paddedJson.set(newJsonEncoded);
+
+  // BIN chunk starts right after the original JSON chunk
+  const binChunkStart = jsonStart + jsonLen;
+  const binChunk = new Uint8Array(glbBuffer, binChunkStart);
+
+  const newTotal = 12 + 8 + paddedLen + binChunk.length;
+  const out = new ArrayBuffer(newTotal);
+  const outView = new DataView(out);
+  const outBytes = new Uint8Array(out);
+
+  // GLB header
+  outView.setUint32(0, 0x46546c67, true); // magic "glTF"
+  outView.setUint32(4, 2, true);           // version 2
+  outView.setUint32(8, newTotal, true);    // total byte length
+
+  // JSON chunk header + data
+  outView.setUint32(12, paddedLen, true);   // chunk length
+  outView.setUint32(16, 0x4e4f534a, true); // chunk type JSON
+  outBytes.set(paddedJson, 20);
+
+  // BIN chunk (copy verbatim)
+  outBytes.set(binChunk, 20 + paddedLen);
+
+  return out;
+}
+
 type ExportHandler = (customName?: string, options?: ExportOptions) => Promise<void>;
 
 let activeHandler: ExportHandler | null = null;
@@ -199,10 +255,14 @@ export function createHeadSkinnedMesh(
     normalScale: origMat?.normalScale ? origMat.normalScale.clone() : new THREE.Vector2(1, 1),
     roughness: isEyes ? 0.1 : (isSkin ? 0.58 : (origMat?.roughness ?? 0.6)),
     metalness: 0.0,
-    transparent: isAlpha || origMat?.transparent || false,
+    // Hair, lashes and brows MUST use transparent: false with alphaTest > 0
+    // so GLTFExporter emits alphaMode: "MASK". transparent: true forces "BLEND" which makes
+    // them completely invisible / ghost transparent in Blender EEVEE.
+    transparent: false,
     opacity: origMat?.opacity ?? 1.0,
-    alphaTest: isAlpha ? 0.2 : (origMat?.alphaTest ?? 0),
+    alphaTest: isAlpha ? 0.25 : 0,
     side: isAlpha ? THREE.DoubleSide : (origMat?.side ?? THREE.FrontSide),
+    visible: origMat?.visible !== false,
   });
 
   const skinned = new THREE.SkinnedMesh(geo, mat);
@@ -292,6 +352,7 @@ export async function exportCharacterScene(
   const restoreMeshSkeletons: (() => void)[] = [];
   const tempFacialMeshes: THREE.SkinnedMesh[] = [];
   const restoreMaterials: Array<{ mesh: THREE.Mesh; origMaterial: THREE.Material | THREE.Material[] }> = [];
+  const restoreGroups: Array<{ mesh: THREE.Mesh; origGroups: THREE.BufferGeometry['groups'] }> = [];
 
   exportInFlight = true;
   try {
@@ -404,7 +465,7 @@ export async function exportCharacterScene(
         restoreMaterials.push({ mesh, origMaterial: origMat });
 
         const sanitize = (m: THREE.Material): THREE.Material => {
-          if (!(m as any).isMeshStandardMaterial) return m;
+          if (!(m as any).isMeshStandardMaterial && !(m as any).isMeshPhysicalMaterial) return m;
           const std = m as THREE.MeshStandardMaterial;
           const matName = std.name || mesh.name || '';
           const lower = matName.toLowerCase();
@@ -418,7 +479,19 @@ export async function exportCharacterScene(
             lower.includes('face') ||
             lower.includes('mouth');
           const isEyes = lower.includes('eye');
-          const isHair = lower.includes('hair') || lower.includes('s4studio') || lower.includes('ace');
+          const isHair =
+            !isSkin &&
+            (lower.includes('hair') ||
+              lower.includes('s4studio') ||
+              lower.includes('shadow') ||
+              lower.includes('empressof') ||
+              lower.includes('asterion') ||
+              /\bace\b/.test(lower));
+          const isLashesOrBrows = lower.includes('lash') || lower.includes('brow');
+
+          // Hair and lashes/brows MUST use alphaTest with transparent=false so glTF exports alphaMode="MASK"
+          // (transparent=true forces alphaMode="BLEND" which causes Blender EEVEE alpha sorting failure / ghost hair).
+          const needsAlphaMask = isHair || isLashesOrBrows;
 
           return new THREE.MeshStandardMaterial({
             name: std.name || mesh.name,
@@ -428,10 +501,11 @@ export async function exportCharacterScene(
             normalScale: std.normalScale ? std.normalScale.clone() : new THREE.Vector2(1, 1),
             roughness: isEyes ? 0.1 : (isSkin ? 0.58 : (isHair ? 0.62 : (std.roughness ?? 0.55))),
             metalness: isSkin || isHair || isEyes ? 0.0 : (std.metalness ?? 0.0),
-            transparent: std.transparent || isHair,
+            transparent: false,
             opacity: std.opacity ?? 1.0,
-            alphaTest: std.alphaTest ?? (isHair ? 0.25 : 0),
-            side: std.side,
+            alphaTest: isHair ? 0.35 : (isLashesOrBrows ? 0.25 : 0),
+            side: needsAlphaMask ? THREE.DoubleSide : std.side,
+            visible: std.visible, // CRITICAL: preserve hidden status to prevent white untextured embedded body meshes
           });
         };
 
@@ -440,6 +514,16 @@ export async function exportCharacterScene(
             mesh.material = sanitize(origMat[0]);
           } else {
             mesh.material = origMat.map((m) => sanitize(m));
+            // Filter geometry.groups so GLTFExporter omits primitives whose material is invisible (e.g. embedded body in clothing)
+            if (mesh.geometry.groups && mesh.geometry.groups.length > 0) {
+              const origGroups = [...mesh.geometry.groups];
+              restoreGroups.push({ mesh, origGroups });
+              mesh.geometry.groups = origGroups.filter((g) => {
+                const matIdx = g.materialIndex ?? 0;
+                const mat = origMat[matIdx];
+                return mat ? mat.visible !== false : true;
+              });
+            }
           }
         } else {
           mesh.material = sanitize(origMat);
@@ -475,7 +559,7 @@ export async function exportCharacterScene(
       maxTextureSize: 4096,
     });
 
-    const blob = new Blob([gltf as ArrayBuffer], { type: 'model/gltf-binary' });
+    const blob = new Blob([patchGlbIor(gltf as ArrayBuffer)], { type: 'model/gltf-binary' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -494,6 +578,9 @@ export async function exportCharacterScene(
     // rest un-undone, so each step is isolated.
     for (const { mesh, origMaterial } of restoreMaterials) {
       mesh.material = origMaterial;
+    }
+    for (const { mesh, origGroups } of restoreGroups) {
+      mesh.geometry.groups = origGroups;
     }
     for (const restore of restoreMeshSkeletons) {
       try {
