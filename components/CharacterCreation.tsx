@@ -8,6 +8,7 @@ import { payloadFromMorphs } from '@/lib/presetIO';
 import { useAssetCatalogues } from '@/lib/mo2/useAssetCatalogues';
 import { resetAssetCatalogues } from '@/lib/mo2/client';
 import { restoreSession, useCharacter } from '@/lib/store';
+import { preloadDynamicMeshes } from '@/lib/head/dynamicSculpt';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { WebGLErrorBoundary } from '@/components/scene/WebGLErrorBoundary';
 
@@ -230,6 +231,7 @@ export function CharacterCreation() {
    */
   useEffect(() => {
     void restoreSession();
+    void preloadDynamicMeshes();
   }, []);
 
   const hydrated = useCharacter((s) => s.hydrated);

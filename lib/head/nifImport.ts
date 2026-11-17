@@ -1,5 +1,5 @@
 import type { Mo2MeshOption, Mo2Manifest } from '@/lib/head/faceTexture';
-import { registerDynamicMesh, getDynamicSculptHeads, resolveOrBuildSculptHead } from '@/lib/head/dynamicSculpt';
+import { registerDynamicMesh, addDynamicHeadOption, getDynamicSculptHeads, resolveOrBuildSculptHead } from '@/lib/head/dynamicSculpt';
 import type { MeshData } from '@/components/scene/useMeshGeometry';
 import { parsePreset, payloadFromMorphs, type PresetPayload } from '@/lib/presetIO';
 import { sculptHeadFor } from '@/lib/manifestSelect';
@@ -91,7 +91,7 @@ export async function decodeAndRegisterNif(file: File): Promise<Mo2MeshOption> {
     mouthMeshUrl,
   };
 
-  getDynamicSculptHeads().unshift(dynamicOption);
+  addDynamicHeadOption(dynamicOption);
   return dynamicOption;
 }
 

@@ -13,7 +13,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { getDynamicMesh } from '@/lib/head/dynamicSculpt';
+import { getDynamicMesh, registerDynamicMesh } from '@/lib/head/dynamicSculpt';
+import { retrieveDynamicMesh } from '@/lib/head/dynamicStorage';
 
 export interface MeshGroup {
   start: number;
@@ -352,9 +353,25 @@ export function useMeshResource(url: string | undefined, label: string): MeshRes
     }
 
     if (url.startsWith('dynamic://')) {
-      const message = `${label}: dynamic mesh not found: ${url}`;
-      console.error(`[HeadModel] ${message}`);
-      setStatus({ error: message, settled: true });
+      retrieveDynamicMesh(url)
+        .then((dbData) => {
+          if (cancelled) return;
+          if (dbData) {
+            registerDynamicMesh(url, dbData);
+            void handleSuccess(dbData);
+          } else {
+            const message = `${label}: dynamic mesh not found: ${url}`;
+            console.error(`[HeadModel] ${message}`);
+            setStatus({ error: message, settled: true });
+          }
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setStatus({
+            error: `${label}: ${err instanceof Error ? err.message : 'failed to load dynamic mesh'}`,
+            settled: true,
+          });
+        });
       return;
     }
 

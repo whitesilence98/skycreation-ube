@@ -1,5 +1,11 @@
 import type { Mo2Manifest, Mo2MeshOption } from '@/lib/head/faceTexture';
 import type { MeshData } from '@/components/scene/useMeshGeometry';
+import {
+  loadPersistedHeadOptions,
+  savePersistedHeadOptions,
+  persistDynamicMesh,
+  retrieveAllDynamicMeshes,
+} from '@/lib/head/dynamicStorage';
 
 export interface SculptBlock {
   host?: string;
@@ -7,8 +13,8 @@ export interface SculptBlock {
   data?: Array<[number, number, number, number]>;
 }
 
-// In-memory registry for dynamic head options and mesh data
-const DYNAMIC_HEAD_OPTIONS: Mo2MeshOption[] = [];
+// In-memory registry for dynamic head options and mesh data (restored from persistent storage on startup)
+const DYNAMIC_HEAD_OPTIONS: Mo2MeshOption[] = loadPersistedHeadOptions();
 const DYNAMIC_MESH_CACHE = new Map<string, MeshData>();
 const BASE_MESH_CACHE = new Map<string, MeshData>();
 
@@ -16,12 +22,33 @@ export function getDynamicSculptHeads(): Mo2MeshOption[] {
   return DYNAMIC_HEAD_OPTIONS;
 }
 
+export function addDynamicHeadOption(option: Mo2MeshOption): void {
+  // Prevent duplicate additions
+  const idx = DYNAMIC_HEAD_OPTIONS.findIndex((h) => h.id === option.id);
+  if (idx !== -1) {
+    DYNAMIC_HEAD_OPTIONS.splice(idx, 1);
+  }
+  DYNAMIC_HEAD_OPTIONS.unshift(option);
+  savePersistedHeadOptions(DYNAMIC_HEAD_OPTIONS);
+}
+
 export function registerDynamicMesh(url: string, data: MeshData): void {
   DYNAMIC_MESH_CACHE.set(url, data);
+  void persistDynamicMesh(url, data);
 }
 
 export function getDynamicMesh(url: string): MeshData | undefined {
   return DYNAMIC_MESH_CACHE.get(url);
+}
+
+/** Preload all dynamic meshes from IndexedDB into memory on startup. */
+export async function preloadDynamicMeshes(): Promise<void> {
+  const loaded = await retrieveAllDynamicMeshes();
+  for (const [url, data] of loaded) {
+    if (!DYNAMIC_MESH_CACHE.has(url)) {
+      DYNAMIC_MESH_CACHE.set(url, data);
+    }
+  }
 }
 
 export function registerBaseMesh(url: string, data: MeshData): void {
@@ -31,6 +58,7 @@ export function registerBaseMesh(url: string, data: MeshData): void {
 export function clearDynamicSculptCache(): void {
   DYNAMIC_HEAD_OPTIONS.length = 0;
   DYNAMIC_MESH_CACHE.clear();
+  savePersistedHeadOptions([]);
 }
 
 /**
