@@ -1,153 +1,39 @@
 'use client';
 
-import { IconArrowRight, IconChevronLeft, IconMouse, IconScroll } from '@/components/hud/Icons';
 import { PresetIO } from '@/components/hud/PresetIO';
 import { useCharacter } from '@/lib/store';
-import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
-interface FooterProps {
-  manifest: Mo2Manifest | null;
-}
-
-export function Footer({ manifest }: FooterProps) {
-  const region = useCharacter((s) => s.activeRegion);
-  const primaryTab = useCharacter((s) => s.primaryTab);
-  const cameraFraming = useCharacter((s) => s.cameraFraming);
-  const setCameraFraming = useCharacter((s) => s.setCameraFraming);
-  const showToast = useCharacter((s) => s.showToast);
-
-  return (
-    <footer className="pointer-events-none absolute inset-x-0 bottom-0 z-30">
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[74px] bg-gradient-to-t from-black/70 via-black/24 to-transparent" />
-
-      {/* Reference: guides from x 48 at y 539–552; BACK at 740; the CONFIRM
-          pill 838 → 988, 29 px tall centred on the same line. */}
-      <div className="relative flex flex-col items-stretch justify-between gap-2 px-4 pb-6 lg:flex-row lg:items-end">
-        {/* ── mouse guides ───────────────────────────────────────── */}
-        <div className="flex max-w-full items-center gap-3 overflow-x-auto whitespace-nowrap text-[10px] tracking-[0.06em] text-[#b7ad9c]/72 [&>span]:shrink-0">
-          {primaryTab === 'EQUIPMENT' || primaryTab === 'BODY' || primaryTab === 'PRESET' ? (
-            <>
-              <span className="flex items-center gap-[5px]">
-                <IconMouse className="h-[13px] w-[9px]" filled />
-                <span>Inspect Gear (LMB)</span>
-              </span>
-              <span className="flex items-center gap-[5px]">
-                <IconMouse className="h-[13px] w-[9px]" />
-                <span>Unequip / Equip (RMB)</span>
-              </span>
-              <span className="flex items-center gap-[5px]">
-                <IconScroll className="h-[13px] w-[9px]" />
-                <span>Zoom (Scroll)</span>
-              </span>
-            </>
-          ) : primaryTab === 'HAIR' ? (
-            <>
-              <span className="flex items-center gap-[5px]">
-                <IconMouse className="h-[13px] w-[9px]" filled />
-                <span>Pick Style Tile (LMB)</span>
-              </span>
-              <span className="flex items-center gap-[5px]">
-                <IconMouse className="h-[13px] w-[9px]" />
-                <span>Orbit Camera (LMB / RMB)</span>
-              </span>
-              <span className="flex items-center gap-[5px]">
-                <IconScroll className="h-[13px] w-[9px]" />
-                <span>Zoom (Scroll)</span>
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="flex items-center gap-[5px]">
-                <IconMouse className="h-[13px] w-[9px]" filled />
-                <span>{primaryTab === 'FACE SHAPE' ? 'Sculpt Gizmo (LMB)' : 'Pick Style Tile (LMB)'}</span>
-              </span>
-              <span className="flex items-center gap-[5px]">
-                <IconMouse className="h-[13px] w-[9px]" />
-                <span>Orbit Camera (LMB / RMB)</span>
-              </span>
-              <span className="flex items-center gap-[5px]">
-                <IconScroll className="h-[13px] w-[9px]" />
-                <span>Zoom (Scroll)</span>
-              </span>
-            </>
-          )}
-        </div>
-
-        {/* ── center: quick camera framing island ─────────────────── */}
-        <div className="pointer-events-auto flex items-center justify-center">
-          <div className="flex items-center gap-1 rounded-full border border-[#d4b483]/22 bg-[#120f0c]/85 p-1 shadow-[0_4px_16px_rgba(0,0,0,0.55)] backdrop-blur-md">
-            <span className="ml-1.5 mr-0.5 text-[8.5px] font-mono tracking-wider text-[#8c8477]/70">CAM:</span>
-            {(['auto', 'face', 'bust', 'body'] as const).map((mode) => {
-              const active = cameraFraming === mode;
-              const label = mode === 'auto' ? 'AUTO' : mode === 'face' ? 'FACE' : mode === 'bust' ? 'BUST' : 'BODY';
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => {
-                    setCameraFraming(mode);
-                    showToast(`CAMERA: ${label} FRAMING`);
-                  }}
-                  title={`Set camera framing to ${label}`}
-                  className={cn(
-                    'flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-mono tracking-wider transition-all duration-150',
-                    active
-                      ? 'border border-[#eac87f] bg-[#d4b483]/25 font-medium text-[#f2dfbe] shadow-[0_0_8px_rgba(234,200,127,0.3)] ring-1 ring-[#eac87f]/60'
-                      : 'border border-transparent text-[#a8a294]/70 hover:border-[#d4b483]/30 hover:bg-[#d4b483]/10 hover:text-[#e4d8c2]',
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'rounded-full transition-all duration-150',
-                      active
-                        ? 'h-1.5 w-1.5 bg-[#eac87f] shadow-[0_0_5px_#eac87f]'
-                        : 'h-1 w-1 bg-[#8c8477]/40',
-                    )}
-                  />
-                  <span>{label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ── actions ────────────────────────────────────────────── */}
-        <div className="pointer-events-auto relative flex flex-wrap items-center justify-end gap-x-3 gap-y-2 [&_button]:min-h-7">
-          {(primaryTab === 'EQUIPMENT' || primaryTab === 'BODY' || primaryTab === 'PRESET' || primaryTab === 'HAIR' || primaryTab === 'FACE') && (
-            <svg
-              className="pointer-events-none absolute -top-10 right-4 h-7 w-7 text-[#d4b483]/45 drop-shadow-[0_0_8px_rgba(212,180,131,0.4)]"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-            >
-              <path d="M12 0 L14.2 9.8 L24 12 L14.2 14.2 L12 24 L9.8 14.2 L0 12 L9.8 9.8 Z" />
-            </svg>
-          )}
-          <PresetIO manifest={manifest} />
-          <span className="h-[11px] w-px bg-[#d4b483]/18" />
-          <button
-            type="button"
-            className="group flex items-center gap-[4px] text-[10px] tracking-[0.13em] text-[#b6ad9d]/80 transition-colors hover:text-[#eee2ca]"
-          >
-            <IconChevronLeft className="h-[9px] w-[9px] opacity-70 transition-transform group-hover:-translate-x-[1px]" />
-            <span>BACK</span>
-          </button>
-
-          <button
-            type="button"
-            className="group flex h-[29px] items-center gap-[6px] rounded-full border border-[#d4b483]/48 bg-black/28 px-[14px] text-[10px] tracking-[0.13em] text-[#e4d8c2]/92 backdrop-blur-[4px] transition-all duration-200 hover:border-[#e0c48d]/85 hover:bg-[#d4b483]/[0.10] hover:shadow-[0_0_18px_rgba(212,180,131,0.22)]"
-          >
-            <span>CONFIRM &amp; APPLY</span>
-            <IconArrowRight className="h-[9px] w-[9px] opacity-70 transition-transform group-hover:translate-x-[2px]" />
-          </button>
-        </div>
-      </div>
-
-      <div className="pointer-events-none absolute bottom-[7px] left-0 right-0 flex justify-center">
-        <span className="text-[10px] tracking-[0.28em] text-[#8b8375]/28">
-          {primaryTab === 'HAIR' ? 'SECTION · HAIR' : `REGION · ${region.toUpperCase()}`}
-        </span>
-      </div>
-    </footer>
-  );
+export function Footer({ manifest }: { manifest: Mo2Manifest | null }) {
+  const isFace = useCharacter(s => s.primaryTab === 'FACE SHAPE');
+  const past = useCharacter(s => s.facePast.length);
+  const future = useCharacter(s => s.faceFuture.length);
+  const comparing = useCharacter(s => s.faceCompareStart !== null);
+  const state = useCharacter.getState;
+  return <footer className="creator-footer">
+    <div className="creator-footer-context">
+      <button type="button" onClick={() => state().setWorkspace('edit')}>Return</button>
+      {isFace ? <>
+        <button type="button" disabled={!past || comparing} onClick={() => state().undoFace()}>Undo</button>
+        <button type="button" disabled={!future || comparing} onClick={() => state().redoFace()}>Redo</button>
+        <button type="button" aria-pressed={comparing}
+          onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); state().beginFaceCompare(); }}
+          onPointerUp={() => state().endFaceCompare()} onPointerCancel={() => state().endFaceCompare()}
+          onLostPointerCapture={() => state().endFaceCompare()} onBlur={() => state().endFaceCompare()}
+          onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); state().beginFaceCompare(); } }}
+          onKeyUp={e => { if (e.key === ' ' || e.key === 'Enter') state().endFaceCompare(); }}>
+          {comparing ? 'Showing original' : 'Hold to compare'}
+        </button>
+        <button type="button" disabled={comparing} onClick={() => state().resetFaceRegion()}>Reset region</button>
+      </> : <span className="creator-footer-hint">Drag to orbit · Scroll to zoom</span>}
+    </div>
+    <div className="creator-footer-actions">
+      <PresetIO manifest={manifest} />
+      <button type="button" className="creator-primary-action" disabled={comparing}
+        onClick={() => {
+          state().applyFaceBaseline(); state().setPreviewMode(true);
+          state().showToast('Preview · face comparison baseline updated');
+        }}>Apply &amp; preview</button>
+    </div>
+  </footer>;
 }

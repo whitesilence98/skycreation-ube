@@ -31,7 +31,7 @@ export function GizmoTooltip() {
     <div
       className="pointer-events-none absolute z-20 flex items-center whitespace-nowrap"
       style={{
-        left: x,
+        left: `calc(${x}px + var(--creator-canvas-offset, 0px))`,
         top: y,
         transform: 'translate(0,-50%)',
         transformOrigin: 'left center',

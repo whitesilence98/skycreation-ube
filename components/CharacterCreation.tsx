@@ -268,6 +268,7 @@ export function CharacterCreation() {
      the source is unknown — is a final state, not a longer spinner. */
   const unavailable = manifestSettled && !sceneReady;
 
+  const previewMode = useCharacter(s => s.previewMode);
   const loaded = sceneReady && (assetsReady || revealFailsafe);
 
   return (
@@ -276,6 +277,7 @@ export function CharacterCreation() {
           an early mount would issue legacy asset requests that pack mode must
           never make. */}
       {sceneReady ? (
+        <div className={`absolute inset-y-0 right-0 transition-[left] duration-200 motion-reduce:transition-none ${previewMode ? 'left-0' : 'left-0 min-[1100px]:left-[150px] min-[1500px]:left-[220px]'}`}>
         <WebGLErrorBoundary>
           <CharacterScene
             manifest={resolved}
@@ -283,6 +285,7 @@ export function CharacterCreation() {
             onIssue={handleSceneIssue}
           />
         </WebGLErrorBoundary>
+        </div>
       ) : (
         <ViewportBackdrop />
       )}

@@ -30,7 +30,7 @@ export function HdrPanel({ onClose }: { onClose: () => void }) {
     setReading(false); setInputError(null);
     useHdr.getState().setSource(null);
   };
-  return <StudioCard title="HDR" badge="ENVIRONMENT LIGHT" onClose={onClose}
+  return <StudioCard title="LIGHTING" badge="HDR / IBL" onClose={onClose}
     footerLeading={<span>Local HDRI · Three.js PBR</span>}>
     <div className="space-y-4 text-[12px] leading-relaxed text-[#d8c9b2]">
       <p>Import an equirectangular panorama for reflections and ambient lighting. Your current background and direct lights stay unchanged.</p>

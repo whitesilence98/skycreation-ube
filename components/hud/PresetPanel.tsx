@@ -31,6 +31,7 @@ export function PresetPanel({ manifest: _manifest }: PresetPanelProps) {
   const setAssets = useCharacter((s) => s.setAssets);
 
   const [status, setStatus] = useState<Status>(null);
+  const [missingThumbs, setMissingThumbs] = useState<Record<string, boolean>>({});
 
   const flash = (s: Status) => {
     setStatus(s);
@@ -77,11 +78,12 @@ export function PresetPanel({ manifest: _manifest }: PresetPanelProps) {
                         : 'border-[#d4b483]/25 bg-black/50 hover:border-[#d4b483]/60 hover:scale-[1.03]',
                     )}
                   >
-                    <img
+                    {missingThumbs[card.id] ? <span className="flex h-full items-center justify-center p-3 text-[12px] text-[#b8b0a0]">Preview unavailable</span> : <img
                       src={card.thumb}
                       alt={card.label}
+                      onError={() => setMissingThumbs(previous => ({ ...previous, [card.id]: true }))}
                       className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-                    />
+                    />}
                     <span className="pointer-events-none absolute inset-0 border border-black/25" />
                   </div>
                   <span

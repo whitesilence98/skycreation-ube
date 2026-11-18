@@ -9,6 +9,7 @@ import { cn } from '@/lib/cn';
 import { buildHairGroups, findHairGroupForPartId, type HairBrand, type HairGroup } from '@/lib/hair';
 import { StudioCard } from '@/components/hud/common/StudioCard';
 import { SearchInput } from '@/components/hud/common/SearchInput';
+import { HairThumbnail } from '@/components/hud/HairThumbnail';
 
 /** Below this, the shipped head hides the mesh — see `visibility`. */
 const VISIBLE_MIN = 0.55;
@@ -225,8 +226,8 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
           />
 
           {/* Hairstyle List */}
-          <div className="thin-scroll flex max-h-[220px] flex-col gap-1 overflow-y-auto pr-[2px]">
-            {filtered.map((g, i) => {
+          <div className="thin-scroll grid max-h-[440px] grid-cols-2 gap-3 overflow-y-auto pr-[2px]">
+            {filtered.map((g) => {
               const isSelected = selectedGroupId === g.id;
 
               return (
@@ -243,50 +244,17 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
                     })
                   }
                   className={cn(
-                    'group flex w-full items-center justify-between border px-2.5 py-1.5 text-left transition-colors duration-100',
+                    'group flex min-w-0 flex-col items-stretch border p-1 text-left transition-colors duration-100',
                     isSelected
                       ? 'border-[#eac87f] bg-[#eac87f]/15 text-[#f2dfbe] shadow-[0_0_8px_rgba(234,200,127,0.25)]'
                       : 'border-[#d4b483]/20 bg-black/40 text-[#c5baa6] hover:border-[#d4b483]/50 hover:bg-[#16130e] hover:text-[#f0e4cc]',
                   )}
                 >
-                  {/* Left: Index + Hair Name */}
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="font-mono text-[8px] text-[#eadcc0]/40 shrink-0">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <span className="truncate text-[9.5px] font-mono tracking-wide">
-                      {g.label}
-                    </span>
-                  </div>
-
-                  {/* Right: Badges & Selected Indicator */}
-                  <div className="flex shrink-0 items-center gap-1.5 ml-2">
-                    <span className="rounded-[1px] border border-[#d4b483]/25 bg-black/60 px-1 py-0.2 font-mono text-[7.5px] uppercase text-[#a9a192]">
-                      {g.brand}
-                    </span>
-
-                    {g.partCount > 1 && (
-                      <span className="rounded-[1px] border border-[#eac87f]/40 bg-[#d4b483]/20 px-1 py-0.2 font-mono text-[7px] font-medium text-[#f2dfbe]">
-                        {g.partCount}P
-                      </span>
-                    )}
-
-                    {g.isHL && (
-                      <span className="rounded-[1px] border border-[#7fb0ea]/40 bg-[#7fb0ea]/20 px-1 py-0.2 font-mono text-[7px] font-medium text-[#bfdbfe]">
-                        HL
-                      </span>
-                    )}
-
-                    {isSelected ? (
-                      <span className="flex items-center gap-1 rounded-xs bg-[#eac87f] px-1.5 py-0.5 font-mono text-[8px] font-bold text-black shadow-[0_0_6px_rgba(234,200,127,0.7)]">
-                        ACTIVE
-                      </span>
-                    ) : (
-                      <span className="opacity-0 group-hover:opacity-100 font-mono text-[8px] text-[#eac87f]/80 transition-opacity">
-                        SELECT
-                      </span>
-                    )}
-                  </div>
+                  <HairThumbnail id={g.id} label={g.label} hairTone={hair.tone}
+                    meshUrls={g.parts.map(part => (part.raw as { meshUrl?: string }).meshUrl ?? convertUrl({ kind: 'hairMesh', id: part.id, mode: 'mesh' }))}
+                    className="aspect-square w-full" />
+                  <span className="truncate px-1 pt-2 text-[12px] text-[#e3ddcf]">{g.label}</span>
+                  <span className="px-1 pb-1 pt-1 text-[10px] text-[#b8b0a0]">{isSelected ? 'Selected' : g.brand}{g.partCount > 1 ? ` · ${g.partCount} parts` : ''}</span>
                 </button>
               );
             })}

@@ -173,6 +173,20 @@ const buildPoseBank = (): Record<RegionId, GizmoPose> =>
 
 export type BodyTab = 'gear' | 'physique';
 
+/**
+ * The face-only slice a face-history entry stores.
+ *
+ * Deliberately narrower than the character: hair, equipment, lighting, camera
+ * and every asset pick are excluded, so undoing a nose slider can never revert
+ * a hairstyle the user changed in between. `anatomyMode` rides along because
+ * the advanced bank only deforms the face when that mode is `advanced`.
+ */
+export interface FaceSnapshot extends AnatomySnapshot {
+  sliders: Record<RegionId, SliderValues>;
+  poses: Record<RegionId, GizmoPose>;
+  anatomyMode: AnatomyMode;
+}
+
 export interface CharacterState extends AnatomySnapshot {
   anatomyMode: AnatomyMode;
   anatomyPast: AnatomySnapshot[];
@@ -181,6 +195,27 @@ export interface CharacterState extends AnatomySnapshot {
   setAnatomyMode: (mode: AnatomyMode) => void;
   beginAnatomyEdit: () => void;
   endAnatomyEdit: () => void;
+  /** Face history: sliders, poses, anatomy and mode — never hair or gear. */
+  facePast: FaceSnapshot[];
+  faceFuture: FaceSnapshot[];
+  /** Snapshot taken when a drag transaction opens; null when closed. */
+  faceEditStart: FaceSnapshot | null;
+  /** While non-null, hold-compare is showing the baseline and this holds the
+   *  live edited face that ends the hold. Transient; never persisted. */
+  faceCompareStart: FaceSnapshot | null;
+  /** The face hold-compare returns to. Transient; never persisted. */
+  faceBaseline: FaceSnapshot | null;
+  beginFaceEdit: () => void;
+  endFaceEdit: () => void;
+  undoFace: () => void;
+  redoFace: () => void;
+  /** Resets the active region's sliders and pose as one history entry. */
+  resetFaceRegion: () => void;
+  beginFaceCompare: () => void;
+  endFaceCompare: () => void;
+  /** Re-anchors the compare baseline to the live edited face, without
+   *  changing what is on screen. */
+  applyFaceBaseline: () => void;
   setAnatomy: (id: AnatomyParamId, value: number) => void;
   setAnatomyAsymmetry: (id: AnatomyParamId, value: number) => void;
   setAnatomyColor: (id: AnatomyColorId, value: string) => void;
@@ -478,29 +513,221 @@ function anatomyPatch(s: CharacterState, patch: Partial<AnatomySnapshot>): Parti
     anatomyPast: s.anatomyEditStart ? s.anatomyPast : [...s.anatomyPast, anatomySnapshot(s)].slice(-30) };
 }
 
+/* ── face history ─────────────────────────────────────────────────────────
+   A second, wider history than `anatomyPast`: one entry is everything that
+   changes the face — both slider banks, gizmo poses, the advanced anatomy
+   values and the mode that makes them deform. Hair, equipment, lighting and
+   camera state are deliberately absent, so undoing a nose edit cannot revert
+   a wardrobe change made after it. */
+const FACE_HISTORY_LIMIT = 50;
+
+function clonePose(p: GizmoPose): GizmoPose {
+  return { offset: [...p.offset], rotation: [...p.rotation], scale: [...p.scale] };
+}
+
+function cloneSliderBank(bank: Record<RegionId, SliderValues>): Record<RegionId, SliderValues> {
+  return Object.fromEntries(REGIONS.map((r) => [r.id, { ...bank[r.id] }])) as Record<RegionId, SliderValues>;
+}
+
+function clonePoseBank(bank: Record<RegionId, GizmoPose>): Record<RegionId, GizmoPose> {
+  return Object.fromEntries(REGIONS.map((r) => [r.id, clonePose(bank[r.id])])) as Record<RegionId, GizmoPose>;
+}
+
+function faceSnapshot(s: CharacterState): FaceSnapshot {
+  return {
+    ...anatomySnapshot(s),
+    sliders: cloneSliderBank(s.sliders),
+    poses: clonePoseBank(s.poses),
+    anatomyMode: s.anatomyMode,
+  };
+}
+
+/** The live-store partial that puts a stored face back on screen. */
+function faceRestore(snap: FaceSnapshot): Partial<CharacterState> {
+  return {
+    ...anatomySnapshot(snap),
+    sliders: cloneSliderBank(snap.sliders),
+    poses: clonePoseBank(snap.poses),
+    anatomyMode: snap.anatomyMode,
+  };
+}
+
+/**
+ * Wrap a face-changing patch with history bookkeeping.
+ *
+ * - While hold-compare is up the live face is the baseline, so every write is
+ *   ignored: the release must restore exactly the pre-hold edit.
+ * - A write that changes nothing adds nothing (sliders fire per pointer move).
+ * - Inside `beginFaceEdit`/`endFaceEdit` the whole drag is one entry: the
+ *   snapshot is taken on the first `begin`, not on every intermediate value.
+ */
+function faceHistory(s: CharacterState, patch: Partial<CharacterState>): Partial<CharacterState> {
+  if (s.faceCompareStart) return {};
+  const current = faceSnapshot(s);
+  const next = faceSnapshot({ ...s, ...patch } as CharacterState);
+  if (JSON.stringify(next) === JSON.stringify(current)) return {};
+  /* Any open transaction — including one the advanced panel opened on its own
+     via `beginAnatomyEdit` — takes one entry for the whole drag. */
+  const inTransaction = Boolean(s.faceEditStart || s.anatomyEditStart);
+  return {
+    ...patch,
+    /* The first edit anchors the compare baseline to the face as it was
+       before that edit; otherwise hold-compare would always show the value
+       the user is already looking at. */
+    ...(s.faceBaseline ? {} : { faceBaseline: current }),
+    faceFuture: [],
+    facePast: inTransaction ? s.facePast : [...s.facePast, current].slice(-FACE_HISTORY_LIMIT),
+  };
+}
+
+/** An anatomy write: recorded in the advanced (`anatomyPast`) history *and*
+ *  in the face history, and ignored entirely while hold-compare is up. */
+function faceAnatomyPatch(s: CharacterState, patch: Partial<AnatomySnapshot>): Partial<CharacterState> {
+  if (!Object.keys(patch).length) return {};
+  const anatomy = anatomyPatch(s, patch);
+  return Object.keys(anatomy).length ? faceHistory(s, anatomy) : {};
+}
+
+/**
+ * Close whatever transaction is open and write one entry per stack.
+ *
+ * The face and advanced histories share the drag: `beginFaceEdit` and
+ * `beginAnatomyEdit` open both markers, so a control column drag that drives
+ * both slider banks and `setAnatomy` still produces exactly one entry in each.
+ */
+function commitEdit(s: CharacterState): Partial<CharacterState> {
+  const faceStart = s.faceEditStart;
+  const anatomyStart = s.anatomyEditStart;
+  if (!faceStart && !anatomyStart) return {};
+  const anatomyChanged = anatomyStart
+    ? JSON.stringify(anatomySnapshot(s)) !== JSON.stringify(anatomyStart) : false;
+  const faceChanged = faceStart
+    ? JSON.stringify(faceSnapshot(s)) !== JSON.stringify(faceStart) : anatomyChanged;
+  return {
+    faceEditStart: null,
+    anatomyEditStart: null,
+    ...(faceChanged && faceStart
+      ? { facePast: [...s.facePast, faceStart].slice(-FACE_HISTORY_LIMIT), faceFuture: [] } : {}),
+    ...(anatomyChanged && anatomyStart
+      ? { anatomyPast: [...s.anatomyPast, anatomyStart].slice(-30) } : {}),
+  };
+}
+
+/**
+ * Keep the advanced stack aligned when a face step moves the anatomy.
+ *
+ * The advanced controls write to both stacks; a face step that restores an
+ * older anatomy block must pop `anatomyPast` with it, or the panel's own undo
+ * would later re-apply a value this call already left behind. A step that did
+ * not touch anatomy (a slider drag) leaves the advanced stack alone.
+ */
+function anatomyStep(s: CharacterState, snap: FaceSnapshot, direction: 'undo' | 'redo'): Partial<CharacterState> {
+  if (JSON.stringify(anatomySnapshot(snap)) === JSON.stringify(anatomySnapshot(s))) return {};
+  return direction === 'undo'
+    ? { anatomyPast: s.anatomyPast.slice(0, -1),
+        anatomyFuture: [...s.anatomyFuture, anatomySnapshot(s)].slice(-30) }
+    : { anatomyFuture: s.anatomyFuture.slice(0, -1),
+        anatomyPast: [...s.anatomyPast, anatomySnapshot(s)].slice(-30) };
+}
+
+/** A different head target invalidates every stored face: drop both histories
+ *  and the compare baseline rather than let undo cross onto another mesh. */
+function faceRebase(): Pick<CharacterState,
+  'facePast' | 'faceFuture' | 'faceEditStart' | 'faceCompareStart' | 'faceBaseline'> {
+  return { facePast: [], faceFuture: [], faceEditStart: null, faceCompareStart: null, faceBaseline: null };
+}
+
+/** The face being built. While compare is held the live fields contain the
+ *  baseline, so saving/exporting must read the edited copy kept in
+ *  `faceCompareStart` instead. */
+function liveFaceState(s: CharacterState): CharacterState {
+  return s.faceCompareStart ? ({ ...s, ...faceRestore(s.faceCompareStart) } as CharacterState) : s;
+}
+
 export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   anatomy: coerceAnatomy(),
   anatomyAsymmetry: coerceAsymmetry(),
   anatomyColors: coerceAnatomyColors(),
   anatomyMode: 'legacy',
   anatomyPast: [], anatomyFuture: [], anatomyEditStart: null,
-  setAnatomyMode: (mode) => { get().endAnatomyEdit(); set({ anatomyMode: mode === 'advanced' ? 'advanced' : 'legacy' }); },
-  beginAnatomyEdit: () => set(s => s.anatomyEditStart ? {} : { anatomyEditStart: anatomySnapshot(s) }),
-  endAnatomyEdit: () => set(s => {
-    if (!s.anatomyEditStart) return {};
-    const changed = JSON.stringify(s.anatomyEditStart) !== JSON.stringify(anatomySnapshot(s));
-    return { anatomyEditStart: null, ...(changed ? { anatomyPast: [...s.anatomyPast, s.anatomyEditStart].slice(-30) } : {}) };
+  facePast: [], faceFuture: [], faceEditStart: null,
+  faceCompareStart: null, faceBaseline: null,
+  /* One transaction, two stacks. A control column drag may write both slider
+     banks and advanced anatomy before it ends, so both markers open together
+     and `commitEdit` closes them into exactly one entry per stack. */
+  beginFaceEdit: () => set(s => s.faceCompareStart || s.faceEditStart ? {} : {
+    faceEditStart: faceSnapshot(s),
+    ...(s.anatomyEditStart ? {} : { anatomyEditStart: anatomySnapshot(s) }),
   }),
+  endFaceEdit: () => set(s => commitEdit(s)),
+  /* These walk the wider face history, which also holds anatomy values, so
+     they undo both a slider drag and an advanced-control edit. */
+  undoFace: () => { get().endFaceEdit(); set(s => {
+    if (s.faceCompareStart) return {};
+    const previous = s.facePast.at(-1);
+    return previous ? { ...faceRestore(previous), facePast: s.facePast.slice(0, -1),
+      faceFuture: [...s.faceFuture, faceSnapshot(s)].slice(-FACE_HISTORY_LIMIT),
+      ...anatomyStep(s, previous, 'undo') } : {};
+  }); },
+  redoFace: () => { get().endFaceEdit(); set(s => {
+    if (s.faceCompareStart) return {};
+    const next = s.faceFuture.at(-1);
+    return next ? { ...faceRestore(next), faceFuture: s.faceFuture.slice(0, -1),
+      facePast: [...s.facePast, faceSnapshot(s)].slice(-FACE_HISTORY_LIMIT),
+      ...anatomyStep(s, next, 'redo') } : {};
+  }); },
+  resetFaceRegion: () => {
+    get().endFaceEdit();
+    set(s => {
+      if (s.faceCompareStart) return {};
+      const region = s.activeRegion;
+      return faceHistory(s, {
+        sliders: { ...s.sliders, [region]: { ...REGIONS_BY_ID[region].defaults } },
+        poses: { ...s.poses, [region]: identityPose() },
+      });
+    });
+  },
+  /* Hold-compare swaps the live face for the baseline and banks the edited
+     face; the second call (button release) puts it back. Re-entering while
+     held is a no-op, so a repeated pointerdown cannot overwrite the bank. */
+  beginFaceCompare: () => set(s => {
+    if (s.faceCompareStart) return {};
+    /* The first hold anchors on the face as it is now; later holds reuse the
+       baseline an `applyFaceBaseline` re-anchored. */
+    const baseline = s.faceBaseline ?? faceSnapshot(s);
+    return { faceCompareStart: faceSnapshot(s), faceBaseline: baseline, ...faceRestore(baseline) };
+  }),
+  endFaceCompare: () => set(s => s.faceCompareStart
+    ? { ...faceRestore(s.faceCompareStart), faceCompareStart: null }
+    : {}),
+  applyFaceBaseline: () => set(s =>
+    s.faceCompareStart
+      /* Mid-hold: the live fields are the baseline, so re-anchor from the
+         banked edited face without touching what is on screen. */
+      ? { faceBaseline: faceSnapshot({ ...s, ...faceRestore(s.faceCompareStart) } as CharacterState) }
+      : { faceBaseline: faceSnapshot(s) }),
+  setAnatomyMode: (mode) => { get().endAnatomyEdit(); set(s => {
+    const next: AnatomyMode = mode === 'advanced' ? 'advanced' : 'legacy';
+    /* The mode changes which face is on screen, so it belongs in face history. */
+    return s.anatomyMode === next ? {} : faceHistory(s, { anatomyMode: next });
+  }); },
+  /* The advanced panel opens this on its own; it participates in the same
+     face history, so its drags batched and undone through `undoFace` too. */
+  beginAnatomyEdit: () => set(s => s.faceCompareStart || s.anatomyEditStart ? {} : {
+    anatomyEditStart: anatomySnapshot(s),
+    ...(s.faceEditStart ? {} : { faceEditStart: faceSnapshot(s) }),
+  }),
+  endAnatomyEdit: () => set(s => commitEdit(s)),
   setAnatomy: (id, value) => set(s => !Object.hasOwn(ANATOMY_BY_ID, id) || !Number.isFinite(value) ? {} :
-    anatomyPatch(s, { anatomy: coerceAnatomy({ ...s.anatomy, [id]: value }) })),
+    faceAnatomyPatch(s, { anatomy: coerceAnatomy({ ...s.anatomy, [id]: value }) })),
   setAnatomyAsymmetry: (id, value) => set(s => !Object.hasOwn(ANATOMY_BY_ID, id) || !ANATOMY_BY_ID[id].bilateral || !Number.isFinite(value) ? {} :
-    anatomyPatch(s, { anatomyAsymmetry: coerceAsymmetry({ ...s.anatomyAsymmetry, [id]: value }) })),
+    faceAnatomyPatch(s, { anatomyAsymmetry: coerceAsymmetry({ ...s.anatomyAsymmetry, [id]: value }) })),
   setAnatomyColor: (id, value) => set(s => !ANATOMY_COLOR_DEFS.some(p => p.id === id) || !/^#[0-9a-f]{6}$/i.test(value) ? {} :
-    anatomyPatch(s, { anatomyColors: coerceAnatomyColors({ ...s.anatomyColors, [id]: value }) })),
+    faceAnatomyPatch(s, { anatomyColors: coerceAnatomyColors({ ...s.anatomyColors, [id]: value }) })),
   applyAnatomyPreset: (id) => {
     get().endAnatomyEdit();
     const preset = ANATOMY_PRESETS.find(p => p.id === id);
-    if (preset && Object.keys(preset.values).length) set(s => anatomyPatch(s, {
+    if (preset && Object.keys(preset.values).length) set(s => faceAnatomyPatch(s, {
       anatomy: applyPresetValues(s.anatomy, preset.group, preset.values),
     }));
   },
@@ -510,15 +737,20 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
       const anatomy = { ...s.anatomy }, anatomyAsymmetry = { ...s.anatomyAsymmetry }, anatomyColors = { ...s.anatomyColors };
       for (const p of ANATOMY_PARAMS) if (p.group === group) { anatomy[p.id] = p.default; if (p.bilateral) anatomyAsymmetry[p.id] = 0; }
       for (const p of ANATOMY_COLOR_DEFS) if (p.group === group) anatomyColors[p.id] = p.default;
-      return anatomyPatch(s, { anatomy, anatomyAsymmetry, anatomyColors });
+      return faceAnatomyPatch(s, { anatomy, anatomyAsymmetry, anatomyColors });
     });
   },
+  /* These walk only the advanced slice, exactly as they did before the face
+     history existed. A face step that moves anatomy keeps this stack aligned
+     via `anatomyStep`, so the two can never disagree about the live face. */
   undoAnatomy: () => { get().endAnatomyEdit(); set(s => {
+    if (s.faceCompareStart) return {};
     const previous = s.anatomyPast.at(-1);
     return previous ? { ...anatomySnapshot(previous), anatomyPast: s.anatomyPast.slice(0, -1),
       anatomyFuture: [...s.anatomyFuture, anatomySnapshot(s)].slice(-30) } : {};
   }); },
   redoAnatomy: () => { get().endAnatomyEdit(); set(s => {
+    if (s.faceCompareStart) return {};
     const next = s.anatomyFuture.at(-1);
     return next ? { ...anatomySnapshot(next), anatomyFuture: s.anatomyFuture.slice(0, -1),
       anatomyPast: [...s.anatomyPast, anatomySnapshot(s)].slice(-30) } : {};
@@ -619,6 +851,9 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         /* The stack is gone, so the panel's selection cannot name a layer. */
         activeOverlay: null,
         activeCategory: 'skin',
+        /* The head picks went with it, so the stored faces belong to a mesh
+           this session no longer has. */
+        ...faceRebase(),
       };
     }),
   hydrated: false,
@@ -740,7 +975,11 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
       if (id) next[kind] = id;
       else delete next[kind];
     }
-    return { assetSelection: next };
+    /* Picking a different head swaps the mesh every stored slider was
+       measured against; undo/redo across that boundary would apply one
+       head's morphs to another. Everything else (hair, eyes, makeup) leaves
+       the face geometry alone and must not clear the history. */
+    return { assetSelection: next, ...(next.headMesh !== s.assetSelection.headMesh ? faceRebase() : {}) };
   }),
   activeCategory: 'skin',
   overlayLayers: [],
@@ -836,19 +1075,20 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
 
   setSlider: (id, value) =>
     set((s) => {
+      if (!Number.isFinite(value)) return {};
       const region = s.activeRegion;
-      return {
+      return faceHistory(s, {
         sliders: {
           ...s.sliders,
           [region]: { ...s.sliders[region], [id]: value },
         },
-      };
+      });
     }),
 
   setActiveSlider: (activeSlider) => set({ activeSlider }),
 
   setPose: (patch) =>
-    set((s) => ({
+    set((s) => faceHistory(s, {
       poses: {
         ...s.poses,
         [s.activeRegion]: { ...s.poses[s.activeRegion], ...patch },
@@ -876,6 +1116,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         anatomyMode: 'legacy',
         anatomy: coerceAnatomy(), anatomyAsymmetry: coerceAsymmetry(), anatomyColors: coerceAnatomyColors(),
         anatomyPast: [], anatomyFuture: [], anatomyEditStart: null,
+        ...faceRebase(),
         poses: buildPoseBank(),
         assetSelection,
         equipment: def?.equipment ? ({ ...def.equipment } as Record<EquipSlot, string>) : s.equipment,
@@ -963,14 +1204,9 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
 
   setName: (name) => set({ name }),
 
-  resetRegion: () =>
-    set((s) => ({
-      sliders: {
-        ...s.sliders,
-        [s.activeRegion]: { ...REGIONS_BY_ID[s.activeRegion].defaults },
-      },
-      poses: { ...s.poses, [s.activeRegion]: identityPose() },
-    })),
+  /* The old region reset, now history-aware: one entry, and no write at all
+     when the region is already at its defaults. */
+  resetRegion: () => get().resetFaceRegion(),
 
   loadPreset: (payload, sculptHeadId) =>
     set((s) => {
@@ -999,6 +1235,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         anatomyAsymmetry: coerceAsymmetry(payload.anatomyAsymmetry),
         anatomyColors: coerceAnatomyColors(payload.anatomyColors),
         anatomyPast: [], anatomyFuture: [], anatomyEditStart: null,
+        ...faceRebase(),
         poses,
         // A RaceMenu file carries no view state, so those fields keep their
         // current values rather than being reset to defaults.
@@ -1031,7 +1268,9 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
     }),
 
   snapshotPreset: () => {
-    const s = get();
+    /* While a hold-compare is up the live fields hold the baseline; a save or
+       export started from that state must still write the edited face. */
+    const s = liveFaceState(get());
     return buildPresetFile({
       name: s.name,
       preset: s.preset,
@@ -1066,7 +1305,11 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   /* The stored fields are exactly the character; transient view state never
      leaves the tab. `pickSession` copies rather than returning references, so
      a later mutation of the live bank cannot silently rewrite the last save. */
-  partialize: (s) => pickSession(s as PersistedSession),
+  /* Read the edited face rather than the baseline a hold-compare temporarily
+     put in the live fields: a reload mid-hold must restore what the user
+     built, not the face they were comparing against. `pickSession` copies, so
+     none of the transient history fields can leak into the payload. */
+  partialize: (s) => pickSession(liveFaceState(s) as PersistedSession),
   /* Runs only when storage actually returned a session. Returning `null` from
      the coercer (a payload that is not even an object) leaves the defaults in
      place, which is the honest response to garbage. */
