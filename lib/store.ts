@@ -2,6 +2,9 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { ANATOMY_PARAMS, ANATOMY_COLOR_DEFS, ANATOMY_BY_ID, type AnatomySnapshot, type AnatomyMode, type AnatomyParamId, type AnatomyColorId, type AnatomyGroupId } from '@/lib/anatomy/params';
+import { coerceAnatomy, coerceAsymmetry, coerceAnatomyColors, applyPresetValues } from '@/lib/anatomy/validate';
+import { ANATOMY_PRESETS } from '@/lib/anatomy/presets';
 import {
   NAME_DEFAULT,
   PRESETS,
@@ -170,7 +173,21 @@ const buildPoseBank = (): Record<RegionId, GizmoPose> =>
 
 export type BodyTab = 'gear' | 'physique';
 
-export interface CharacterState {
+export interface CharacterState extends AnatomySnapshot {
+  anatomyMode: AnatomyMode;
+  anatomyPast: AnatomySnapshot[];
+  anatomyFuture: AnatomySnapshot[];
+  anatomyEditStart: AnatomySnapshot | null;
+  setAnatomyMode: (mode: AnatomyMode) => void;
+  beginAnatomyEdit: () => void;
+  endAnatomyEdit: () => void;
+  setAnatomy: (id: AnatomyParamId, value: number) => void;
+  setAnatomyAsymmetry: (id: AnatomyParamId, value: number) => void;
+  setAnatomyColor: (id: AnatomyColorId, value: string) => void;
+  applyAnatomyPreset: (id: string) => void;
+  resetAnatomyGroup: (group: AnatomyGroupId) => void;
+  undoAnatomy: () => void;
+  redoAnatomy: () => void;
   hair: HairSettings;
   hairTab: HairTab;
   setHair: (patch: Partial<HairSettings>) => void;
@@ -449,7 +466,61 @@ export interface CharacterState {
  * - `merge` coerces instead of spreading. What comes back from storage is
  *   arbitrary JSON; see `coerceSession`.
  */
+function anatomySnapshot(s: AnatomySnapshot): AnatomySnapshot {
+  return { anatomy: { ...s.anatomy }, anatomyAsymmetry: { ...s.anatomyAsymmetry }, anatomyColors: { ...s.anatomyColors } };
+}
+function anatomyPatch(s: CharacterState, patch: Partial<AnatomySnapshot>): Partial<CharacterState> {
+  const next = { ...anatomySnapshot(s), ...patch };
+  if (JSON.stringify(next) === JSON.stringify(anatomySnapshot(s))) return {};
+  return { ...patch, anatomyFuture: [],
+    anatomyPast: s.anatomyEditStart ? s.anatomyPast : [...s.anatomyPast, anatomySnapshot(s)].slice(-30) };
+}
+
 export const useCharacter = create<CharacterState>()(persist((set, get) => ({
+  anatomy: coerceAnatomy(),
+  anatomyAsymmetry: coerceAsymmetry(),
+  anatomyColors: coerceAnatomyColors(),
+  anatomyMode: 'legacy',
+  anatomyPast: [], anatomyFuture: [], anatomyEditStart: null,
+  setAnatomyMode: (mode) => { get().endAnatomyEdit(); set({ anatomyMode: mode === 'advanced' ? 'advanced' : 'legacy' }); },
+  beginAnatomyEdit: () => set(s => s.anatomyEditStart ? {} : { anatomyEditStart: anatomySnapshot(s) }),
+  endAnatomyEdit: () => set(s => {
+    if (!s.anatomyEditStart) return {};
+    const changed = JSON.stringify(s.anatomyEditStart) !== JSON.stringify(anatomySnapshot(s));
+    return { anatomyEditStart: null, ...(changed ? { anatomyPast: [...s.anatomyPast, s.anatomyEditStart].slice(-30) } : {}) };
+  }),
+  setAnatomy: (id, value) => set(s => !Object.hasOwn(ANATOMY_BY_ID, id) || !Number.isFinite(value) ? {} :
+    anatomyPatch(s, { anatomy: coerceAnatomy({ ...s.anatomy, [id]: value }) })),
+  setAnatomyAsymmetry: (id, value) => set(s => !Object.hasOwn(ANATOMY_BY_ID, id) || !ANATOMY_BY_ID[id].bilateral || !Number.isFinite(value) ? {} :
+    anatomyPatch(s, { anatomyAsymmetry: coerceAsymmetry({ ...s.anatomyAsymmetry, [id]: value }) })),
+  setAnatomyColor: (id, value) => set(s => !ANATOMY_COLOR_DEFS.some(p => p.id === id) || !/^#[0-9a-f]{6}$/i.test(value) ? {} :
+    anatomyPatch(s, { anatomyColors: coerceAnatomyColors({ ...s.anatomyColors, [id]: value }) })),
+  applyAnatomyPreset: (id) => {
+    get().endAnatomyEdit();
+    const preset = ANATOMY_PRESETS.find(p => p.id === id);
+    if (preset && Object.keys(preset.values).length) set(s => anatomyPatch(s, {
+      anatomy: applyPresetValues(s.anatomy, preset.group, preset.values),
+    }));
+  },
+  resetAnatomyGroup: (group) => {
+    get().endAnatomyEdit();
+    set(s => {
+      const anatomy = { ...s.anatomy }, anatomyAsymmetry = { ...s.anatomyAsymmetry }, anatomyColors = { ...s.anatomyColors };
+      for (const p of ANATOMY_PARAMS) if (p.group === group) { anatomy[p.id] = p.default; if (p.bilateral) anatomyAsymmetry[p.id] = 0; }
+      for (const p of ANATOMY_COLOR_DEFS) if (p.group === group) anatomyColors[p.id] = p.default;
+      return anatomyPatch(s, { anatomy, anatomyAsymmetry, anatomyColors });
+    });
+  },
+  undoAnatomy: () => { get().endAnatomyEdit(); set(s => {
+    const previous = s.anatomyPast.at(-1);
+    return previous ? { ...anatomySnapshot(previous), anatomyPast: s.anatomyPast.slice(0, -1),
+      anatomyFuture: [...s.anatomyFuture, anatomySnapshot(s)].slice(-30) } : {};
+  }); },
+  redoAnatomy: () => { get().endAnatomyEdit(); set(s => {
+    const next = s.anatomyFuture.at(-1);
+    return next ? { ...anatomySnapshot(next), anatomyFuture: s.anatomyFuture.slice(0, -1),
+      anatomyPast: [...s.anatomyPast, anatomySnapshot(s)].slice(-30) } : {};
+  }); },
   hair: PRESETS[0].hair ? coerceHair({ ...DEFAULT_HAIR, ...PRESETS[0].hair }) : { ...DEFAULT_HAIR },
   hairTab: 'STYLE',
   setHairTab: (hairTab) => set({ hairTab }),
@@ -798,6 +869,9 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         preset: def ? def.id : PRESETS[0].id,
         presetNonce: s.presetNonce + 1,
         sliders: def ? presetSliderBank(def) : buildSliderBank(),
+        anatomyMode: 'legacy',
+        anatomy: coerceAnatomy(), anatomyAsymmetry: coerceAsymmetry(), anatomyColors: coerceAnatomyColors(),
+        anatomyPast: [], anatomyFuture: [], anatomyEditStart: null,
         poses: buildPoseBank(),
         assetSelection,
         equipment: def?.equipment ? ({ ...def.equipment } as Record<EquipSlot, string>) : s.equipment,
@@ -916,6 +990,11 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
           : s.assetSelection;
       return {
         sliders,
+        anatomyMode: payload.anatomyMode === 'advanced' ? 'advanced' : 'legacy',
+        anatomy: coerceAnatomy(payload.anatomy),
+        anatomyAsymmetry: coerceAsymmetry(payload.anatomyAsymmetry),
+        anatomyColors: coerceAnatomyColors(payload.anatomyColors),
+        anatomyPast: [], anatomyFuture: [], anatomyEditStart: null,
         poses,
         // A RaceMenu file carries no view state, so those fields keep their
         // current values rather than being reset to defaults.
@@ -971,6 +1050,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
       browGlossy: s.browGlossy,
       linkBrowToHair: s.linkBrowToHair,
       overlays: s.overlayLayers,
+      anatomyMode: s.anatomyMode,
+      ...anatomySnapshot(s),
     });
   },
 }), {

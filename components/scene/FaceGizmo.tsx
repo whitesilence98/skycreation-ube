@@ -8,6 +8,7 @@ import { useCharacter } from '@/lib/store';
 import { useGizmoTip } from '@/lib/gizmoTip';
 import { regionPivot, type Rig } from '@/lib/head/rig';
 import { REGIONS_BY_ID, SLIDER_DEFS } from '@/lib/regions';
+import { anatomySliderBank } from '@/lib/anatomy/bind';
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -48,7 +49,12 @@ export function FaceGizmo({ rig }: FaceGizmoProps) {
      dependency array. Calling a hook in a dep array happens to work but
      breaks the moment the memo is moved into a conditional, and it makes the
      dependency chain impossible to read. */
-  const sliders = useCharacter((s) => s.sliders[s.activeRegion]);
+  const baseSliders = useCharacter((s) => s.sliders[s.activeRegion]);
+  const anatomy = useCharacter(s => s.anatomy);
+  const anatomyMode = useCharacter(s => s.anatomyMode);
+  const sliders = useMemo(() => anatomyMode === 'advanced'
+    ? anatomySliderBank(activeRegion, anatomy, baseSliders) : baseSliders,
+  [activeRegion, anatomyMode, anatomy, baseSliders]);
 
   const anchor = useMemo(() => {
     const p = new THREE.Vector3(...def.center);

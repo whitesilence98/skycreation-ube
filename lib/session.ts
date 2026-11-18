@@ -36,6 +36,8 @@ import { ENV_MODES, type EnvMode } from '@/lib/envModes';
 import { BACKGROUND_MODES, type BackgroundMode } from '@/lib/backgrounds';
 import { coerceLighting, bounded, wrapDegrees, type LightingSettings } from '@/lib/lighting';
 import { CAMERA_ROTATE_SPEED_DEFAULT, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPEED_MAX } from '@/lib/camera';
+import { coerceAnatomy, coerceAsymmetry, coerceAnatomyColors } from '@/lib/anatomy/validate';
+import type { AnatomySnapshot, AnatomyMode } from '@/lib/anatomy/params';
 import { createJSONStorage, type PersistStorage, type StateStorage } from 'zustand/middleware';
 import type {
   ActiveCategory, BodyTab, ColorOverlay, EnbPreset, FilterPreset, GizmoPose, GradeSettings,
@@ -75,7 +77,8 @@ export const SESSION_KEY = `lyra.character-session.v${SESSION_VERSION}`;
  * `assetSourceId` *is* kept: it is what lets a genuine pack switch invalidate
  * the picks while an ordinary reload leaves them alone.
  */
-export interface PersistedSession {
+export interface PersistedSession extends AnatomySnapshot {
+  anatomyMode: AnatomyMode;
   hair: HairSettings;
   hairTab: HairTab;
   name: string;
@@ -239,6 +242,10 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
   ])) as Record<RegionId, GizmoPose>;
 
   return {
+    anatomy: coerceAnatomy(o.anatomy),
+    anatomyAsymmetry: coerceAsymmetry(o.anatomyAsymmetry),
+    anatomyColors: coerceAnatomyColors(o.anatomyColors),
+    anatomyMode: o.anatomyMode === 'advanced' ? 'advanced' : 'legacy',
     hair: coerceHair(o.hair),
     hairTab: isOneOf(HAIR_TABS, o.hairTab) ? o.hairTab : defaults.hairTab,
     name: typeof o.name === 'string' && o.name.trim() ? o.name.slice(0, 14) : NAME_DEFAULT,
@@ -310,6 +317,10 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
 /** The stored slice, copied out of a live store. */
 export function pickSession(s: PersistedSession): PersistedSession {
   return {
+    anatomy: { ...s.anatomy },
+    anatomyAsymmetry: { ...s.anatomyAsymmetry },
+    anatomyColors: { ...s.anatomyColors },
+    anatomyMode: s.anatomyMode,
     hair: { ...s.hair },
     hairTab: s.hairTab,
     name: s.name,

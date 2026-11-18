@@ -75,7 +75,7 @@ assert.equal(useCharacter.getState().browColor, '#334455', 'relinking snaps brow
 // ── preset round-trip ───────────────────────────────────────────────────────
 const exported = useCharacter.getState().snapshotPreset();
 const payload = parsePreset(JSON.stringify(exported));
-assert.equal(exported.version, 2);
+assert.equal(exported.version, 3);
 assert.deepEqual(JSON.parse(JSON.stringify(payload.hair)), JSON.parse(JSON.stringify(exported.hair)));
 
 // A v1 file has no hair block; loading it must leave the current hair alone.

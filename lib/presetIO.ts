@@ -12,6 +12,8 @@ import { coerceHair, type HairSettings } from '@/lib/hair/settings';
 import type { GizmoPose, OverlayLayer } from '@/lib/store';
 import { ASSET_KINDS, type AssetSelection } from '@/lib/manifestSelect';
 import { isEquipSelection, type EquipSelection } from '@/lib/equipment';
+import type { AnatomySnapshot, AnatomyMode } from '@/lib/anatomy/params';
+import { coerceAnatomy, coerceAsymmetry, coerceAnatomyColors } from '@/lib/anatomy/validate';
 
 /**
  * Import/export for character presets.
@@ -31,14 +33,15 @@ import { isEquipSelection, type EquipSelection } from '@/lib/equipment';
  */
 
 export const PRESET_FORMAT = 'lyra-preset';
-export const PRESET_VERSION = 2;
+export const PRESET_VERSION = 3;
 
 export interface RegionSnapshot {
   sliders: SliderValues;
   pose: GizmoPose;
 }
 
-export interface PresetFile {
+export interface PresetFile extends Partial<AnatomySnapshot> {
+  anatomyMode?: AnatomyMode;
   format: typeof PRESET_FORMAT;
   version: number;
   /** ISO timestamp; informational only. */
@@ -168,7 +171,8 @@ export function payloadFromMorphs(
   };
 }
 
-export interface PresetPayload {
+export interface PresetPayload extends Partial<AnatomySnapshot> {
+  anatomyMode?: AnatomyMode;
   name?: string;
   preset?: string;
   /**
@@ -347,6 +351,7 @@ export function toRaceMenuMorphs(
 }
 
 export function buildPresetFile(args: {
+  anatomyMode?: AnatomyMode;
   name: string;
   preset: string;
   activeRegion: RegionId;
@@ -363,7 +368,7 @@ export function buildPresetFile(args: {
   browGlossy?: number;
   linkBrowToHair?: boolean;
   overlays?: OverlayLayer[];
-}): PresetFile {
+} & Partial<AnatomySnapshot>): PresetFile {
   return {
     format: PRESET_FORMAT,
     version: PRESET_VERSION,
@@ -385,6 +390,10 @@ export function buildPresetFile(args: {
     browGlossy: args.browGlossy,
     linkBrowToHair: args.linkBrowToHair,
     overlays: args.overlays,
+    anatomyMode: args.anatomyMode === 'advanced' ? 'advanced' : 'legacy',
+    anatomy: coerceAnatomy(args.anatomy),
+    anatomyAsymmetry: coerceAsymmetry(args.anatomyAsymmetry),
+    anatomyColors: coerceAnatomyColors(args.anatomyColors),
   };
 }
 
@@ -513,6 +522,9 @@ export function parsePreset(text: string, fileName?: string): PresetPayload {
 
   // ── this app's own export ───────────────────────────────────────
   if (obj.format === PRESET_FORMAT) {
+    if (obj.version !== undefined && ![1, 2, PRESET_VERSION].includes(obj.version as number)) {
+      throw new Error('Unsupported LYRA preset version. Update the app before importing this file.');
+    }
     const rawRegions = (obj.regions ?? {}) as Record<string, unknown>;
     const regions: PresetPayload['regions'] = {};
     for (const region of REGIONS) {
@@ -538,6 +550,10 @@ export function parsePreset(text: string, fileName?: string): PresetPayload {
       regions,
       unmapped: 0,
       source: 'lyra',
+      anatomyMode: obj.anatomyMode === 'advanced' ? 'advanced' : 'legacy',
+      anatomy: coerceAnatomy(obj.anatomy),
+      anatomyAsymmetry: coerceAsymmetry(obj.anatomyAsymmetry),
+      anatomyColors: coerceAnatomyColors(obj.anatomyColors),
       assets: isAssetSelection(obj.assets) ? obj.assets : undefined,
       equipment: isEquipSelection(obj.equipment) ? obj.equipment : undefined,
       weight: coerceWeight(obj.weight),

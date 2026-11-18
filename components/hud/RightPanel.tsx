@@ -6,6 +6,7 @@ import { StudioCard } from '@/components/hud/common/StudioCard';
 import { IconCheck, IconMove, IconRotate, IconScale, IconSparkle } from '@/components/hud/Icons';
 import { HudSlider as Slider } from '@/components/hud/HudSlider';
 import { cn } from '@/lib/cn';
+import { AnatomyPanel } from '@/components/hud/AnatomyPanel';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
 const MODES: Array<{ id: TransformMode; label: string; Icon: (p: { className?: string }) => React.JSX.Element }> = [
@@ -20,6 +21,7 @@ interface RightPanelProps {
 }
 
 export function RightPanel({ manifest: _manifest = null, onClose }: RightPanelProps) {
+  const anatomyMode = useCharacter(s => s.anatomyMode);
   const mode = useCharacter((s) => s.transformMode);
   const setMode = useCharacter((s) => s.setTransformMode);
   const activeRegion = useCharacter((s) => s.activeRegion);
@@ -37,6 +39,9 @@ export function RightPanel({ manifest: _manifest = null, onClose }: RightPanelPr
   const axisSliders = SLIDER_DEFS.filter((s) => s.style === 'axis');
   const morphSliders = SLIDER_DEFS.filter((s) => s.style === 'morph');
 
+  if (anatomyMode === 'advanced') {
+    return <AnatomyPanel onClose={onClose ?? (() => useCharacter.getState().setWorkspace('edit'))} />;
+  }
   return (
     <StudioCard
       title="FACIAL SCULPT"
@@ -47,6 +52,10 @@ export function RightPanel({ manifest: _manifest = null, onClose }: RightPanelPr
       showSparkle
     >
       <div className="flex flex-col gap-2.5">
+      <button type="button" onClick={() => useCharacter.getState().setAnatomyMode('advanced')}
+        className="border border-[#d4b483]/35 p-2 text-[11px] text-[#e6d3ac] hover:bg-[#d4b483]/10 focus-visible:outline focus-visible:outline-[#eac87f]">
+        Advanced controls (partial rig support)
+      </button>
         {/* ── Facial Region Selection ─────────────────────────────────── */}
       <div className="mb-[12px] border border-[#d4b483]/22 bg-black/40 p-2">
         <div className="mb-[6px] flex items-center justify-between text-[10px] font-mono tracking-wider text-[#d8c39c]">

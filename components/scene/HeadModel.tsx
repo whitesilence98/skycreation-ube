@@ -22,6 +22,7 @@ import {
 import { convertUrl } from '@/lib/mo2/client';
 import { loadMask, compositeHeadAtlas, type OverlayInput } from '@/lib/head/overlayLayers';
 import { SLIDER_DEFS, REGIONS_BY_ID } from '@/lib/regions';
+import { anatomySliderBank } from '@/lib/anatomy/bind';
 import { useCharacter } from '@/lib/store';
 import { MeshOverlay } from '@/components/scene/MeshOverlay';
 import { FaceGizmo } from '@/components/scene/FaceGizmo';
@@ -491,6 +492,8 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
 
   const activeRegion = useCharacter((s) => s.activeRegion);
   const sliders = useCharacter((s) => s.sliders);
+  const anatomy = useCharacter(s => s.anatomy);
+  const anatomyMode = useCharacter(s => s.anatomyMode);
   const poses = useCharacter((s) => s.poses);
   const overlayLayers = useCharacter((s) => s.overlayLayers);
 
@@ -1161,8 +1164,9 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
        let the active tab win the lips/jaw collision, and it had the side
        effect that merely switching tabs re-displaced the mouth. */
     for (const rid of Object.keys(REGIONS_BY_ID) as Array<keyof typeof REGIONS_BY_ID>) {
+      const values = anatomyMode === 'advanced' ? anatomySliderBank(rid, anatomy, sliders[rid]) : sliders[rid];
       for (const key of rig.regionBoneKeys[rid]) {
-        poseRegionBone(rig, key, rid, defs, sliders[rid], poses[rid]);
+        poseRegionBone(rig, key, rid, defs, values, poses[rid]);
       }
     }
 
@@ -1170,7 +1174,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     rig.root.updateMatrixWorld(true);
     onDirty();
 
-  }, [rig, sliders, poses, weight, linkFaceToWeight, onDirty]);
+  }, [rig, sliders, poses, anatomy, anatomyMode, weight, linkFaceToWeight, onDirty]);
 
   /* A part with geometry is never withheld: pack mode draws its own material
      once its atlas is on the GPU, and the flat grey stand-in until then (or
