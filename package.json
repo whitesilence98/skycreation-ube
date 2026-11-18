@@ -34,6 +34,8 @@
     "check:equip": "node scripts/check_equipment_thumbnails.cjs",
     "check:hair": "node scripts/check_hair_thumbnails.cjs",
     "check:hdr": "node scripts/check_hdr.cjs",
+    "check:editor": "node scripts/check_editor_shell.cjs",
+    "check:editor:screens": "node scripts/check_editor_browser.cjs",
     "check:deform": "node scripts/check_anatomy_deformation.cjs",
     "check:anatomy": "node scripts/check_anatomy_params.cjs",
     "check:brows": "node scripts/verify_brows_panel.cjs"
@@ -42,7 +44,7 @@
     "@react-three/drei": "10.7.9",
     "@react-three/fiber": "9.8.2",
     "@react-three/postprocessing": "3.2.2",
-    "next": "16.4.4",
+    "next": "16.4.6",
     "postprocessing": "6.39.6",
     "react": "19.3.1",
     "react-dom": "19.3.1",

@@ -4,7 +4,7 @@ Web-based 3D Skyrim Character Creator & Asset Studio managed with Claude Code Ga
 
 ## Technology Stack
 
-- **Engine**: Web (Next.js 16.4.4 App Router + React 19 + `@react-three/fiber` 9 + `@react-three/drei` 10 + Three.js 0.187)
+- **Engine**: Web (Next.js 16.4.6 App Router + React 19 + `@react-three/fiber` 9 + `@react-three/drei` 10 + Three.js 0.187)
 - **Language**: TypeScript (Strict mode)
 - **Styling**: Tailwind CSS v4 + PostCSS
 - **State**: Zustand 5

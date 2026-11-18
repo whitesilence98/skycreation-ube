@@ -9,7 +9,7 @@
 ## Engine & Language
 
 - **Engine**: Web
-- **Framework**: Next.js 16 (App Router) + React 19
+- **Framework**: Next.js 16.4.6 (App Router) + React 19
 - **3D Renderer**: Three.js (`@react-three/fiber`, `@react-three/drei`)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS v4
