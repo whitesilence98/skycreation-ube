@@ -6,6 +6,7 @@ import { LeftPanel } from '@/components/hud/LeftPanel';
 import { RightPanel } from '@/components/hud/RightPanel';
 import { Footer } from '@/components/hud/Footer';
 import { AssetPanel } from '@/components/hud/AssetPanel';
+import { HdrPanel } from '@/components/hud/HdrPanel';
 import { GraphicsPanel } from '@/components/hud/GraphicsPanel';
 import { CameraPanel } from '@/components/hud/CameraPanel';
 import { PosePanel } from '@/components/hud/PosePanel';
@@ -67,7 +68,7 @@ export function Hud({ manifest }: HudProps) {
   const isStudioLeftTab = isDualStudioTab || primaryTab === 'BODY' || (primaryTab === 'FACE' && subTab === 'EYES');
   const isRightDrawerActive = chrome && (workspace !== 'edit' || isDualStudioTab);
   const toast = useCharacter((s) => s.toast);
-  const rightTitle = isBrowsTab
+  const rightTitle = workspace === 'hdr' ? 'HDR ENVIRONMENT LIGHTING' : isBrowsTab
     ? 'BROW COLOR & PROPERTIES'
     : isHairTab
       ? 'HAIR COLOR & PROPERTIES'
@@ -223,7 +224,9 @@ export function Hud({ manifest }: HudProps) {
           )}
         >
           <div className="min-h-0 flex-1 overflow-y-auto thin-scroll">
-            {isBrowsTab ? (
+            {workspace === 'hdr' ? (
+              <HdrPanel onClose={closeRightDrawer} />
+            ) : isBrowsTab ? (
               <BrowProperties />
             ) : isHairTab ? (
               <HairProperties />

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useRef } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
@@ -20,6 +20,11 @@ import { HeadModel, type SceneHandles } from '@/components/scene/HeadModel';
 import { EnbReshadeEffect } from '@/components/scene/EnbReshadeEffect';
 import { GradeEffect } from '@/components/scene/GradeEffect';
 import { BackgroundStage } from '@/components/scene/BackgroundStage';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
+import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
+import { useHdr } from '@/lib/hdrState';
+import { inspectHdrHeader, checkHdrDimensions } from '@/lib/hdr';
+import { ExposureEffect } from '@/components/scene/ExposureEffect';
 import { StatsProbe } from '@/components/scene/StatsProbe';
 import { isGradeNeutral } from '@/lib/graphics';
 import { cameraSpherical, FRAMING_SPECS } from '@/lib/camera';
@@ -206,28 +211,57 @@ function PipelineRig({ dof }: { dof: React.RefObject<DepthOfFieldEffect | null> 
   const envMode = useCharacter((s) => s.envMode);
   const envRotation = useCharacter((s) => s.envRotation);
   const envIntensity = useCharacter((s) => s.envIntensity);
+  const hdrSource = useHdr(s => s.source);
+  const [customReady, setCustomReady] = useState(false);
 
   useEffect(() => {
     const pmrem = new THREE.PMREMGenerator(gl);
-    const envScene = createEnvironmentScene(envMode);
-    const envTarget = pmrem.fromScene(envScene, 0.04);
-    scene.environment = envTarget.texture;
-    pmrem.dispose();
-    envScene.traverse((object) => {
-      if (object instanceof THREE.Mesh) {
-        object.geometry.dispose();
-        for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.dispose();
+    let envTarget: THREE.WebGLRenderTarget | undefined;
+    let texture: THREE.DataTexture | undefined;
+    let envScene: THREE.Scene | undefined;
+    let ready = false;
+    try {
+      if (hdrSource) {
+        inspectHdrHeader(hdrSource.buffer, hdrSource.format);
+        const loader = hdrSource.format === 'hdr' ? new HDRLoader() : new EXRLoader();
+        texture = loader.createDataTexture(hdrSource.buffer);
+        checkHdrDimensions(texture.image.width, texture.image.height);
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        envTarget = pmrem.fromEquirectangular(texture);
+        ready = true;
+        useHdr.setState({ status: 'ready', error: null });
       }
-    });
+    } catch (error) {
+      useHdr.setState({ status: 'error', error: error instanceof Error ? error.message : 'Could not decode this HDRI. Try a standard equirectangular HDR panorama.' });
+    } finally {
+      texture?.dispose();
+    }
+    try {
+      if (!envTarget) {
+        envScene = createEnvironmentScene(envMode);
+        envTarget = pmrem.fromScene(envScene, 0.04);
+      }
+      scene.environment = envTarget.texture;
+      setCustomReady(ready);
+    } finally {
+      pmrem.dispose();
+      envScene?.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.geometry.dispose();
+          for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.dispose();
+        }
+      });
+    }
+    const owned = envTarget;
     return () => {
-      scene.environment = null;
-      envTarget.dispose();
+      if (scene.environment === owned?.texture) scene.environment = null;
+      owned?.dispose();
     };
-  }, [gl, scene, envMode]);
+  }, [gl, scene, envMode, hdrSource]);
 
   useEffect(() => {
-    scene.environmentIntensity = ENV_CONFIG[envMode].baseIntensity * envIntensity;
-  }, [scene, envMode, envIntensity]);
+    scene.environmentIntensity = (customReady ? 1 : ENV_CONFIG[envMode].baseIntensity) * envIntensity;
+  }, [scene, envMode, envIntensity, customReady]);
 
   useEffect(() => {
     if (!scene.environmentRotation) {
@@ -264,6 +298,7 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
   const enbEnabled = useCharacter((s) => s.enbEnabled);
   const enbPreset = useCharacter((s) => s.enbPreset);
   const toneMapping = useCharacter((s) => s.toneMapping);
+  const exposure = useCharacter(s => s.exposure);
   const fx = useCharacter((s) => s.fx);
   const grade = useCharacter((s) => s.grade);
   const lighting = useCharacter((s) => s.lighting);
@@ -406,6 +441,7 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
             camera overlay would. */}
         {!isGradeNeutral(grade) && <GradeEffect settings={grade} />}
         {fx.vignette && <Vignette eskil={false} offset={0.34} darkness={0.48} />}
+        {exposure !== 1 && <ExposureEffect exposure={exposure} />}
         <ToneMapping mode={TONE_MAPPING_MODE[toneMapping]} />
         {/* SMAA runs on clean edges before film grain to prevent false edge noise detection */}
         {fx.smaa && <SMAA preset={SMAAPreset.HIGH} />}
@@ -463,6 +499,7 @@ export function CharacterScene({ manifest, onAssetsReady, onIssue }: CharacterSc
       gl={(defaults) => createCustomRenderer(defaults.canvas as HTMLCanvasElement)}
       camera={{ fov: 27, near: 0.1, far: 8, position: [0, CAM.y, CAM.z] }}
       onCreated={({ gl }) => {
+        gl.outputColorSpace = THREE.SRGBColorSpace;
         gl.setClearColor('#07070a', 1);
         /* The composer issues several internal renders per frame; with the
            default auto-reset the counters would only describe the last one.

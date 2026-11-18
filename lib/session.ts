@@ -111,6 +111,7 @@ export interface PersistedSession extends AnatomySnapshot {
   customBackgroundUrl?: string | null;
   lighting?: LightingSettings;
   envIntensity?: number;
+  exposure?: number;
   cameraRotateSpeed?: number;
   skinGloss: number;
   skinSss: number;
@@ -281,6 +282,7 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     customBackgroundUrl: typeof o.customBackgroundUrl === 'string' ? o.customBackgroundUrl : (defaults.customBackgroundUrl ?? null),
     lighting: coerceLighting(o.lighting, defaults.lighting),
     envIntensity: bounded(o.envIntensity, defaults.envIntensity ?? 1, 0, 2),
+    exposure: bounded(o.exposure, defaults.exposure ?? 1, 0.1, 4),
     cameraRotateSpeed: bounded(o.cameraRotateSpeed, defaults.cameraRotateSpeed ?? CAMERA_ROTATE_SPEED_DEFAULT, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPEED_MAX),
     skinGloss: clamp(finite(o.skinGloss, defaults.skinGloss), 0, 1),
     skinSss: clamp(finite(o.skinSss, defaults.skinSss), 0, 1),
@@ -356,6 +358,7 @@ export function pickSession(s: PersistedSession): PersistedSession {
     envRotation: s.envRotation,
     lighting: coerceLighting(s.lighting),
     envIntensity: s.envIntensity ?? 1,
+    exposure: s.exposure ?? 1,
     cameraRotateSpeed: s.cameraRotateSpeed ?? CAMERA_ROTATE_SPEED_DEFAULT,
     skinGloss: s.skinGloss,
     skinSss: s.skinSss,

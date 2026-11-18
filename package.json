@@ -33,6 +33,7 @@
     "check:nif": "node scripts/check_nif_import.cjs",
     "check:equip": "node scripts/check_equipment_thumbnails.cjs",
     "check:hair": "node scripts/check_hair_thumbnails.cjs",
+    "check:hdr": "node scripts/check_hdr.cjs",
     "check:deform": "node scripts/check_anatomy_deformation.cjs",
     "check:anatomy": "node scripts/check_anatomy_params.cjs",
     "check:brows": "node scripts/verify_brows_panel.cjs"

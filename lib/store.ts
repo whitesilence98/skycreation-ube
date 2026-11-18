@@ -85,7 +85,7 @@ export type EnbPreset = 'all' | 'enb' | 'pure';
 
 /** Left workspace dock. The panels stay mounted; only the active one is
  *  visible, so switching never drops filters, scroll position or local state. */
-export type Workspace = 'edit' | 'assets' | 'camera' | 'graphics' | 'poses' | 'physics' | 'sculpt' | 'settings' | 'wardrobe';
+export type Workspace = 'edit' | 'assets' | 'camera' | 'graphics' | 'poses' | 'physics' | 'sculpt' | 'hdr' | 'settings' | 'wardrobe';
 
 export type PoseCategory = 'IDLE' | 'ACTION' | 'EXPRESSIONS' | 'FAVORITES';
 
@@ -287,6 +287,8 @@ export interface CharacterState extends AnatomySnapshot {
   /** Environment rotation around Y axis in degrees [0, 360) */
   envRotation: number;
   envIntensity: number;
+  exposure: number;
+  setExposure: (value: number) => void;
   /** Active 3D stage and background mode */
   backgroundMode: BackgroundMode;
   /** Custom GLB URL when backgroundMode is 'custom-3d' */
@@ -646,6 +648,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   envMode: 'studio',
   envRotation: 0,
   envIntensity: 1,
+  exposure: 1,
+  setExposure: value => set(s => ({ exposure: bounded(value, s.exposure, 0.1, 4) })),
   backgroundMode: 'void',
   customBackgroundUrl: null,
   lighting: { ...LIGHTING_DEFAULTS },

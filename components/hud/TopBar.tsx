@@ -354,6 +354,13 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
               <span>GRAPHICS</span>
             </button>
 
+            <button type="button" onClick={() => setWorkspace(workspace === 'hdr' ? 'edit' : 'hdr')}
+              title="HDR environment lighting" aria-pressed={workspace === 'hdr'}
+              className={cn('flex h-[26px] items-center rounded-full border px-2.5 text-[11px] tracking-wider focus-visible:outline focus-visible:outline-[#eac87f]',
+                workspace === 'hdr' ? 'border-[#eac87f] bg-[#d4b483]/25 text-[#f2dfbe]' : 'border-[#d4b483]/25 bg-black/40 text-[#d8c9b2] hover:bg-[#d4b483]/10')}>
+              HDR
+            </button>
+
             {/* Poses & Animations Drawer */}
             <button
               type="button"
