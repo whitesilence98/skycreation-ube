@@ -6,6 +6,7 @@ import { LeftPanel } from '@/components/hud/LeftPanel';
 import { Footer } from '@/components/hud/Footer';
 import { CategoryRail } from '@/components/hud/shell/CategoryRail';
 import { SubList } from '@/components/hud/shell/SubList';
+import { RegionStrip, ControlsDisclosure } from '@/components/hud/shell/RegionStrip';
 import { ControlColumn } from '@/components/hud/shell/ControlColumn';
 import { ToolStrip } from '@/components/hud/shell/ToolStrip';
 import { HdrPanel } from '@/components/hud/HdrPanel';
@@ -100,8 +101,10 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
         onClick={() => setEditorOpen(v => !v)}>{editorOpen ? 'Hide panel' : 'Show panel'}</button>
       <aside id="creator-editor" className={`creator-editor ${category === 'face' ? 'creator-editor-face' : ''}`}
         aria-label={`${CATEGORY_LABELS[category]} editor`} hidden={!editorOpen || toolOpen} inert={compare}>
-        {category === 'face' ? <><SubList selected={section} onSelect={setSection} /><ControlColumn section={section} /></>
-          : <LeftPanel manifest={manifest} category={category} />}
+        {category === 'face' ? <>
+          <RegionStrip selected={section} onSelect={setSection} />
+          <ControlsDisclosure><ControlColumn section={section} /></ControlsDisclosure>
+        </> : <LeftPanel manifest={manifest} category={category} />}
       </aside>
       <ToolStrip />
       {toolOpen && <aside ref={tools} className="creator-tool-drawer" aria-label="Studio properties" tabIndex={-1}>
