@@ -3,26 +3,38 @@
 import { useCharacter, BODY_WEIGHT_ENABLED } from '@/lib/store';
 import { ANATOMY_PARAMS, type AnatomyParamId } from '@/lib/anatomy/params';
 import { hasBodyScale } from '@/lib/anatomy/bodyScale';
-import { StudioCard } from '@/components/hud/common/StudioCard';
 import { HudSlider } from '@/components/hud/HudSlider';
 import { IconSparkle } from '@/components/hud/Icons';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
-/** The body-build sliders this panel owns: the skeleton-scale values only.
- *  `body.muscleDefinition` is a material stub, not a shape. */
-const BODY_SHAPE_IDS = ANATOMY_PARAMS
-  .filter((p) => p.group === 'body' && hasBodyScale(p.id))
-  .map((p) => p.id);
+/** The body-build sliders grouped into 2 ergonomic sections (RaceMenu parity). */
+const PROPORTION_SLIDERS: { id: AnatomyParamId; customLabel?: string }[] = [
+  { id: 'body.heightCm', customLabel: 'HEIGHT' },
+  { id: 'body.headScale', customLabel: 'HEAD SCALE' },
+  { id: 'body.armLength', customLabel: 'ARM LENGTH' },
+  { id: 'body.legLength', customLabel: 'LEG LENGTH' },
+  { id: 'body.shoulderWidth', customLabel: 'SHOULDER WIDTH' },
+];
 
-function BodyShapeSlider({ id }: { id: AnatomyParamId }) {
+const SILHOUETTE_SLIDERS: { id: AnatomyParamId; customLabel?: string }[] = [
+  { id: 'body.chestSize', customLabel: 'CHEST & BUST' },
+  { id: 'body.waistSize', customLabel: 'WAIST TAPER' },
+  { id: 'body.hipWidth', customLabel: 'HIP WIDTH' },
+  { id: 'body.buttSize', customLabel: 'BUTT VOLUME' },
+  { id: 'body.thighWidth', customLabel: 'THIGH FULLNESS' },
+  { id: 'body.belly', customLabel: 'BELLY SOFTNESS' },
+  { id: 'body.fat', customLabel: 'BODY FAT' },
+];
+
+function BodyShapeSlider({ id, customLabel }: { id: AnatomyParamId; customLabel?: string }) {
   const value = useCharacter((s) => s.anatomy[id]);
   const p = ANATOMY_PARAMS.find((entry) => entry.id === id)!;
   const s = useCharacter.getState;
   const isHeight = id === 'body.heightCm';
   return (
     <HudSlider
-      label={p.label}
+      label={customLabel ?? p.label}
       min={p.min}
       max={p.max}
       step={p.step}
@@ -61,31 +73,48 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
   );
 
   return (
-    <StudioCard
-      title="BODY ANATOMY & PHYSIQUE"
-      badge={!BODY_WEIGHT_ENABLED ? '0% (LOCKED)' : `${Math.round(weight * 100)}% WEIGHT`}
-      footerLeading={<span>+ COR · UBE · 3D SCULPT</span>}
-      footerTrailing={<span>DUAL-WEIGHT BLEND</span>}
-    >
+    <div className="flex flex-col gap-3">
+      {/* ── Top Header: Section title & status (blends natively into panel) ── */}
+      <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
+          BODY PHYSIQUE
+        </span>
+        <span className="font-mono text-[10px] text-[#a49a88]">
+          {!BODY_WEIGHT_ENABLED ? '0% (LOCKED)' : `${Math.round(weight * 100)}% WEIGHT`}
+        </span>
+      </div>
 
-      {/* ── 0. Body Shape (RaceMenu-style bone scale) ──────────────── */}
-      <div className="mb-[6px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[9px] backdrop-blur-md">
-        <div className="mb-2 flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
-          <span className="font-mono text-[9.5px] font-semibold text-[#efece6] uppercase">
-            BODY SHAPE
+      {/* ── 0A. Proportions & Stature ────────────────────────────── */}
+      <div className="flex flex-col gap-1 border-b border-[#d4b483]/10 pb-2.5">
+        <div className="mb-1 flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6] leading-tight">
+            PROPORTIONS &amp; STATURE
           </span>
-          <span className="font-mono text-[8.5px] text-[#8f8778]">SKELETON SCALE</span>
+          <span className="font-mono text-[10px] text-[#a49a88] leading-tight">SKELETON SCALE</span>
         </div>
-        {BODY_SHAPE_IDS.map((id) => (
-          <BodyShapeSlider key={id} id={id} />
+        {PROPORTION_SLIDERS.map((s) => (
+          <BodyShapeSlider key={s.id} id={s.id} customLabel={s.customLabel} />
         ))}
-        <p className="mt-1 text-[8.5px] leading-snug text-[#8f8778]">
-          Bone-transform scaling (RaceMenu parity). 50 = unchanged; height reads in cm.
+      </div>
+
+      {/* ── 0B. Curvature & Silhouette ───────────────────────────── */}
+      <div className="flex flex-col gap-1 border-b border-[#d4b483]/10 pb-2.5">
+        <div className="mb-1 flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6] leading-tight">
+            CURVATURE &amp; SILHOUETTE
+          </span>
+          <span className="font-mono text-[10px] text-[#a49a88] leading-tight">VOLUME &amp; PROFILE</span>
+        </div>
+        {SILHOUETTE_SLIDERS.map((s) => (
+          <BodyShapeSlider key={s.id} id={s.id} customLabel={s.customLabel} />
+        ))}
+        <p className="mt-1 text-[10px] leading-relaxed text-[#a49a88]">
+          Bone-transform scaling (RaceMenu parity). 50 = baseline unchanged.
         </p>
       </div>
 
       {/* ── 1. Body Weight Slider (0–100% lerp) ────────────────────── */}
-      <div className="rounded-xs border border-[#d4b483]/22 bg-black/45 p-[9px] backdrop-blur-md">
+      <div className="flex flex-col gap-1.5 border-b border-[#d4b483]/10 pb-2.5">
         <HudSlider
           label="BODY WEIGHT"
           suffix={!BODY_WEIGHT_ENABLED ? '(LOCKED AT 0%)' : hasBodyPair ? undefined : '(SINGLE MESH)'}
@@ -102,13 +131,13 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
         />
 
         {/* Quick Weight Preset Buttons */}
-        <div className="mt-2 flex items-center justify-between gap-1.5 text-[9px] font-mono">
+        <div className="mt-1 flex items-center justify-between gap-1.5 text-[10px] font-mono leading-none">
           <button
             type="button"
             disabled={!BODY_WEIGHT_ENABLED}
             onClick={() => setWeight(0)}
             className={cn(
-              'flex-1 rounded-xs border py-1 tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed',
+              'flex-1 rounded-[2px] border py-1 tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed',
               weight === 0
                 ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
                 : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
@@ -121,7 +150,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
             disabled={!BODY_WEIGHT_ENABLED}
             onClick={() => setWeight(0.5)}
             className={cn(
-              'flex-1 rounded-xs border py-1 tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed',
+              'flex-1 rounded-[2px] border py-1 tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed',
               Math.abs(weight - 0.5) < 0.02
                 ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
                 : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
@@ -134,7 +163,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
             disabled={!BODY_WEIGHT_ENABLED}
             onClick={() => setWeight(1)}
             className={cn(
-              'flex-1 rounded-xs border py-1 tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed',
+              'flex-1 rounded-[2px] border py-1 tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed',
               weight === 1
                 ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
                 : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
@@ -150,7 +179,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
           onClick={() => setLinkFaceToWeight(!linkFaceToWeight)}
           title="FaceGen fullness and neck perimeter scale with body weight (Skyrim Creation Engine parity)"
           className={cn(
-            'mt-2.5 flex w-full items-center justify-between border px-2 py-1.5 text-[9.5px] font-mono tracking-wider transition-colors',
+            'mt-1.5 flex w-full items-center justify-between border px-2 py-1.5 text-[10px] font-mono tracking-wider leading-tight transition-colors',
             linkFaceToWeight
               ? 'border-[#eac87f] bg-[#d4b483]/16 text-[#f2dfbe] font-medium shadow-[0_0_8px_rgba(212,180,131,0.2)]'
               : 'border-[#8c8477]/30 bg-black/30 text-[#a8a294]/70 hover:border-[#d4b483]/50 hover:text-[#d5cdbd]',
@@ -165,57 +194,55 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
             />
             LINK FACE TO WEIGHT
           </span>
-          <span className="text-[9px] uppercase text-[#c9b184]">
+          <span className="text-[10px] font-medium uppercase text-[#c9b184] leading-tight">
             {linkFaceToWeight ? 'ACTIVE' : 'OFF'}
           </span>
         </button>
       </div>
 
       {/* ── 2. Garment Layer Toggle (Anatomy vs Clothing) ─────────── */}
-      <div className="my-[6px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[8px]">
-        <div className="flex items-center justify-between">
-          <div className="flex flex-col">
-            <span className="font-mono text-[9.5px] font-semibold text-[#efece6] uppercase">
-              GARMENT LAYER
-            </span>
-            <span className="text-[8.5px] text-[#8f8778]">
-              {garmentVisible ? 'Outfits visible on model' : 'Hiding clothes for anatomy inspection'}
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setGarmentVisible(!garmentVisible)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-xs border px-2.5 py-1 text-[9px] font-mono tracking-wider transition-all',
-              garmentVisible
-                ? 'border-[#eac87f] bg-[#d4b483]/20 text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
-                : 'border-[#d09e88]/50 bg-[#d09e88]/15 text-[#e0a898]',
-            )}
-          >
-            <span
-              className={cn(
-                'h-1.5 w-1.5 rounded-full',
-                garmentVisible ? 'bg-[#eac87f] shadow-[0_0_4px_#eac87f]' : 'bg-[#e0a898]',
-              )}
-            />
-            <span>{garmentVisible ? 'OUTFIT ON' : 'ANATOMY ONLY'}</span>
-          </button>
+      <div className="flex items-center justify-between border-b border-[#d4b483]/10 pb-2.5">
+        <div className="flex flex-col">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6] leading-tight">
+            GARMENT LAYER
+          </span>
+          <span className="text-[10px] text-[#a49a88] leading-tight">
+            {garmentVisible ? 'Outfits visible on model' : 'Hiding clothes for anatomy inspection'}
+          </span>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setGarmentVisible(!garmentVisible)}
+          className={cn(
+            'flex items-center gap-1.5 rounded-[2px] border px-2.5 py-1 text-[10px] font-mono tracking-wider leading-tight transition-all',
+            garmentVisible
+              ? 'border-[#eac87f] bg-[#d4b483]/20 text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
+              : 'border-[#d09e88]/50 bg-[#d09e88]/15 text-[#e0a898]',
+          )}
+        >
+          <span
+            className={cn(
+              'h-1.5 w-1.5 rounded-full',
+              garmentVisible ? 'bg-[#eac87f] shadow-[0_0_4px_#eac87f]' : 'bg-[#e0a898]',
+            )}
+          />
+          <span>{garmentVisible ? 'OUTFIT ON' : 'ANATOMY ONLY'}</span>
+        </button>
       </div>
 
       {/* ── 3. Skin Material Gloss & SSS ─────────────────────────── */}
-      <div className="my-[6px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[8px]">
-        <div className="mb-2 flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
-          <span className="font-mono text-[9.5px] font-semibold text-[#efece6] uppercase">
+      <div className="flex flex-col gap-2 border-b border-[#d4b483]/10 pb-2.5">
+        <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6] leading-tight">
             SKIN SHADER METRICS
           </span>
-          <span className="font-mono text-[8.5px] text-[#8f8778]">SSS / GLOSS</span>
+          <span className="font-mono text-[10px] text-[#a49a88] leading-tight">SSS / GLOSS</span>
         </div>
 
         <div className="flex flex-col gap-2">
           <div>
-            <div className="mb-0.5 flex justify-between text-[9px] font-mono">
+            <div className="mb-0.5 flex justify-between text-[10px] font-mono leading-tight">
               <span className="text-[#a9a192]">SKIN GLOSS</span>
               <span className="text-[#eac87f]">{Math.round(skinGloss * 100)}%</span>
             </div>
@@ -231,7 +258,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
           </div>
 
           <div>
-            <div className="mb-0.5 flex justify-between text-[9px] font-mono">
+            <div className="mb-0.5 flex justify-between text-[10px] font-mono leading-tight">
               <span className="text-[#a9a192]">SUBSURFACE SCATTERING</span>
               <span className="text-[#eac87f]">{Math.round(skinSss * 100)}%</span>
             </div>
@@ -249,24 +276,24 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
       </div>
 
       {/* ── 4. CBPC Physics Launcher Card ─────────────────────────── */}
-      <div className="my-[6px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[8px]">
+      <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
           <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[9.5px] font-semibold text-[#efece6] uppercase">
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6] leading-tight">
               CBPC SOFT-BODY PHYSICS
             </span>
           </div>
-          <span className={cn('font-mono text-[8.5px]', bodyPhysicsEnabled ? 'text-[#eac87f]' : 'text-[#8f8778]')}>
+          <span className={cn('font-mono text-[10px] leading-tight', bodyPhysicsEnabled ? 'text-[#eac87f]' : 'text-[#8f8778]')}>
             {bodyPhysicsEnabled ? 'ENABLED' : 'OFF'}
           </span>
         </div>
 
-        <div className="mt-2 flex items-center gap-1.5">
+        <div className="mt-1 flex items-center gap-1.5">
           <button
             type="button"
             onClick={triggerPhysicsImpulse}
             title="Trigger a momentary impulse to preview physics bounce"
-            className="flex-1 rounded-xs border border-[#d4b483]/30 bg-black/40 py-1.5 font-mono text-[9px] tracking-wider text-[#d8c9ad] transition-all hover:border-[#eac87f] hover:text-[#fff0d4]"
+            className="flex-1 rounded-[2px] border border-[#d4b483]/30 bg-black/40 py-1.5 font-mono text-[10px] tracking-wider leading-tight text-[#d8c9ad] transition-all hover:border-[#eac87f] hover:text-[#fff0d4]"
           >
             TEST BOUNCE
           </button>
@@ -275,7 +302,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
             type="button"
             onClick={() => setWorkspace(workspace === 'physics' ? 'edit' : 'physics')}
             className={cn(
-              'flex-1 rounded-xs border py-1.5 font-mono text-[9px] tracking-wider transition-all',
+              'flex-1 rounded-[2px] border py-1.5 font-mono text-[10px] tracking-wider leading-tight transition-all',
               workspace === 'physics'
                 ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_8px_rgba(234,200,127,0.35)]'
                 : 'border-[#d4b483]/35 bg-[#d4b483]/12 text-[#e8c98e] hover:border-[#eac87f] hover:bg-[#d4b483]/22 hover:text-[#fff0d4]',
@@ -285,6 +312,6 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
           </button>
         </div>
       </div>
-    </StudioCard>
+    </div>
   );
 }

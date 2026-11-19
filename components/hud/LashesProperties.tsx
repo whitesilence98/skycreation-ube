@@ -1,7 +1,6 @@
 'use client';
 
 import { useCharacter } from '@/lib/store';
-import { StudioCard } from '@/components/hud/common/StudioCard';
 import { BracketSlider } from '@/components/hud/common/BracketSlider';
 import { cn } from '@/lib/cn';
 
@@ -22,12 +21,16 @@ export function LashesProperties() {
   const setLashesOpacity = useCharacter((s) => s.setLashesOpacity);
 
   return (
-    <StudioCard
-      title="LASH COLOR & PROPERTIES"
-      showSparkle
-      badge={`${Math.round(lashesOpacity * 100)}%`}
-    >
-      <div className="flex flex-col gap-3 pt-1">
+    <div className="flex flex-col gap-3 pt-1">
+      {/* ── Subheader ── */}
+      <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
+          LASH COLOR &amp; PROPERTIES
+        </span>
+        <span className="font-mono text-[10px] text-[#a49a88]">
+          {Math.round(lashesOpacity * 100)}%
+        </span>
+      </div>
         <div className="flex items-center justify-between text-[10px] font-mono tracking-wider text-[#b8ab97]">
           <span>TINT COLOR</span>
           <div className="flex items-center gap-1.5">
@@ -72,6 +75,5 @@ export function LashesProperties() {
           onChange={setLashesOpacity}
         />
       </div>
-    </StudioCard>
-  );
-}
+    );
+  }

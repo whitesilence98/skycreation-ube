@@ -311,31 +311,19 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
   const grade = useCharacter((s) => s.grade);
   const lighting = useCharacter((s) => s.lighting);
   const dirs = rigDirections(lighting);
-  const hair = useCharacter((s) => s.primaryTab === 'HAIR');
   /* Pack mode's outfit runs to y ≈ −1.4, far outside the head framing.
-     Both BODY (Physique) and EQUIPMENT (Gear Slots) tabs pull back to full-body;
-     every other tab (and legacy MO2) is unchanged. */
+     Both BODY (Physique) and EQUIPMENT (Gear Slots) tabs, as well as PRESET,
+     pull back to full-body framing. */
   const primaryTab = useCharacter((s) => s.primaryTab);
-  const bodyFraming = manifest?.sourceLayout === 'pack' && (primaryTab === 'BODY' || primaryTab === 'EQUIPMENT');
+  const bodyFraming = (manifest?.sourceLayout === 'pack' && (primaryTab === 'BODY' || primaryTab === 'EQUIPMENT')) || primaryTab === 'PRESET';
   const backgroundMode = useCharacter((s) => s.backgroundMode);
   const customBackgroundUrl = useCharacter((s) => s.customBackgroundUrl);
+
+  const isBody = bodyFraming;
 
   return (
     <>
       <BackgroundStage mode={backgroundMode} customUrl={customBackgroundUrl} />
-      {backgroundMode === 'void' && (
-        /* Fog colour matches the pool's outer value: a near-black fog over the
-           grey pool pulled the character's edges toward a colour the backdrop
-           no longer contains. */
-        <fog
-          attach="fog"
-          args={
-            bodyFraming
-              ? ['#121216', 4.5, 7]
-              : ['#121216', hair ? 2.1 : 1.35, hair ? 3.65 : 2.9]
-          }
-        />
-      )}
       <CameraRig bodyFraming={bodyFraming} />
       <PipelineRig dof={dof} />
       <StatsProbe />
@@ -353,29 +341,25 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
           specular. */}
       <ambientLight intensity={0.75 * (1 + grade.ambient / 10)} color="#fff2e6" />
       {/* The key is the one shadow caster. A directional light's shadow camera
-          is an orthographic box around its target, and the character is a
-          ~0.3 m head inside a ~1.6 m body, so the box is tight: anything
-          larger loses the nose/lip-scale contact we are buying the shadow for.
-          A 1024 map over ±0.55 m is ~1 mm per texel, enough for the socket and
-          lip creases; `normalBias` is what stops the cheek from acne-ing on its
-          own normal map. */}
+          is an orthographic box around its target, calibrated for both tight
+          head framing and full-body silhouette framing. */}
       <directionalLight
         position={dirs.key}
-        intensity={2.6 * lighting.intensity}
+        intensity={2.8 * lighting.intensity}
         color={lighting.keyColor}
         castShadow
         shadow-mapSize={[1024, 1024]}
-        shadow-camera-left={-0.55}
-        shadow-camera-right={0.55}
-        shadow-camera-top={0.75}
-        shadow-camera-bottom={-0.75}
+        shadow-camera-left={isBody ? -1.1 : -0.55}
+        shadow-camera-right={isBody ? 1.1 : 0.55}
+        shadow-camera-top={isBody ? 0.95 : 0.75}
+        shadow-camera-bottom={isBody ? -1.65 : -0.75}
         shadow-camera-near={0.1}
-        shadow-camera-far={3}
-        shadow-bias={-0.0004}
+        shadow-camera-far={isBody ? 6.0 : 3.0}
+        shadow-bias={-0.0003}
         shadow-normalBias={0.012}
       />
       <directionalLight position={dirs.fill} intensity={1.35 * lighting.fill * lighting.intensity} color="#dce6f2" />
-      <directionalLight position={dirs.rim} intensity={1.4 * lighting.rim * lighting.intensity} color="#9ee0d8" />
+      <directionalLight position={dirs.rim} intensity={1.4 * lighting.rim * lighting.intensity} color="#f0dfbe" />
       <directionalLight position={dirs.bounce} intensity={0.85 * lighting.intensity} color="#faeee4" />
 
       {/* A white point source in front of the face, at eye height, 0.24 m off

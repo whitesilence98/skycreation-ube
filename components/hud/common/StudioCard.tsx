@@ -14,6 +14,7 @@ export interface StudioCardProps {
   footerTrailing?: React.ReactNode;
   showSparkle?: boolean;
   className?: string;
+  variant?: 'floating' | 'embedded';
   children: React.ReactNode;
 }
 
@@ -28,30 +29,41 @@ export function StudioCard({
   footerTrailing,
   showSparkle = false,
   className,
+  variant,
   children,
 }: StudioCardProps) {
   const [minimized, setMinimized] = useState(defaultMinimized);
+  const isEmbedded = (variant ?? (onClose ? 'floating' : 'embedded')) === 'embedded';
   const hasHeader = Boolean(title || badge || headerTrailing || onClose || allowMinimize);
   const hasFooter = Boolean(!minimized && (footerLeading || footerTrailing || showSparkle));
 
   return (
     <div
       className={cn(
-        'relative flex w-full max-w-[276px] flex-col select-none text-[#e6e1d8] transition-all duration-200',
+        'relative flex w-full flex-col select-none text-[#e6e1d8] transition-all duration-200',
         className,
       )}
     >
       <div
         className={cn(
-          'relative flex flex-col rounded-[2px] border border-[#463a2e] bg-[#161311]/92 shadow-[0_16px_40px_rgba(0,0,0,0.65)] backdrop-blur-md transition-all duration-200',
-          minimized ? 'p-2.5 pb-2 bg-[#161311]/96' : 'p-3 gap-2.5',
+          'relative flex flex-col transition-all duration-200',
+          isEmbedded
+            ? 'border-0 bg-transparent shadow-none backdrop-blur-none p-0 gap-3'
+            : cn(
+                'rounded-[2px] border border-[#463a2e] bg-[#161311]/92 shadow-[0_16px_40px_rgba(0,0,0,0.65)] backdrop-blur-md',
+                minimized ? 'p-2.5 pb-2 bg-[#161311]/96' : 'p-3 gap-2.5',
+              ),
         )}
       >
         {/* Ornate Nordic Antique Corner Brackets */}
-        <span className="pointer-events-none absolute -top-[1px] -left-[1px] h-[6px] w-[6px] border-t border-l border-[#d4b483]/60" />
-        <span className="pointer-events-none absolute -top-[1px] -right-[1px] h-[6px] w-[6px] border-t border-r border-[#d4b483]/60" />
-        <span className="pointer-events-none absolute -bottom-[1px] -left-[1px] h-[6px] w-[6px] border-b border-l border-[#d4b483]/60" />
-        <span className="pointer-events-none absolute -bottom-[1px] -right-[1px] h-[6px] w-[6px] border-b border-r border-[#d4b483]/60" />
+        {!isEmbedded && (
+          <>
+            <span className="pointer-events-none absolute -top-[1px] -left-[1px] h-[6px] w-[6px] border-t border-l border-[#d4b483]/60" />
+            <span className="pointer-events-none absolute -top-[1px] -right-[1px] h-[6px] w-[6px] border-t border-r border-[#d4b483]/60" />
+            <span className="pointer-events-none absolute -bottom-[1px] -left-[1px] h-[6px] w-[6px] border-b border-l border-[#d4b483]/60" />
+            <span className="pointer-events-none absolute -bottom-[1px] -right-[1px] h-[6px] w-[6px] border-b border-r border-[#d4b483]/60" />
+          </>
+        )}
 
         {/* Header */}
         {hasHeader && (
@@ -65,7 +77,7 @@ export function StudioCard({
             >
               <span className="h-1.5 w-1.5 rounded-full bg-[#eac87f] shadow-[0_0_5px_rgba(234,200,127,0.7)] shrink-0" />
               {title && (
-                <h2 className="text-[11px] font-medium tracking-[0.14em] text-[#d8c39c] uppercase font-mono truncate">
+                <h2 className="text-[11.5px] font-semibold tracking-wider text-[#e2cba0] uppercase font-sans truncate">
                   {title}
                 </h2>
               )}
@@ -73,7 +85,7 @@ export function StudioCard({
 
             <div className="flex items-center gap-1.5 shrink-0">
               {badge && (
-                <span className="text-[9.5px] font-mono tracking-wider text-[#8f8778]">
+                <span className="text-[10px] font-mono tracking-wider text-[#a49a88] leading-none">
                   {badge}
                 </span>
               )}

@@ -36,16 +36,8 @@ export function BodyProperties({ manifest = null, onClose }: BodyPropertiesProps
       ?.some((row) => row.weightVariants),
   );
 
-  return (
-    <StudioCard
-      title="BODY & PHYSICS"
-      badge="HDT-SMP"
-      onClose={onClose ?? (() => setWorkspace('edit'))}
-      footerLeading={<span>+ UBE ANATOMY</span>}
-      footerTrailing={<span>SMP ACTIVE</span>}
-      showSparkle
-    >
-      <div className="flex flex-col gap-3">
+  const content = (
+    <div className="flex flex-col gap-3">
 
       {/* ── Body Weight Slider ──────────────────────────────────── */}
       <section className="mb-[16px]">
@@ -142,7 +134,7 @@ export function BodyProperties({ manifest = null, onClose }: BodyPropertiesProps
             disabled={!bodyPhysicsEnabled}
             title="Trigger a soft-body impulse to test breast and gluteal spring dynamics"
             className={cn(
-              'border px-[6px] py-[2px] text-[9.5px] tracking-[0.08em] transition-colors',
+              'border px-[6px] py-[2px] text-[10px] tracking-[0.08em] leading-tight transition-colors',
               bodyPhysicsEnabled
                 ? 'border-[#d4b483]/60 bg-[#d4b483]/12 text-[#e8c691] hover:border-[#d4b483] hover:bg-[#d4b483]/22 active:scale-95'
                 : 'border-[#8c8477]/20 bg-transparent text-[#8c8477]/40 cursor-not-allowed',
@@ -240,7 +232,7 @@ export function BodyProperties({ manifest = null, onClose }: BodyPropertiesProps
             onClick={() => {
               setWorkspace('poses');
             }}
-            className="text-[9.5px] tracking-[0.08em] text-[#c9b184]/85 underline-offset-2 hover:underline hover:text-[#f0e6d4]"
+            className="text-[10px] tracking-[0.08em] text-[#c9b184]/85 underline-offset-2 hover:underline hover:text-[#f0e6d4] leading-tight"
           >
             MORE POSES →
           </button>
@@ -268,7 +260,23 @@ export function BodyProperties({ manifest = null, onClose }: BodyPropertiesProps
           })}
         </div>
       </section>
-      </div>
+    </div>
+  );
+
+  if (!onClose) {
+    return content;
+  }
+
+  return (
+    <StudioCard
+      title="BODY & PHYSICS"
+      badge="HDT-SMP"
+      onClose={onClose}
+      footerLeading={<span>+ UBE ANATOMY</span>}
+      footerTrailing={<span>SMP ACTIVE</span>}
+      showSparkle
+    >
+      {content}
     </StudioCard>
   );
 }

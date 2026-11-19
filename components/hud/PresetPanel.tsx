@@ -52,87 +52,84 @@ export function PresetPanel({ manifest: _manifest }: PresetPanelProps) {
   };
 
   return (
-    <div className="relative select-none text-[#e6e1d8]">
-      <div className="flex flex-col gap-3 rounded-xs border border-[#d4b483]/22 bg-black/45 p-3.5 backdrop-blur-md">
-        {/* Top Header: PRESETS */}
-        <h2 className="text-[11px] font-medium tracking-[0.05em] text-[#efece6] uppercase">
+    <div className="flex flex-col gap-3 select-none text-[#e6e1d8]">
+      {/* Top Header: PRESETS */}
+      <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
           PRESETS
-        </h2>
+        </span>
+        <span className="font-mono text-[10px] text-[#a49a88]">
+          4 BUILT-IN
+        </span>
+      </div>
 
-        {/* ── CHARACTER PRESETS (4 Portrait Cards) ─────────────────────────── */}
-        <div className="flex flex-col gap-2 pt-0.5">
-          <span className="text-center text-[10px] font-mono tracking-[0.14em] uppercase text-[#c4b595]">
-            CHARACTER PRESETS
-          </span>
+      {/* ── CHARACTER PRESETS (4 Portrait Cards) ─────────────────────────── */}
+      <div className="flex flex-col gap-2 pt-0.5">
+        <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#c4b595]">
+          CHARACTER PRESETS
+        </span>
 
-          {/* 2×2 Grid of 4 Character Cards */}
-          <div className="grid grid-cols-2 gap-2.5">
-            {PRESET_CARDS.map((card) => {
-              const isSelected = currentPreset === card.id;
-              return (
-                <button
-                  key={card.id}
-                  type="button"
-                  onClick={() => handleSelectPreset(card)}
-                  className="group flex flex-col items-center gap-1.5 text-center"
+        {/* 2×2 Grid of 4 Character Cards */}
+        <div className="grid grid-cols-2 gap-2.5">
+          {PRESET_CARDS.map((card) => {
+            const isSelected = currentPreset === card.id;
+            return (
+              <button
+                key={card.id}
+                type="button"
+                onClick={() => handleSelectPreset(card)}
+                className="group flex flex-col items-center gap-1.5 text-center"
+              >
+                <div
+                  className={cn(
+                    'relative aspect-square w-full overflow-hidden rounded-xs border transition-all duration-150',
+                    isSelected
+                      ? 'border-2 border-[#eac87f] shadow-[0_0_12px_rgba(234,200,127,0.45)] ring-1 ring-[#eac87f]/60'
+                      : 'border-[#d4b483]/25 bg-black/50 hover:border-[#d4b483]/60 hover:scale-[1.03]',
+                  )}
                 >
-                  <div
-                    className={cn(
-                      'relative aspect-square w-full overflow-hidden rounded-xs border transition-all duration-150',
-                      isSelected
-                        ? 'border-2 border-[#eac87f] shadow-[0_0_12px_rgba(234,200,127,0.45)] ring-1 ring-[#eac87f]/60'
-                        : 'border-[#d4b483]/25 bg-black/50 hover:border-[#d4b483]/60 hover:scale-[1.03]',
-                    )}
-                  >
-                    {missingThumbs[card.id] ? <span className="flex h-full items-center justify-center p-3 text-[12px] text-[#b8b0a0]">Preview unavailable</span> : <img
-                      src={card.thumb}
-                      alt={card.label}
-                      onError={() => setMissingThumbs(previous => ({ ...previous, [card.id]: true }))}
-                      className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-                    />}
-                    <span className="pointer-events-none absolute inset-0 border border-black/25" />
-                  </div>
-                  <span
-                    className={cn(
-                      'text-[10px] font-mono tracking-wider transition-colors',
-                      isSelected
-                        ? 'font-bold text-[#f2dfbe] drop-shadow-[0_0_6px_rgba(234,200,127,0.5)]'
-                        : 'text-[#8f8778] group-hover:text-[#c4b9a3]',
-                    )}
-                  >
-                    {card.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <PresetLibrary />
-
-        {/* Status Message Toast */}
-        {status && (
-          <div
-            role="status"
-            className={cn(
-              'mt-1 text-center font-mono text-[9.5px] tracking-wide uppercase',
-              status.kind === 'error'
-                ? 'text-[#e0967c]'
-                : status.kind === 'warn'
-                  ? 'text-[#e0c48d]'
-                  : 'text-[#a9c9b6]',
-            )}
-          >
-            {status.text}
-          </div>
-        )}
-
-        {/* Format Compatibility Tagline */}
-        <div className="flex items-center justify-center gap-1.5 pt-1 text-[8.5px] font-mono tracking-[0.12em] text-[#8b8375]/70 border-t border-[#d4b483]/14">
-          <span className="text-[#d4b483]/70">+</span>
-          <span>SKYRIM SE · RACEMENU · XPMSE</span>
+                  {missingThumbs[card.id] ? <span className="flex h-full items-center justify-center p-3 text-[12px] text-[#b8b0a0]">Preview unavailable</span> : <img
+                    src={card.thumb}
+                    alt={card.label}
+                    onError={() => setMissingThumbs(previous => ({ ...previous, [card.id]: true }))}
+                    className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                  />}
+                  <span className="pointer-events-none absolute inset-0 border border-black/25" />
+                </div>
+                <span
+                  className={cn(
+                    'text-[10px] font-mono tracking-wider transition-colors',
+                    isSelected
+                      ? 'font-bold text-[#f2dfbe] drop-shadow-[0_0_6px_rgba(234,200,127,0.5)]'
+                      : 'text-[#8f8778] group-hover:text-[#c4b9a3]',
+                  )}
+                >
+                  {card.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
+
+      <PresetLibrary />
+
+      {/* Status Message Toast */}
+      {status && (
+        <div
+          role="status"
+          className={cn(
+            'mt-1 text-center font-mono text-[9.5px] tracking-wide uppercase',
+            status.kind === 'error'
+              ? 'text-[#e0967c]'
+              : status.kind === 'warn'
+                ? 'text-[#e0c48d]'
+                : 'text-[#a9c9b6]',
+          )}
+        >
+          {status.text}
+        </div>
+      )}
     </div>
   );
 }

@@ -17,11 +17,12 @@ import { SettingsPanel } from '@/components/hud/SettingsPanel';
 import { BodyProperties } from '@/components/hud/BodyProperties';
 import { AssetPanel } from '@/components/hud/AssetPanel';
 import { WardrobeDrawer } from '@/components/hud/WardrobeDrawer';
+import { OutfitSideActions } from '@/components/hud/outfit/OutfitSideActions';
 import { GizmoTooltip } from '@/components/hud/GizmoTooltip';
 import { editorCategory, CATEGORY_LABELS, type EditorCategory, type FaceSectionId } from '@/lib/faceControls';
 import { useCharacter } from '@/lib/store';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
-import { CATEGORY_MAP } from '@/lib/manifestSelect';
+import { exitWardrobe, navigateCategory } from '@/lib/editorNav';
 
 export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
   const primary = useCharacter(s => s.primaryTab);
@@ -32,31 +33,25 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
   const category = editorCategory(primary);
   const [section, setSection] = useState<FaceSectionId>(() => useCharacter.getState().activeRegion);
   const [editorOpen, setEditorOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
   const tools = useRef<HTMLDivElement>(null);
   const toolTrigger = useRef<HTMLElement | null>(null);
   const previousTool = useRef(false);
   const state = useCharacter.getState;
   const toolOpen = !preview && !['edit', 'sculpt'].includes(workspace);
+  const editorHidden = category === 'outfit' ? (toolOpen && isMobile) : (!editorOpen || (toolOpen && isMobile));
+
+  useEffect(() => {
+    const mql = window.matchMedia(category === 'outfit' ? '(max-width: 900px)' : '(max-width: 760px)');
+    setIsMobile(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, [category]);
 
   const selectCategory = (id: EditorCategory) => {
-    state().endFaceCompare(); state().endFaceEdit();
-    if (category === 'face' && id !== 'face') state().applyFaceBaseline();
-    const tabs = { preset: 'PRESET', face: 'FACE SHAPE', hair: 'HAIR', body: 'BODY', outfit: 'EQUIPMENT', styling: 'FACE' };
-    state().setPrimaryTab(tabs[id]);
-    state().setWorkspace('edit');
-    if (id === 'face') state().applyFaceBaseline();
-    if (id === 'body') state().setBodyTab('physique');
-    if (id === 'outfit') state().setBodyTab('gear');
-    if (id === 'styling') {
-      const kind = state().subTab.toLowerCase();
-      state().setActiveCategory(Object.hasOwn(CATEGORY_MAP, kind) ? kind as keyof typeof CATEGORY_MAP : 'skin');
-    }
+    navigateCategory(id);
     setEditorOpen(true);
-    // Explicit category selection only; never reframe on reload or while editing a slider.
-    /* Every category frames the standing figure, matching the reference's
-       full-body preview. FACE keeps the face framing because that is the only
-       category whose controls act on the face at slider scale. */
-    state().setCameraFraming(id === 'face' ? 'face' : 'body');
   };
   const closeTool = () => state().setWorkspace('edit');
   useEffect(() => {
@@ -73,7 +68,21 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
   useEffect(() => {
     const release = () => { state().endFaceCompare(); state().endFaceEdit(); };
     const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === 'Escape') {
+        // Native dialog cancellation owns Escape; never close the drawer beneath it.
+        if (document.querySelector('dialog[open], [role="menu"]')) return;
+        const menus = document.querySelectorAll<HTMLDetailsElement>('details[open]:has(> summary)');
+        const menu = Array.from(menus).reverse().find(e => e.querySelector('[role="group"], [role="menu"]') || e.closest('.creator-wardrobe-sets, .creator-outfit-more'));
+        if (menu) {
+          menu.open = false; menu.querySelector<HTMLElement>('summary')?.focus();
+          event.preventDefault(); event.stopPropagation(); return;
+        }
+        if (category === 'outfit') {
+          if (state().previewMode) { release(); state().setPreviewMode(false); return; }
+          if (toolOpen) { release(); closeTool(); return; }
+          release(); exitWardrobe(); return;
+        }
         release(); state().setPreviewMode(false); closeTool();
       }
       const target = event.target as HTMLElement;
@@ -89,24 +98,25 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
       release(); window.removeEventListener('pointerup', release); window.removeEventListener('pointercancel', release);
       window.removeEventListener('blur', release); document.removeEventListener('keydown', onKey);
     };
-  }, [category]);
+  }, [category, toolOpen]);
   useEffect(() => { if (category === 'face') state().applyFaceBaseline(); }, [category]);
 
-  return <div className="creator-shell pointer-events-none absolute inset-0 z-10">
+  return <div className="creator-shell pointer-events-none absolute inset-0 z-10" data-outfit={category === 'outfit' ? 'true' : undefined}>
     <TopBar manifest={manifest} />
     {!preview && <>
-      <CategoryRail selected={category} onSelect={selectCategory} />
-      <button type="button" className="creator-editor-toggle" aria-controls="creator-editor"
-        aria-expanded={editorOpen && !toolOpen} hidden={toolOpen}
-        onClick={() => setEditorOpen(v => !v)}>{editorOpen ? 'Hide panel' : 'Show panel'}</button>
-      <aside id="creator-editor" className={`creator-editor ${category === 'face' ? 'creator-editor-face' : ''}`}
-        aria-label={`${CATEGORY_LABELS[category]} editor`} hidden={!editorOpen || toolOpen} inert={compare}>
+      {category !== 'outfit' && <CategoryRail selected={category} onSelect={selectCategory} />}
+      {category !== 'outfit' && <button type="button" className="creator-editor-toggle" aria-controls="creator-editor"
+        aria-expanded={editorOpen && (!isMobile || !toolOpen)} hidden={isMobile && toolOpen}
+        onClick={() => setEditorOpen(v => !v)}>{editorOpen ? 'Hide panel' : 'Show panel'}</button>}
+      <aside id="creator-editor" className={`creator-editor ${category === 'face' ? 'creator-editor-face' : category === 'outfit' ? 'creator-editor-outfit' : ''}`}
+        aria-label={`${CATEGORY_LABELS[category]} editor`} hidden={editorHidden} inert={compare}>
         {category === 'face' ? <>
           <RegionStrip selected={section} onSelect={setSection} />
           <ControlsDisclosure><ControlColumn section={section} /></ControlsDisclosure>
         </> : <LeftPanel manifest={manifest} category={category} />}
       </aside>
-      <ToolStrip />
+      {category === 'outfit' && <OutfitSideActions />}
+      {category !== 'outfit' && <ToolStrip />}
       {toolOpen && <aside ref={tools} className="creator-tool-drawer" aria-label="Studio properties" tabIndex={-1}>
         {workspace === 'camera' && <CameraPanel onClose={closeTool} />}
         {workspace === 'hdr' && <HdrPanel onClose={closeTool} />}

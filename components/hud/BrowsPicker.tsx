@@ -6,9 +6,7 @@ import { convertUrl, fetchCatalogue, matchesQuery } from '@/lib/mo2/client';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import type { CatalogueEntry } from '@/lib/mo2/types';
 import { cn } from '@/lib/cn';
-import { StudioCard } from '@/components/hud/common/StudioCard';
 import { SearchInput } from '@/components/hud/common/SearchInput';
-import { IconSparkle } from '@/components/hud/Icons';
 
 type FilterTab = 'ALL' | 'CLASSIC' | 'ILV';
 
@@ -136,13 +134,17 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
   const activeMeshLabel = activeMeshEntry?.label || (activeMeshEntry?.file?.replace(/\.(nif|tri)$/i, '')) || 'FemaleBrows';
 
   return (
-    <StudioCard
-      title="BROWS & ARCH"
-      badge={loading ? 'LOADING…' : `${allBrows.length} STYLES`}
-      footerLeading={<span>+ COR · UBE · 3D SCULPT</span>}
-      footerTrailing={<span>{filteredBrows.length} SHOWN</span>}
-    >
-      {/* ── Sub-brand / Series Filters ────────────────────────────── */}
+    <div className="flex flex-col gap-2.5">
+      {/* ── Top Header ── */}
+      <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
+          BROWS &amp; ARCH
+        </span>
+        <span className="font-mono text-[10px] text-[#a49a88]">
+          {loading ? 'LOADING…' : `${allBrows.length} STYLES`}
+        </span>
+      </div>
+
       <div className="flex flex-col gap-2 pt-0.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#baab94]">
@@ -151,7 +153,7 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
             <button
               type="button"
               onClick={() => setShowMeshOptions(!showMeshOptions)}
-              className="text-[9px] font-mono tracking-wider text-[#d4b483] hover:text-[#fff0d4] transition-colors"
+              className="text-[10px] font-mono tracking-wider text-[#d4b483] hover:text-[#fff0d4] transition-colors leading-tight"
             >
               {showMeshOptions ? '▲ HIDE 3D MESH' : '▲ 3D MESH SHAPES'}
             </button>
@@ -160,7 +162,7 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
           {/* 3D Brow Mesh Selector (Optional toggle) */}
           {showMeshOptions && browMeshes.length > 0 && (
             <div className="flex flex-col gap-1.5 rounded-[2px] border border-[#463a2e] bg-[#1a1512]/95 p-2 transition-all">
-              <span className="text-[9px] font-mono tracking-wider text-[#d4b483]/90 uppercase">
+              <span className="text-[10px] font-mono tracking-wider text-[#d4b483]/90 uppercase leading-tight">
                 3D BROW SKELETAL MESH
               </span>
               <div className="grid grid-cols-2 gap-1.5">
@@ -173,7 +175,7 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
                       type="button"
                       onClick={() => setAssets({ browsMesh: mesh.id })}
                       className={cn(
-                        'flex items-center justify-between rounded-[2px] border px-2 py-1 text-[9px] font-mono transition-all',
+                        'flex items-center justify-between rounded-[2px] border px-2 py-1 text-[10px] font-mono leading-tight transition-all',
                         isSelected
                           ? 'border-[#b89552] bg-[#4a3d2a]/95 text-[#f2dfbe] font-bold shadow-[0_0_8px_rgba(184,149,82,0.35)]'
                           : 'border-[#382d22] bg-[#16120f]/90 text-[#8f8576] hover:border-[#6a553c] hover:text-[#e8ded0]',
@@ -194,7 +196,7 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
               type="button"
               onClick={() => setFilter('ALL')}
               className={cn(
-                'flex-1 rounded-[3px] border py-[3px] text-center text-[9.5px] font-mono tracking-wider transition-all',
+                'flex-1 rounded-[3px] border py-[3px] text-center text-[10px] font-mono tracking-wider leading-tight transition-all',
                 filter === 'ALL'
                   ? 'border-[#7a6952] bg-[#645644] font-medium text-[#f2e8dc] shadow-[0_1px_4px_rgba(0,0,0,0.5)]'
                   : 'border-[#382d22] bg-[#201a16]/90 text-[#8f8576] hover:border-[#524332] hover:text-[#c4b9a3]',
@@ -206,7 +208,7 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
               type="button"
               onClick={() => setFilter('CLASSIC')}
               className={cn(
-                'flex-1 rounded-[3px] border py-[3px] text-center text-[9.5px] font-mono tracking-wider transition-all',
+                'flex-1 rounded-[3px] border py-[3px] text-center text-[10px] font-mono tracking-wider leading-tight transition-all',
                 filter === 'CLASSIC'
                   ? 'border-[#7a6952] bg-[#645644] font-medium text-[#f2e8dc] shadow-[0_1px_4px_rgba(0,0,0,0.5)]'
                   : 'border-[#382d22] bg-[#201a16]/90 text-[#8f8576] hover:border-[#524332] hover:text-[#c4b9a3]',
@@ -218,7 +220,7 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
               type="button"
               onClick={() => setFilter('ILV')}
               className={cn(
-                'flex-1 rounded-[3px] border py-[3px] text-center text-[9.5px] font-mono tracking-wider transition-all',
+                'flex-1 rounded-[3px] border py-[3px] text-center text-[10px] font-mono tracking-wider leading-tight transition-all',
                 filter === 'ILV'
                   ? 'border-[#7a6952] bg-[#645644] font-medium text-[#f2e8dc] shadow-[0_1px_4px_rgba(0,0,0,0.5)]'
                   : 'border-[#382d22] bg-[#201a16]/90 text-[#8f8576] hover:border-[#524332] hover:text-[#c4b9a3]',
@@ -293,10 +295,10 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
                   {/* Brow Title Pill at Bottom */}
                   <span
                     className={cn(
-                      'absolute bottom-[2px] inset-x-[3px] truncate rounded-[1px] px-1 py-[1px] text-center text-[8.5px] font-mono tracking-tight transition-colors',
+                      'absolute bottom-[2px] inset-x-[3px] truncate rounded-[1px] px-1 py-[2px] text-center text-[10px] font-mono tracking-tight leading-tight transition-colors',
                       isSelected
                         ? 'bg-black/85 font-medium text-[#f4e6cf]'
-                        : 'bg-black/80 text-[#8e8576] group-hover:text-[#d4cbb8]',
+                        : 'bg-black/80 text-[#a49a88] group-hover:text-[#d4cbb8]',
                     )}
                   >
                     {cleanLabel}
@@ -305,14 +307,7 @@ export function BrowsPicker({ manifest }: { manifest: Mo2Manifest | null }) {
               );
             })}
           </div>
-
-          {/* Active Preset Readout */}
-          <div className="text-center pt-1 border-t border-[#463a2e]/50">
-            <span className="text-[9.5px] font-mono tracking-tight text-[#d4b483]">
-              [{activeLabel} · {activeSeries} · {activeMeshLabel}]
-            </span>
-          </div>
         </div>
-    </StudioCard>
+    </div>
   );
 }

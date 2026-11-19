@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useCharacter } from '@/lib/store';
 import { presetFileName } from '@/lib/presetIO';
 import { downloadPresetJson } from '@/lib/presets/download';
-import { exportCharacterGlb } from '@/lib/exportGlb';
+import { useGlbExport } from '@/components/hud/useGlbExport';
 import { exportCharacterPackage } from '@/lib/exportPackage';
 import { importPresetFromFiles } from '@/lib/head/nifImport';
 import { cn } from '@/lib/cn';
@@ -37,7 +37,6 @@ export function PresetIO({ manifest }: PresetIOProps) {
   const [status, setStatus] = useState<Status>(null);
   const [busy, setBusy] = useState(false);
   const characterName = useCharacter((s) => s.name);
-  const [exportingGlb, setExportingGlb] = useState(false);
   const [exportingPackage, setExportingPackage] = useState(false);
 
   // Close dropdown on outside click or Escape key
@@ -69,19 +68,7 @@ export function PresetIO({ manifest }: PresetIOProps) {
     window.setTimeout(() => setStatus(null), 3500);
   };
 
-  const onExportGlb = async () => {
-    setExportingGlb(true);
-    flash({ kind: 'ok', text: 'EXPORTING MODEL & RIG (.GLB)...' });
-    try {
-      await exportCharacterGlb(characterName, { animated: true });
-      const safeName = (characterName || 'Character').trim().replace(/[^a-zA-Z0-9_\-]/g, '_') || 'Character';
-      flash({ kind: 'ok', text: `EXPORTED ${safeName}.glb` });
-    } catch (err) {
-      flash({ kind: 'error', text: err instanceof Error ? err.message : 'GLB export failed' });
-    } finally {
-      setExportingGlb(false);
-    }
-  };
+  const { exportGlb: onExportGlb, exportingGlb } = useGlbExport(flash);
 
   const onExportPackage = async () => {
     setExportingPackage(true);
@@ -204,12 +191,12 @@ export function PresetIO({ manifest }: PresetIOProps) {
             <div className="pointer-events-none absolute -bottom-[1px] -right-[1px] h-1.5 w-1.5 border-b border-r border-[#d4b483]/60" />
 
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-[#463a2e]/60 px-2 py-1.5 text-[9px] font-mono tracking-wider text-[#a89e8f]/80">
+            <div className="flex items-center justify-between border-b border-[#463a2e]/60 px-2 py-1.5 text-[10px] font-mono tracking-wider text-[#a89e8f]/90 leading-tight">
               <div className="flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#eac87f] shadow-[0_0_5px_#eac87f]" />
                 <span className="font-semibold text-[#e8c691]">EXPORT ASSET</span>
               </div>
-              <span className="text-[8px] text-[#8c8477]">3 FORMATS</span>
+              <span className="text-[10px] text-[#8c8477]">3 FORMATS</span>
             </div>
 
             {/* Menu options */}
@@ -232,11 +219,11 @@ export function PresetIO({ manifest }: PresetIOProps) {
                     <span className="text-[10px] font-medium tracking-[0.1em] text-[#e8dcce] group-hover:text-[#fff]">
                       CHARACTER PRESET
                     </span>
-                    <span className="rounded-xs border border-[#d4b483]/35 bg-[#d4b483]/15 px-1 py-0.5 font-mono text-[8px] tracking-wider text-[#eac87f]">
+                    <span className="rounded-xs border border-[#d4b483]/35 bg-[#d4b483]/15 px-1 py-0.5 font-mono text-[10px] tracking-wider text-[#eac87f]">
                       .JSON
                     </span>
                   </div>
-                  <span className="mt-0.5 text-[8.5px] leading-tight text-[#9a9182] group-hover:text-[#c4bcad]">
+                  <span className="mt-0.5 text-[10px] leading-tight text-[#9a9182] group-hover:text-[#c4bcad]">
                     RaceMenu &amp; LYRA morph sliders
                   </span>
                 </div>
@@ -267,11 +254,11 @@ export function PresetIO({ manifest }: PresetIOProps) {
                     <span className="text-[10px] font-medium tracking-[0.1em] text-[#e8dcce] group-hover:text-[#fff]">
                       {exportingGlb ? 'EXPORTING 3D MESH...' : '3D MODEL & RIG'}
                     </span>
-                    <span className="rounded-xs border border-[#d4b483]/35 bg-[#d4b483]/15 px-1 py-0.5 font-mono text-[8px] tracking-wider text-[#eac87f]">
+                    <span className="rounded-xs border border-[#d4b483]/35 bg-[#d4b483]/15 px-1 py-0.5 font-mono text-[10px] tracking-wider text-[#eac87f]">
                       .GLB
                     </span>
                   </div>
-                  <span className="mt-0.5 text-[8.5px] leading-tight text-[#9a9182] group-hover:text-[#c4bcad]">
+                  <span className="mt-0.5 text-[10px] leading-tight text-[#9a9182] group-hover:text-[#c4bcad]">
                     Skinned mesh + skeleton for Blender / 3D
                   </span>
                 </div>
@@ -302,11 +289,11 @@ export function PresetIO({ manifest }: PresetIOProps) {
                     <span className="text-[10px] font-medium tracking-[0.1em] text-[#e8dcce] group-hover:text-[#fff]">
                       {exportingPackage ? 'COMPILING PACKAGE...' : 'GAME ASSET PACKAGE'}
                     </span>
-                    <span className="rounded-xs border border-[#d4b483]/35 bg-[#d4b483]/15 px-1 py-0.5 font-mono text-[8px] tracking-wider text-[#eac87f]">
+                    <span className="rounded-xs border border-[#d4b483]/35 bg-[#d4b483]/15 px-1 py-0.5 font-mono text-[10px] tracking-wider text-[#eac87f]">
                       .ZIP
                     </span>
                   </div>
-                  <span className="mt-0.5 text-[8.5px] leading-tight text-[#9a9182] group-hover:text-[#c4bcad]">
+                  <span className="mt-0.5 text-[10px] leading-tight text-[#9a9182] group-hover:text-[#c4bcad]">
                     GLB + OBJ/MTL + extracted textures + preset
                   </span>
                 </div>
@@ -314,7 +301,7 @@ export function PresetIO({ manifest }: PresetIOProps) {
             </div>
 
             {/* Footer */}
-            <div className="border-t border-[#463a2e]/50 px-2 py-1 text-right font-mono text-[8px] text-[#8c8477]">
+            <div className="border-t border-[#463a2e]/50 px-2 py-1 text-right font-mono text-[10px] text-[#8c8477] leading-tight">
               CHARACTER: <span className="text-[#d4b483]">{characterName || 'LYRA'}</span>
             </div>
           </div>

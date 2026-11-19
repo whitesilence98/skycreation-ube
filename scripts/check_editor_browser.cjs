@@ -28,13 +28,13 @@ const path = require('node:path');
     }
     throw Error('Timed out: ' + expression);
   };
-  const click = async label => evaluate(`(() => { const e = [...document.querySelectorAll('button')].find(e => e.textContent.trim() === ${JSON.stringify(label)}); if (!e) throw Error('Missing button: ' + ${JSON.stringify(label)}); e.click(); })()`);
+  const click = async (label, category = false) => evaluate(`(() => { const root = ${category} ? document.querySelector('nav[aria-label="Character categories"]') : document; const e = [...root.querySelectorAll('button')].find(e => e.textContent.trim() === ${JSON.stringify(label)}); if (!e) throw Error('Missing button: ' + ${JSON.stringify(label)}); e.click(); })()`);
   try {
     await send('Runtime.enable'); await send('Page.enable');
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
     await send('Page.navigate', { url });
     await wait(`document.querySelector('nav[aria-label="Character categories"]')`);
-    await click('Features');
+    await click('Features', true);
     await wait(`document.querySelector('section[aria-label="Forehead adjustments"], section[aria-label="Nose adjustments"]')`);
     await click('Nose');
     await evaluate('document.fonts.ready');
@@ -59,7 +59,7 @@ const path = require('node:path');
       fs.writeFileSync(path.join(dir, name + '.png'), Buffer.from(shot.data, 'base64')); summaries.push({ name, ...metrics });
     }
     for (const label of ['Presets', 'Hair', 'Body', 'Outfit', 'Styling', 'Features']) {
-      await click(label);
+      await click(label, true);
       await evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
       assert.equal(await evaluate(`document.querySelector('nav[aria-label="Character categories"] button[aria-pressed="true"]').textContent.trim()`), label);
     }

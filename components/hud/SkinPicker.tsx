@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCharacter, BODY_WEIGHT_ENABLED } from '@/lib/store';
 import { cn } from '@/lib/cn';
-import { StudioCard } from '@/components/hud/common/StudioCard';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
 interface SkinPickerProps {
@@ -362,12 +361,16 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
 
   return (
     <>
-      <StudioCard
-        title="BODY & SKIN"
-        badge="UBE / RACEMENU"
-        footerLeading={<span>+ COR · UBE · 3D SCULPT</span>}
-        footerTrailing={<span>PBR ACTIVE</span>}
-      >
+      <div className="flex flex-col gap-2.5">
+        {/* ── Top Header: Section title & status (blends natively into panel) ── */}
+        <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
+            BODY &amp; SKIN
+          </span>
+          <span className="font-mono text-[10px] text-[#a49a88]">
+            UBE / RACEMENU
+          </span>
+        </div>
 
         {/* ── 1. BODY WEIGHT & STATURE ───────────────────────────────── */}
         <div className="flex flex-col gap-1.5 pt-0.5">
@@ -392,7 +395,7 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
             )}
             aria-label="Body weight slider"
           />
-          <div className="flex items-center justify-between text-[8.5px] font-mono text-[#8f8778]/70 px-0.5">
+          <div className="flex items-center justify-between text-[10px] font-mono text-[#a49a88] px-0.5 leading-tight">
             <span>Slim (_0)</span>
             <span>Muscular (_1)</span>
           </div>
@@ -403,7 +406,7 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
             onClick={() => setLinkFaceToWeight(!linkFaceToWeight)}
             title="Link Face to Weight: FaceGen fullness and neck perimeter scale with body weight (Skyrim Creation Engine parity)"
             className={cn(
-              'mt-0.5 flex w-full items-center justify-between border px-2 py-1 text-[9.5px] font-mono tracking-[0.08em] transition-colors',
+              'mt-0.5 flex w-full items-center justify-between border px-2 py-1 text-[10px] font-mono tracking-[0.08em] leading-tight transition-colors',
               linkFaceToWeight
                 ? 'border-[#d4b483]/70 bg-[#d4b483]/14 text-[#e8c691] font-medium shadow-[0_0_8px_rgba(212,180,131,0.15)]'
                 : 'border-[#8c8477]/30 bg-black/20 text-[#a8a294]/70 hover:border-[#d4b483]/45 hover:text-[#d5cdbd]',
@@ -418,7 +421,7 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
               />
               LINK FACE TO WEIGHT
             </span>
-            <span className="text-[9px] uppercase text-[#c9b184]/80">
+            <span className="text-[10px] font-medium uppercase text-[#c9b184] leading-tight">
               {linkFaceToWeight ? 'ACTIVE' : 'OFF'}
             </span>
           </button>
@@ -442,7 +445,7 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
             />
             <span className="pointer-events-none absolute inset-0 border border-black/30" />
           </button>
-          <span className="text-[9.5px] font-mono tracking-tight text-[#8f8778]">
+          <span className="text-[10px] font-mono tracking-tight text-[#a49a88] leading-tight">
             [{activeTexture.name}]
           </span>
         </div>
@@ -489,7 +492,7 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
             </div>
           </div>
 
-          <span className="text-[9.5px] font-mono tracking-tight text-[#8f8778]">
+          <span className="text-[10px] font-mono tracking-tight text-[#a49a88] leading-tight">
             [{currentColorName}]
           </span>
         </div>
@@ -542,7 +545,7 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
             <line x1="50" y1="18" x2="50" y2="58" strokeDasharray="3 3" />
           </svg>
         </div>
-      </StudioCard>
+      </div>
 
       {/* ── MODAL 1: SKIN TEXTURE SELECTOR (IMAGE 1) ───────────────── */}
       {modalOpen === 'texture' && (
@@ -586,8 +589,8 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
                     </div>
                     <span
                       className={cn(
-                        'text-[9px] font-mono tracking-tight transition-colors',
-                        isSelected ? 'font-semibold text-[#f2dfbe]' : 'text-[#8f8778]/70 group-hover:text-[#c4b9a3]',
+                        'text-[10px] font-mono tracking-tight leading-tight transition-colors',
+                        isSelected ? 'font-semibold text-[#f2dfbe]' : 'text-[#a49a88] group-hover:text-[#c4b9a3]',
                       )}
                     >
                       [{preset.name}]
@@ -610,7 +613,7 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
                 <span className="text-[10px] font-mono font-bold tracking-[0.1em] uppercase text-[#eac87f]">
                   {draftTexture.title}
                 </span>
-                <span className="mt-0.5 text-[9px] leading-tight text-[#b6ab98]/80">
+                <span className="mt-0.5 text-[10px] leading-tight text-[#c4bba8]">
                   {draftTexture.description}
                 </span>
               </div>
@@ -826,7 +829,7 @@ function ColorPickerModal({
         {/* ── RGB & HEX Numerical Readout + Preview Swatch ──────────── */}
         <div className="mt-3 flex items-center justify-between border-y border-[#d4b483]/18 bg-black/40 p-2">
           {/* R, G, B Inputs */}
-          <div className="flex flex-col gap-1 text-[9.5px] font-mono">
+          <div className="flex flex-col gap-1 text-[10px] font-mono leading-tight">
             <div className="flex items-center gap-1.5">
               <span className="w-3 text-[#d4b483]">R</span>
               <input
@@ -864,7 +867,7 @@ function ColorPickerModal({
 
           {/* HEX Input */}
           <div className="flex flex-col items-center gap-1">
-            <span className="text-[9px] font-mono text-[#8f8778]">HEX</span>
+            <span className="text-[10px] font-mono text-[#a49a88] leading-tight">HEX</span>
             <input
               type="text"
               value={draftColor}

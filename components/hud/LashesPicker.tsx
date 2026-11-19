@@ -6,7 +6,6 @@ import { convertUrl, fetchCatalogue, matchesQuery } from '@/lib/mo2/client';
 import type { CatalogueEntry } from '@/lib/mo2/types';
 import { isRenderableMeshRow } from '@/lib/manifestSelect';
 import { cn } from '@/lib/cn';
-import { StudioCard } from '@/components/hud/common/StudioCard';
 import { SearchInput } from '@/components/hud/common/SearchInput';
 import { SegmentedControl } from '@/components/hud/common/SegmentedControl';
 
@@ -145,13 +144,17 @@ export function LashesPicker({ onDirty }: { onDirty?: () => void }) {
   const shown = mode === 'mesh' ? filteredMeshes.length : filteredTextures.length;
 
   return (
-    <StudioCard
-      title="LASHES & LINER"
-      badge={loading ? 'LOADING…' : mode === 'mesh' ? `${renderableMeshes} SHAPES` : `${textures.length} ATLASES`}
-      footerLeading={<span>+ UBE · COR LASH ATLAS</span>}
-      footerTrailing={<span>{shown} SHOWN</span>}
-      showSparkle
-    >
+    <div className="flex flex-col gap-2.5">
+      {/* ── Top Header ── */}
+      <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
+          LASHES &amp; LINER
+        </span>
+        <span className="font-mono text-[10px] text-[#a49a88]">
+          {loading ? 'LOADING…' : mode === 'mesh' ? `${renderableMeshes} SHAPES` : `${textures.length} ATLASES`}
+        </span>
+      </div>
+
       <div className="flex flex-col gap-2.5">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#c4b595]">
@@ -324,13 +327,7 @@ export function LashesPicker({ onDirty }: { onDirty?: () => void }) {
             </div>
           )}
         </div>
-
-        <div className="border-t border-[#463a2e]/50 pt-1 text-center">
-          <span className="text-[9.5px] font-mono tracking-tight text-[#d4b483]">
-            [{activeMesh ? labelOf(activeMesh) : 'PACK DEFAULT'} · {activeTexture ? labelOf(activeTexture) : 'HEAD ATLAS'}]
-          </span>
-        </div>
       </div>
-    </StudioCard>
+    </div>
   );
 }

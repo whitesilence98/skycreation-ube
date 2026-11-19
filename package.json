@@ -29,6 +29,8 @@
     "check:selection": "node scripts/check_asset_selection.cjs && node scripts/check_pack_selection.cjs",
     "check:face": "node scripts/check_face_panels.cjs",
     "check:preset-library": "node scripts/check_preset_library.cjs",
+    "check:outfit-sets": "node scripts/check_outfit_sets.cjs",
+    "check:outfit:screens": "node scripts/check_outfit_browser.cjs",
     "check:neck": "node scripts/verify_neck_seam_3d.cjs",
     "check:skeleton": "node scripts/check_skeleton_hierarchy.cjs",
     "check:body-scale": "node scripts/check_body_scale.cjs",

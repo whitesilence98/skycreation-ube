@@ -377,7 +377,7 @@ export function ColorStudio2D({
       )}
 
       {/* ── RGB & HEX Numeric Inputs ──────────────────────────────── */}
-      <div className="flex items-center justify-between gap-2 border-y border-[#463a2e]/50 py-1.5 text-[9.5px] font-mono tracking-wider">
+      <div className="flex items-center justify-between gap-2 border-y border-[#463a2e]/50 py-1.5 text-[10px] font-mono tracking-wider leading-tight">
         <div className="flex items-center gap-1.5">
           <span className="text-[#8f8576]">RGB</span>
           <div className="flex gap-1 text-[#d4cbb8]">

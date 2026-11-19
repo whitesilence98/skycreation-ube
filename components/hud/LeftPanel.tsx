@@ -7,7 +7,6 @@ import { HairProperties } from '@/components/hud/HairProperties';
 import { BodyPanel } from '@/components/hud/BodyPanel';
 import { BodyProperties } from '@/components/hud/BodyProperties';
 import { EquipmentPanel } from '@/components/hud/EquipmentPanel';
-import { WardrobeDrawer } from '@/components/hud/WardrobeDrawer';
 import { SkinPicker } from '@/components/hud/SkinPicker';
 import { SkinProperties } from '@/components/hud/SkinProperties';
 import { EyePicker } from '@/components/hud/EyePicker';
@@ -41,10 +40,7 @@ export function LeftPanel({ manifest, category }: { manifest: Mo2Manifest | null
       <BodyPanel manifest={manifest} />
       <details className="creator-details"><summary>Physics &amp; pose properties</summary><BodyProperties manifest={manifest} /></details>
     </>}
-    {category === 'outfit' && <>
-      <EquipmentPanel manifest={manifest} />
-      <details className="creator-details"><summary>Browse all garments</summary><WardrobeDrawer manifest={manifest} onClose={() => state().setWorkspace('edit')} /></details>
-    </>}
+    {category === 'outfit' && <EquipmentPanel manifest={manifest} />}
     {category === 'styling' && <>
       <nav className="creator-style-tabs" aria-label="Appearance categories">
         {STYLE_TABS.map(([id, label, kind]) => <button key={id} type="button" aria-pressed={subTab === id}

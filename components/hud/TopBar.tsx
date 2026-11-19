@@ -17,15 +17,16 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
         <circle cx="12" cy="7.4" r="3.3" fill="currentColor" />
         <path d="M12 11.6c-3.6 0-6.2 2.2-6.6 6.2h13.2c-.4-4-3-6.2-6.6-6.2z" fill="currentColor" />
       </svg>
-      <span className="creator-header-name">{preview ? name : 'Preview'}</span>
+      <span className="creator-header-name font-display tracking-[0.16em] uppercase text-[#f2ecd9]">{name || 'Character Creator'}</span>
+      <span className="creator-header-caption">{preview ? 'Preview Mode' : 'Sculpting Mode'}</span>
       <a
         href="/rigger"
         target="_blank"
-        rel="noreferrer"
-        className="ml-4 px-2 py-0.5 rounded text-[11px] font-medium bg-zinc-800/80 hover:bg-zinc-700 text-sky-400 border border-zinc-700/60 transition-colors flex items-center gap-1.5 no-underline"
-        title="Open Auto-Rigger Studio"
+        rel="noopener noreferrer"
+        aria-label="Auto-Rigger Studio (opens in a new tab)"
+        className="ml-4 px-2.5 py-0.5 rounded-[2px] text-[10px] font-mono tracking-widest text-[#d4b483] bg-[#d4b483]/10 hover:bg-[#d4b483]/20 border border-[#d4b483]/30 transition-all flex items-center gap-1.5 uppercase"
       >
-        <span>🦴</span> Auto-Rigger
+        <span>⚡</span> Auto-Rigger
       </a>
     </div>
     <button type="button" className="creator-header-collapse" onClick={() => useCharacter.getState().setPreviewMode(!preview)}

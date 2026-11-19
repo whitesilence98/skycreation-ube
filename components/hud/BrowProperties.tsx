@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { useCharacter } from '@/lib/store';
-import { StudioCard } from '@/components/hud/common/StudioCard';
 import { BracketSlider } from '@/components/hud/common/BracketSlider';
 import { ColorStudio2D, type ColorSwatchItem } from '@/components/hud/common/ColorStudio2D';
 import { cn } from '@/lib/cn';
@@ -33,10 +32,12 @@ export function BrowProperties() {
   const showToast = useCharacter((s) => s.showToast);
 
   return (
-    <StudioCard
-      title="BROW COLOR & PROPERTIES"
-      showSparkle
-      headerTrailing={
+    <div className="flex flex-col gap-3 pt-1">
+      {/* ── Subheader with Sync Toggle ── */}
+      <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
+          BROW COLOR &amp; PROPERTIES
+        </span>
         <button
           type="button"
           onClick={() => {
@@ -50,7 +51,7 @@ export function BrowProperties() {
               : 'Click to synchronize eyebrow color with current hair color.'
           }
           className={cn(
-            'flex items-center gap-1.5 border px-2 py-0.5 text-[8.5px] font-mono tracking-wider transition-all',
+            'flex items-center gap-1.5 border px-2 py-0.5 text-[9px] font-mono tracking-wider leading-tight transition-all',
             linkBrowToHair
               ? 'border-[#eac87f]/70 bg-[#d4b483]/15 text-[#eac87f] shadow-[0_0_8px_rgba(234,200,127,0.15)]'
               : 'border-[#463a2e] bg-black/20 text-[#8c8477] hover:border-[#7a6952] hover:text-[#d8c9ad]',
@@ -64,11 +65,10 @@ export function BrowProperties() {
           />
           <span>{linkBrowToHair ? 'LINKED TO HAIR' : 'CUSTOM COLOR'}</span>
         </button>
-      }
-    >
+      </div>
       {/* Synchronization Status Banner */}
       {linkBrowToHair ? (
-        <div className="flex items-center justify-between border border-[#eac87f]/25 bg-[#d4b483]/10 px-2 py-1 text-[9px] font-mono text-[#eac87f] shadow-[0_0_8px_rgba(234,200,127,0.06)]">
+        <div className="flex items-center justify-between border border-[#eac87f]/25 bg-[#d4b483]/10 px-2 py-1 text-[10px] font-mono text-[#eac87f] shadow-[0_0_8px_rgba(234,200,127,0.06)]">
           <span className="flex items-center gap-1.5">
             <span className="text-[10px]">🔗</span>
             <span>
@@ -77,10 +77,10 @@ export function BrowProperties() {
               )
             </span>
           </span>
-          <span className="text-[7.5px] tracking-wider text-[#8c8477]">PICK TO CUSTOMIZE</span>
+          <span className="text-[10px] tracking-wider text-[#a49a88]">PICK TO CUSTOMIZE</span>
         </div>
       ) : (
-        <div className="flex items-center justify-between border border-[#463a2e]/60 bg-black/30 px-2 py-1 text-[9px] font-mono text-[#a89f91]">
+        <div className="flex items-center justify-between border border-[#463a2e]/60 bg-black/30 px-2 py-1 text-[10px] font-mono text-[#a89f91]">
           <span className="flex items-center gap-1.5">
             <span className="text-[10px]">✦</span>
             <span>CUSTOM BROW COLOR</span>
@@ -91,7 +91,7 @@ export function BrowProperties() {
               setLinkBrowToHair(true);
               showToast?.('✦ BROW COLOR LINKED TO HAIR');
             }}
-            className="text-[7.5px] tracking-wider text-[#eac87f] hover:underline"
+            className="text-[10px] tracking-wider text-[#eac87f] hover:underline"
           >
             [RESET & LINK]
           </button>
@@ -133,6 +133,6 @@ export function BrowProperties() {
           onChange={setBrowGlossy}
         />
       </div>
-    </StudioCard>
+    </div>
   );
 }

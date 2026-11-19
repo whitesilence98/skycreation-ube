@@ -80,7 +80,8 @@ assert.equal(scale.BODY_SCALE_BASELINE_HEIGHT, 1.554, 'camera baseline matches c
 
 // 3. Direction: every body-shape slider moves its own axes the right way.
 const sliders = ['body.headScale', 'body.fat', 'body.shoulderWidth', 'body.chestSize',
-  'body.waistSize', 'body.hipWidth', 'body.armLength', 'body.legLength'];
+  'body.waistSize', 'body.hipWidth', 'body.armLength', 'body.legLength',
+  'body.buttSize', 'body.thighWidth', 'body.belly'];
 for (const id of sliders) {
   const low = scale.bodyScaleFactors(withAnatomy({ [id]: 0 }));
   const high = scale.bodyScaleFactors(withAnatomy({ [id]: 100 }));
@@ -135,9 +136,10 @@ for (const bone of scale.BODY_SCALE_BONES) {
   assert.ok(known.has(bone), `${bone} is not in XP32_CANONICAL_PARENTS / SKELETON_WEIGHT_SCALES`);
 }
 
-// 8. The nine wired body ids flip to `wired`; the material stub does not leak.
+// 8. The wired body ids flip to `wired`; the material stub does not leak.
 for (const id of ['body.heightCm', 'body.headScale', 'body.fat', 'body.shoulderWidth',
-  'body.chestSize', 'body.waistSize', 'body.hipWidth', 'body.armLength', 'body.legLength']) {
+  'body.chestSize', 'body.waistSize', 'body.hipWidth', 'body.armLength', 'body.legLength',
+  'body.buttSize', 'body.thighWidth', 'body.belly']) {
   assert.equal(scale.hasBodyScale(id), true, id);
   assert.equal(params.ANATOMY_BY_ID[id].status, 'wired', id);
   assert.equal(params.ANATOMY_BY_ID[id].group, 'body', id);

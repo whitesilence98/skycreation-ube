@@ -5,7 +5,6 @@ import { useCharacter, type OverlayLayer, type OverlayBlend } from '@/lib/store'
 import { fetchCatalogue, matchesQuery } from '@/lib/mo2/client';
 import type { CatalogueEntry } from '@/lib/mo2/types';
 import { cn } from '@/lib/cn';
-import { StudioCard } from '@/components/hud/common/StudioCard';
 import { OverlaySwatch } from '@/components/hud/common/OverlaySwatch';
 import { IconEye } from '@/components/hud/Icons';
 
@@ -146,13 +145,17 @@ export function MakeupPicker({ onDirty }: { onDirty?: () => void }) {
   };
 
   return (
-    <StudioCard
-      title="MAKEUP & TINTS"
-      badge={loading ? 'LOADING…' : `${entries.length} STYLES`}
-      footerLeading={<span>+ SDZ21 · UBE 4K ATLAS MASKS</span>}
-      footerTrailing={<span>{filtered.length} SHOWN</span>}
-      showSparkle
-    >
+    <div className="flex flex-col gap-2.5">
+      {/* ── Top Header ── */}
+      <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
+          MAKEUP &amp; TINTS
+        </span>
+        <span className="font-mono text-[10px] text-[#a49a88]">
+          {loading ? 'LOADING…' : `${entries.length} STYLES`}
+        </span>
+      </div>
+
       <div className="flex flex-col gap-2.5">
         {/* ── 1. ACTIVE LAYERS STACK ─────────────────────────────────── */}
         <div className="flex flex-col gap-1.5 pt-0.5">
@@ -493,6 +496,6 @@ export function MakeupPicker({ onDirty }: { onDirty?: () => void }) {
           </div>
         </div>
       </div>
-    </StudioCard>
+    </div>
   );
 }

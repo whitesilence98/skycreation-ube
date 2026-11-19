@@ -21,11 +21,11 @@ export function HudSlider({ label, suffix, value, min, max, step, display, onCha
   return (
     <div className={cn("mb-[14px] min-h-[36px]", disabled && "opacity-45")}>
       <div className="mb-[4px] flex min-h-[16px] items-baseline justify-between gap-2">
-        <label className="flex items-baseline gap-[4px] text-[10px] tracking-[0.09em] text-[#cec5b3]/88">
+        <label className="flex items-baseline gap-[4px] text-[10px] tracking-[0.09em] text-[#cec5b3]/90">
           <span>{label}</span>
-          {suffix && <span className="text-[10px] tracking-[0.03em] text-[#a89e8d]/62">{suffix}</span>}
+          {suffix && <span className="text-[10px] tracking-[0.03em] text-[#c4bba8]">{suffix}</span>}
         </label>
-        <span className={cn('num text-[10px] tracking-[0.02em]', bracketed ? 'text-[#d8c9ad]/88' : 'text-[#c3baa9]/80')}>{display}</span>
+        <span className={cn('num text-[10px] tracking-[0.02em]', bracketed ? 'text-[#eac87f]' : 'text-[#d8c9ad]')}>{display}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value}
         disabled={disabled}
@@ -33,6 +33,7 @@ export function HudSlider({ label, suffix, value, min, max, step, display, onCha
         onPointerDown={() => !disabled && onActiveChange?.(true)} onPointerUp={() => onActiveChange?.(false)}
         onPointerCancel={() => onActiveChange?.(false)} onFocus={() => !disabled && onActiveChange?.(true)} onBlur={() => onActiveChange?.(false)}
         aria-label={`${label} ${suffix ?? ''}`.trim()}
+        aria-valuetext={display}
         className={cn(
           "hud-range h-[9px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#eac87f]",
           disabled && "cursor-not-allowed opacity-50 pointer-events-none"
@@ -74,8 +75,8 @@ export function RangeRow({
   const pct = ((value - min) / (max - min)) * 100;
   return (
     <label className="flex min-h-[28px] items-center gap-[6px]">
-      <span className="w-[132px] shrink-0 text-[10px] tracking-[0.1em] text-[#cfc6b4]/88">
-        {label} <span className="text-[#a49a88]/70">[{format(value)}]</span>
+      <span className="w-[132px] shrink-0 text-[10px] tracking-[0.1em] text-[#cfc6b4]/90">
+        {label} <span className="text-[#c4bba8]">[{format(value)}]</span>
       </span>
       <input
         type="range"
@@ -85,6 +86,7 @@ export function RangeRow({
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         aria-label={ariaLabel}
+        aria-valuetext={format(value)}
         className="hud-range h-[10px] flex-1 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#eac87f]"
         style={{ ['--pct' as string]: `${pct}%` }}
       />

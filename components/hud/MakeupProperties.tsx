@@ -32,19 +32,22 @@ export function MakeupProperties({ onClose, kind = 'makeup' }: MakeupPropertiesP
   const label = entry ? (isTattoo ? tattooLabel(entry) : makeupLabel(entry)) : layer?.id;
   const swatches = isTattoo ? TATTOO_INK_SWATCHES : BEAUTY_SWATCHES[subtype ?? 'OVERLAYS'];
 
-  return (
-    <StudioCard
-      title={isTattoo ? 'TATTOO & INK' : 'MAKEUP & TINT'}
-      badge={layer ? (isTattoo ? 'TATTOO' : subtype ?? 'MAKEUP') : 'EMPTY'}
-      onClose={onClose}
-      footerLeading={<span>{isTattoo ? '+ WARPAINT · COR' : '+ TINTMASK · UBE'}</span>}
-      footerTrailing={layer ? <span>LAYER {stack.indexOf(layer) + 1}</span> : undefined}
-      showSparkle
-    >
+  const content = (
+    <div className="flex flex-col gap-3 pt-1">
+      {/* ── Subheader ── */}
+      <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
+          {isTattoo ? 'TATTOO & INK' : 'MAKEUP & TINT'}
+        </span>
+        <span className="font-mono text-[10px] text-[#a49a88]">
+          {layer ? (isTattoo ? 'TATTOO' : subtype ?? 'MAKEUP') : 'EMPTY'}
+        </span>
+      </div>
+
       {!layer ? (
         <div className="py-8 text-center text-[10px] leading-relaxed text-[#8f8371]">
           <p className="text-[#b5a68c]">No {isTattoo ? 'tattoo' : 'makeup'} layer selected.</p>
-          <p className="mt-1 text-[9px]">Select a style from the left to edit.</p>
+          <p className="mt-1 text-[9px]">Select a style from above to edit.</p>
         </div>
       ) : (
         <div className="flex flex-col gap-3 pt-1">
@@ -135,6 +138,23 @@ export function MakeupProperties({ onClose, kind = 'makeup' }: MakeupPropertiesP
           />
         </div>
       )}
+    </div>
+  );
+
+  if (!onClose) {
+    return content;
+  }
+
+  return (
+    <StudioCard
+      title={isTattoo ? 'TATTOO & INK' : 'MAKEUP & TINT'}
+      badge={layer ? (isTattoo ? 'TATTOO' : subtype ?? 'MAKEUP') : 'EMPTY'}
+      onClose={onClose}
+      footerLeading={<span>{isTattoo ? '+ WARPAINT · COR' : '+ TINTMASK · UBE'}</span>}
+      footerTrailing={layer ? <span>LAYER {stack.indexOf(layer) + 1}</span> : undefined}
+      showSparkle
+    >
+      {content}
     </StudioCard>
   );
 }

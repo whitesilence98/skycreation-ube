@@ -46,6 +46,7 @@ export function ControlColumn({ section }: { section: FaceSectionId }) {
           <p className="creator-hint">These offsets build on the broad sliders above. 50 adds nothing.</p>
           {ids.map(id => <HudSlider key={id} label={ANATOMY_BY_ID[id].label}
             value={anatomy[id]} min={0} max={100} step={1} display={String(anatomy[id])}
+            bracketed
             onChange={value => state().setAnatomy(id, value)}
             /* These only deform the head in advanced mode. Turning it on at the
                first drag replaces the removed "Apply saved fine adjustments"
@@ -61,7 +62,7 @@ export function ControlColumn({ section }: { section: FaceSectionId }) {
         <p className="creator-hint">Saved with your preset, but they do not change the character yet. Disabled until they do.</p>
         {experimental.map(id => <HudSlider key={id} label={ANATOMY_BY_ID[id].label} disabled
           min={ANATOMY_BY_ID[id].min} max={ANATOMY_BY_ID[id].max} step={ANATOMY_BY_ID[id].step}
-          value={anatomy[id]} display="Not connected" onChange={() => {}} />)}
+          value={anatomy[id]} display="Not connected" bracketed onChange={() => {}} />)}
       </details>}
     </fieldset>
   </section>;

@@ -5,9 +5,7 @@ import { useCharacter } from '@/lib/store';
 import { convertUrl, fetchCatalogue, matchesQuery } from '@/lib/mo2/client';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import type { CatalogueEntry } from '@/lib/mo2/types';
-import { StudioCard } from '@/components/hud/common/StudioCard';
 import { cn } from '@/lib/cn';
-import { IconSparkle } from '@/components/hud/Icons';
 
 type FilterTab = 'ALL' | 'ZHIZHEN' | 'UBE';
 
@@ -111,16 +109,18 @@ export function EyePicker({ manifest }: { manifest: Mo2Manifest | null }) {
   const activeLabel = activeEntry ? (activeEntry.label || activeEntry.file.replace(/\.dds$/i, '')) : 'Default Eyes';
 
   return (
-    <StudioCard
-      title="EYES & GAZE"
-      badge={loading ? 'LOADING…' : `${allEyes.length} PRESETS`}
-      footerLeading={<span>+ ZHIZHEN · UBE · KORALINA</span>}
-      footerTrailing={<span>{filteredEyes.length} SHOWN</span>}
-      showSparkle
-    >
-      <div className="flex flex-col gap-2.5">
-        {/* ── Sub-brand Filters ─────────────────────────────────────── */}
-        <div className="flex flex-col gap-2 pt-0.5">
+    <div className="flex flex-col gap-2.5">
+      {/* ── Top Header ── */}
+      <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
+          EYES &amp; GAZE
+        </span>
+        <span className="font-mono text-[10px] text-[#a49a88]">
+          {loading ? 'LOADING…' : `${allEyes.length} PRESETS`}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-2 pt-0.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#c4b595]">
               IRIS PRESETS
@@ -262,14 +262,7 @@ export function EyePicker({ manifest }: { manifest: Mo2Manifest | null }) {
               );
             })}
           </div>
-
-          <div className="text-center pt-1">
-            <span className="text-[9.5px] font-mono tracking-tight text-[#8f8778]">
-              [{activeLabel}]
-            </span>
-          </div>
         </div>
       </div>
-    </StudioCard>
-  );
-}
+    );
+  }

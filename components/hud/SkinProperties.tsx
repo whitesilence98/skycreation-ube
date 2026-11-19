@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { useCharacter } from '@/lib/store';
-import { StudioCard } from '@/components/hud/common/StudioCard';
 import { BracketSlider } from '@/components/hud/common/BracketSlider';
 import { ColorStudio2D, type ColorSwatchItem } from '@/components/hud/common/ColorStudio2D';
 import { cn } from '@/lib/cn';
@@ -52,16 +51,18 @@ export function SkinProperties() {
   const activeColor = skinColor || '#ffffff';
 
   return (
-    <StudioCard
-      title="SKIN COLOR & PROPERTIES"
-      showSparkle
-      headerTrailing={
+    <div className="flex flex-col gap-3 pt-1">
+      {/* ── Subheader with Quick Actions ── */}
+      <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
+          SKIN COLOR &amp; PROPERTIES
+        </span>
         <button
           type="button"
           onClick={() => setSkinColor('#ffffff')}
           title="Reset to original authored skin diffuse atlas"
           className={cn(
-            'border px-1.5 py-0.5 text-[8.5px] font-mono tracking-wider transition-colors',
+            'border px-1.5 py-0.5 text-[9px] font-mono tracking-wider leading-tight transition-colors',
             activeColor.toLowerCase() === '#ffffff'
               ? 'border-[#eac87f] bg-[#d4b483]/20 text-[#f0e6d4]'
               : 'border-[#463a2e] text-[#8f8778] hover:border-[#7a6952] hover:text-[#d8c9ad]',
@@ -69,8 +70,8 @@ export function SkinProperties() {
         >
           [ORIGINAL]
         </button>
-      }
-    >
+      </div>
+
       {/* 2D SV Box, Hue/Tone Bars, 24 Swatches, RGB & HEX */}
       <ColorStudio2D
         color={activeColor}
@@ -114,6 +115,6 @@ export function SkinProperties() {
           onChange={setSkinDetail}
         />
       </div>
-    </StudioCard>
+    </div>
   );
 }

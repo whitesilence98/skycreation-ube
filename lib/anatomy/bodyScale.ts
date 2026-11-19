@@ -59,7 +59,10 @@ export type BodyScaleParamId =
   | 'body.waistSize'
   | 'body.hipWidth'
   | 'body.armLength'
-  | 'body.legLength';
+  | 'body.legLength'
+  | 'body.buttSize'
+  | 'body.thighWidth'
+  | 'body.belly';
 
 /**
  * The anatomy slice this module reads. Structural, so `AnatomyValues` (a
@@ -68,7 +71,7 @@ export type BodyScaleParamId =
  */
 export type BodyScaleAnatomies = Readonly<Record<BodyScaleParamId, number>>;
 
-/** The nine anatomy values this module implements. `body.muscleDefinition` is
+/** The anatomy values this module implements. `body.muscleDefinition` is
  *  a material stub, not a scale, and deliberately stays out. */
 const BODY_SCALE_PARAM_IDS: readonly BodyScaleParamId[] = [
   'body.heightCm',
@@ -80,6 +83,9 @@ const BODY_SCALE_PARAM_IDS: readonly BodyScaleParamId[] = [
   'body.hipWidth',
   'body.armLength',
   'body.legLength',
+  'body.buttSize',
+  'body.thighWidth',
+  'body.belly',
 ];
 
 export function hasBodyScale(id: string): id is BodyScaleParamId {
@@ -160,6 +166,16 @@ export const BODY_SCALE_RULES: readonly ScaleRule[] = [
   { param: 'body.legLength', bone: 'NPC R Thigh [RThg]', axes: ['z'], perUnit: 0.0035, exponent: 0.5 },
   { param: 'body.legLength', bone: 'NPC L Calf [LClf]', axes: ['z'], perUnit: 0.0035, exponent: 0.5 },
   { param: 'body.legLength', bone: 'NPC R Calf [RClf]', axes: ['z'], perUnit: 0.0035, exponent: 0.5 },
+
+  // Butt volume
+  { param: 'body.buttSize', bone: 'Butt', axes: ['x', 'y', 'z'], perUnit: 0.0035 },
+
+  // Thigh fullness (radial X/Y, length Z unchanged)
+  { param: 'body.thighWidth', bone: 'NPC L Thigh [LThg]', axes: ['x', 'y'], perUnit: 0.0035 },
+  { param: 'body.thighWidth', bone: 'NPC R Thigh [RThg]', axes: ['x', 'y'], perUnit: 0.0035 },
+
+  // Belly softness (radial X/Y)
+  { param: 'body.belly', bone: 'Belly', axes: ['x', 'y'], perUnit: 0.0035 },
 ];
 
 /** Every bone this module writes, for contract tests. */

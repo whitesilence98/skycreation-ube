@@ -9,13 +9,26 @@ interface AnatomyBinding {
 }
 // ponytail: broad existing bone fields only; micro-shapes require authored targets and visual review.
 export const ANATOMY_BINDINGS = {
+  // Nose
   'nose.width': { region: 'nose', slider: 'width', amount: 8 },
   'nose.length': { region: 'nose', slider: 'length', amount: 6 },
+  'nose.bridgeHeight': { region: 'nose', slider: 'height', amount: 0.35 },
+  // Mouth & Lips
   'mouth.width': { region: 'lips', slider: 'width', amount: 8 },
+  // Jaw & Chin
   'chin.length': { region: 'jaw', slider: 'length', amount: 6 },
   'jaw.width': { region: 'jaw', slider: 'width', amount: 8 },
-  'cheekbone.height': { region: 'cheeks', slider: 'height', amount: 0.5 },
-  'brow.positionY': { region: 'eyebrows', slider: 'height', amount: 0.5 },
+  'jaw.contour': { region: 'jaw', slider: 'depth', amount: 6 },
+  // Cheeks
+  'cheekbone.height': { region: 'cheeks', slider: 'height', amount: 0.45 },
+  'cheekbone.angle': { region: 'cheeks', slider: 'angle', amount: 0.35 },
+  // Forehead & Glabella
+  'glabella.prominence': { region: 'forehead', slider: 'protrusion', amount: 0.35 },
+  // Eyebrows
+  'brow.positionY': { region: 'eyebrows', slider: 'height', amount: 0.45 },
+  'brow.archHeight': { region: 'eyebrows', slider: 'height', amount: 0.35 },
+  'brow.archAngle': { region: 'eyebrows', slider: 'angle', amount: 0.30 },
+  'brow.thickness': { region: 'eyebrows', slider: 'depth', amount: 4 },
 } as const satisfies Partial<Record<AnatomyParamId, AnatomyBinding>>;
 
 export function hasAnatomyBinding(id: string): id is keyof typeof ANATOMY_BINDINGS {

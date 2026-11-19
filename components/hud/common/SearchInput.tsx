@@ -21,7 +21,7 @@ export function SearchInput({
   return (
     <div
       className={cn(
-        'group flex h-[26px] w-full items-center gap-1.5 rounded-xs border border-[#443729] bg-[#110e0c]/90 px-2 py-1 text-[9.5px] font-mono transition-all duration-150',
+        'group flex h-[28px] w-full items-center gap-1.5 rounded-xs border border-[#443729] bg-[#110e0c]/90 px-2 py-1 text-[10px] font-mono leading-none transition-all duration-150',
         'focus-within:border-[#eac87f] focus-within:shadow-[0_0_8px_rgba(234,200,127,0.25)] focus-within:bg-[#16120e]',
         className,
       )}
@@ -54,7 +54,7 @@ export function SearchInput({
         placeholder={placeholder}
         autoFocus={autoFocus}
         spellCheck={false}
-        className="w-full min-w-0 bg-transparent text-[9.5px] font-mono tracking-wider text-[#efece6] outline-none placeholder:text-[#8c8477]/50"
+        className="w-full min-w-0 bg-transparent text-[10px] font-mono tracking-wider text-[#efece6] outline-none placeholder:text-[#8c8477]/65"
       />
 
       {/* Clear Button when Query Exists */}
@@ -64,7 +64,7 @@ export function SearchInput({
           onClick={() => onChange('')}
           title="Clear search (Esc)"
           aria-label="Clear search"
-          className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-black/60 text-[9px] text-[#a89e8f] transition-colors hover:bg-[#d4b483]/25 hover:text-[#f2dfbe]"
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-black/60 text-[10px] leading-none text-[#a89e8f] transition-colors hover:bg-[#d4b483]/25 hover:text-[#f2dfbe]"
         >
           ✕
         </button>

@@ -59,18 +59,18 @@ export function BracketSlider({
 
   return (
     <div className={cn('flex flex-col gap-0.5', disabled && 'opacity-40 cursor-not-allowed')}>
-      <div className="flex items-center justify-between text-[9.5px] font-mono tracking-wider">
-        <span className="text-[#a89e8f] uppercase">
-          {label} [{readout}]
-        </span>
+      <div className="flex items-center justify-between text-[10px] font-mono tracking-wider mb-1">
+        <span className="text-[#a89e8f] uppercase">{label}</span>
+        <span className="text-[#eac87f] font-medium tabular-nums">{readout}</span>
       </div>
-      <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#8f8576]">
-        <span className="select-none text-[#8f8576] font-light">[</span>
+      <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#a49a88]">
+        <span className="select-none text-[#a49a88] font-light" aria-hidden="true">[</span>
         <div
           ref={trackRef}
           role="slider"
           tabIndex={disabled ? -1 : 0}
           aria-label={label}
+          aria-orientation="horizontal"
           aria-valuemin={min}
           aria-valuemax={max}
           aria-valuenow={value}
@@ -78,9 +78,13 @@ export function BracketSlider({
           aria-disabled={disabled || undefined}
           onKeyDown={(e) => {
             if (disabled) return;
-            const next = e.key === 'Home' ? min : e.key === 'End' ? max
+            const largeStep = step * 10;
+            const next = e.key === 'Home' ? min
+              : e.key === 'End' ? max
+              : e.key === 'PageUp' ? Math.min(max, value + largeStep)
+              : e.key === 'PageDown' ? Math.max(min, value - largeStep)
               : ['ArrowRight', 'ArrowUp'].includes(e.key) ? value + step
-                : ['ArrowLeft', 'ArrowDown'].includes(e.key) ? value - step : null;
+              : ['ArrowLeft', 'ArrowDown'].includes(e.key) ? value - step : null;
             if (next === null) return;
             e.preventDefault();
             onChange(Math.max(min, Math.min(max, Number(next.toFixed(4)))));
@@ -94,12 +98,13 @@ export function BracketSlider({
           className={cn(
             'relative h-[14px] flex-1 flex items-center',
             disabled ? 'cursor-not-allowed' : 'cursor-pointer',
+            'focus-visible:outline-2 focus-visible:outline-[#eac87f] focus-visible:outline-offset-2',
           )}
         >
           {/* Hairline Track line */}
-          <div className="h-[1px] w-full bg-[#4a3e30]">
+          <div className="h-[1px] w-full bg-[#786650]/80">
             <div
-              className="h-[1px] bg-[#8c7857]"
+              className="h-[1px] bg-[#d4b483]"
               style={{ width: `${pct}%` }}
             />
           </div>
@@ -109,7 +114,7 @@ export function BracketSlider({
             style={{ left: `${pct}%` }}
           />
         </div>
-        <span className="select-none text-[#8f8576] font-light">]</span>
+        <span className="select-none text-[#a49a88] font-light" aria-hidden="true">]</span>
       </div>
     </div>
   );

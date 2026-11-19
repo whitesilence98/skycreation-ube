@@ -172,7 +172,7 @@ export function PosePanel({ onClose }: PosePanelProps = {}) {
       </div>
 
       {/* ── Category Navigation Tabs ─────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-1 rounded-md border border-[#d4b483]/18 bg-black/40 p-1">
+      <div className="flex flex-wrap gap-1.5 rounded-md border border-[#d4b483]/18 bg-black/40 p-1">
         {(['IDLE', 'ACTION', 'EXPRESSIONS', 'FAVORITES'] as const).map((cat) => {
           const active = poseCategory === cat;
           return (
@@ -184,7 +184,7 @@ export function PosePanel({ onClose }: PosePanelProps = {}) {
                 setShowExternalArchive(false);
               }}
               className={cn(
-                'relative flex items-center justify-center gap-1 rounded py-1.5 text-[9.5px] font-medium tracking-[0.08em] transition-all duration-150',
+                'relative flex flex-1 min-w-[110px] items-center justify-center gap-1.5 rounded px-2.5 py-1.5 text-[10px] font-medium tracking-[0.06em] transition-all duration-150',
                 active
                   ? 'border border-[#d8be8c]/70 bg-[#d4b483]/20 text-[#f5ecd8] shadow-[0_0_10px_rgba(212,180,131,0.25)]'
                   : 'border border-transparent text-[#a9a192]/70 hover:bg-white/[0.04] hover:text-[#d5ccbb]',
@@ -192,11 +192,11 @@ export function PosePanel({ onClose }: PosePanelProps = {}) {
             >
               <span>{cat}</span>
               {cat === 'FAVORITES' ? (
-                <span className={cn('text-[9px]', active ? 'text-[#eac87f]' : 'text-[#a9a192]/60')}>
+                <span className={cn('text-[10px]', active ? 'text-[#eac87f]' : 'text-[#a9a192]/60')}>
                   ★{categoryCounts[cat]}
                 </span>
               ) : (
-                <span className="text-[8.5px] opacity-60">({categoryCounts[cat]})</span>
+                <span className="text-[9.5px] opacity-60">({categoryCounts[cat]})</span>
               )}
             </button>
           );

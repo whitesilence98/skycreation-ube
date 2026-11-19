@@ -5,7 +5,6 @@ import { useCharacter, type OverlayLayer } from '@/lib/store';
 import { fetchCatalogue, matchesQuery } from '@/lib/mo2/client';
 import type { CatalogueEntry } from '@/lib/mo2/types';
 import { cn } from '@/lib/cn';
-import { StudioCard } from '@/components/hud/common/StudioCard';
 import { SearchInput } from '@/components/hud/common/SearchInput';
 import { OverlaySwatch } from '@/components/hud/common/OverlaySwatch';
 import { IconEye } from '@/components/hud/Icons';
@@ -119,13 +118,17 @@ export function TattooPicker({ onDirty }: { onDirty?: () => void }) {
   };
 
   return (
-    <StudioCard
-      title="TATTOOS & WARPAINT"
-      badge={loading ? 'LOADING…' : `${entries.length} WARPAINTS`}
-      footerLeading={<span>+ COR WARPAINT · UBE</span>}
-      footerTrailing={<span>{filtered.length} SHOWN</span>}
-      showSparkle
-    >
+    <div className="flex flex-col gap-2.5">
+      {/* ── Top Header ── */}
+      <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
+          TATTOOS &amp; WARPAINT
+        </span>
+        <span className="font-mono text-[10px] text-[#a49a88]">
+          {loading ? 'LOADING…' : `${entries.length} WARPAINTS`}
+        </span>
+      </div>
+
       <div className="flex flex-col gap-2.5">
         {/* ── 1. APPLIED LAYERS (shared cap) ─────────────────────────── */}
         <div className="flex flex-col gap-1.5 pt-0.5">
@@ -142,7 +145,7 @@ export function TattooPicker({ onDirty }: { onDirty?: () => void }) {
                   onDirty?.();
                 }}
                 className={cn(
-                  'text-[9px] font-mono tracking-[0.08em] text-[#b9a88a] transition-colors hover:text-[#f0dfbe]',
+                  'text-[10px] font-mono tracking-[0.08em] leading-tight text-[#b9a88a] transition-colors hover:text-[#f0dfbe]',
                   focus,
                 )}
               >
@@ -151,14 +154,14 @@ export function TattooPicker({ onDirty }: { onDirty?: () => void }) {
             )}
           </div>
           {full && layers.length === 0 && (
-            <p className="border border-[#d4b483]/20 bg-black/30 px-2 py-1 text-[9px] font-mono text-[#c5b595]/80">
+            <p className="border border-[#d4b483]/20 bg-black/30 px-2 py-1 text-[10px] font-mono text-[#c5b595] leading-normal">
               Stack full with makeup — remove a layer to add a warpaint.
             </p>
           )}
 
           <div className="thin-scroll max-h-[85px] space-y-[3px] overflow-y-auto">
             {layers.length === 0 && (
-              <p className="border border-[#d4b483]/15 bg-black/30 px-2 py-2 text-center text-[9.5px] font-mono leading-relaxed text-[#b5ab99]/70">
+              <p className="border border-[#d4b483]/15 bg-black/30 px-2 py-2 text-center text-[10px] font-mono leading-relaxed text-[#c4bba8]">
                 No warpaints applied. Pick designs below to stack.
               </p>
             )}
@@ -187,10 +190,10 @@ export function TattooPicker({ onDirty }: { onDirty?: () => void }) {
                       className="h-[8px] w-[8px] shrink-0 rounded-full border border-[#d4b483]/60 shadow-[0_0_4px_rgba(212,180,131,0.4)]"
                       style={{ backgroundColor: layer.color }}
                     />
-                    <span className="min-w-0 flex-1 truncate text-[9.5px] font-mono text-[#ddceb5]">
+                    <span className="min-w-0 flex-1 truncate text-[10px] font-mono text-[#ddceb5] leading-tight">
                       L{index + 1} · {label}
                     </span>
-                    <span className="num shrink-0 text-[9.5px] font-mono text-[#c5b595]">
+                    <span className="num shrink-0 text-[10px] font-mono text-[#c5b595] leading-tight">
                       {Math.round(layer.opacity * 100)}%
                     </span>
                   </button>
@@ -233,7 +236,7 @@ export function TattooPicker({ onDirty }: { onDirty?: () => void }) {
             <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#c4b595]">
               WARPAINT DESIGNS
             </span>
-            <span className="text-[9.5px] font-mono tracking-tight text-[#8f8778]">
+            <span className="text-[10px] font-mono tracking-tight text-[#a49a88] leading-tight">
               {loading ? 'LOADING…' : `${filtered.length} DESIGNS`}
             </span>
           </div>
@@ -243,7 +246,7 @@ export function TattooPicker({ onDirty }: { onDirty?: () => void }) {
           {error && (
             <p
               role="alert"
-              className="border border-[#b56a5a]/40 bg-[#b56a5a]/10 px-2 py-1.5 text-[9.5px] font-mono leading-relaxed text-[#dda898]"
+              className="border border-[#b56a5a]/40 bg-[#b56a5a]/10 px-2 py-1.5 text-[10px] font-mono leading-relaxed text-[#dda898]"
             >
               {error}
             </p>
@@ -296,7 +299,7 @@ export function TattooPicker({ onDirty }: { onDirty?: () => void }) {
                       >
                         <OverlaySwatch kind="tattoo" id={entry.id} color={layer?.color ?? DEFAULT_INK} />
 
-                        <span className="pointer-events-none absolute bottom-[1px] right-[2px] text-[8.5px] font-mono tracking-tight text-[#eadcc0]/75">
+                        <span className="pointer-events-none absolute bottom-[1px] right-[2px] text-[10px] font-mono tracking-tight text-[#eadcc0]/85 leading-none">
                           {String(index + 1).padStart(2, '0')}
                         </span>
 
@@ -307,10 +310,10 @@ export function TattooPicker({ onDirty }: { onDirty?: () => void }) {
 
                       <span
                         className={cn(
-                          'mt-[2px] w-full truncate text-center text-[9px] tracking-[0.04em] transition-colors',
+                          'mt-[2px] w-full truncate text-center text-[10px] tracking-[0.04em] leading-tight transition-colors',
                           isSelected
                             ? 'font-medium text-[#f0e2ca]'
-                            : 'text-[#a9a192]/70 group-hover:text-[#d5ccbb]',
+                            : 'text-[#a9a192] group-hover:text-[#d5ccbb]',
                         )}
                       >
                         {label}
@@ -323,6 +326,6 @@ export function TattooPicker({ onDirty }: { onDirty?: () => void }) {
           </div>
         </div>
       </div>
-    </StudioCard>
+    </div>
   );
 }

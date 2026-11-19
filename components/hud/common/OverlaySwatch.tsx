@@ -42,7 +42,7 @@ export function OverlaySwatch({ kind, id, color }: { kind: string; id: string; c
           }}
         />
       ) : (
-        <span className="text-[9px] tracking-[0.06em] text-[#dacbad]/50">
+        <span className="text-[10px] tracking-[0.06em] text-[#dacbad]/70 leading-none">
           {status === 'error' ? 'NO MASK' : '…'}
         </span>
       )}

@@ -1,20 +1,17 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, type MouseEvent } from 'react';
 import { useCharacter } from '@/lib/store';
-import {
-  EQUIP_SLOTS,
-  EQUIP_SLOT_LABEL,
-  type EquipSlot,
-} from '@/lib/equipment';
+import { EQUIP_SLOTS, EQUIP_SLOT_LABEL, type EquipSlot } from '@/lib/equipment';
 import { assetOptions } from '@/lib/manifestSelect';
 import { convertUrl } from '@/lib/mo2/client';
+import { exitWardrobe, navigateCategory } from '@/lib/editorNav';
 import { cn } from '@/lib/cn';
-import { StudioCard } from '@/components/hud/common/StudioCard';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { IconHanger, IconSparkle } from '@/components/hud/Icons';
 import { SlotIcon } from '@/components/hud/SlotIcon';
 import { GarmentThumbnail } from '@/components/hud/GarmentThumbnail';
+import { OutfitSets } from '@/components/hud/outfit/OutfitSets';
 
 interface ClothingItem {
   id: string;
@@ -32,350 +29,106 @@ interface ClothingItem {
 }
 
 function cleanGarmentName(name: string): string {
-  return name
-    .replace(/\.nif$/i, '')
-    .replace(/_[01]$/, '')
-    .replace(/^\[UBE 2\.0\]\s*/i, '')
-    .replace(/^FB_/i, '')
-    .replace(/_/g, ' ')
-    .trim();
+  return name.replace(/\.nif$/i, '').replace(/_[01]$/, '')
+    .replace(/^\[UBE 2\.0\]\s*/i, '').replace(/^FB_/i, '').replace(/_/g, ' ').trim();
 }
 
+const WARDROBE_TABS = [
+  ['outfit', 'Wardrobe'], ['styling', 'Appearance'], ['body', 'Body Shape'],
+  ['hair', 'Hair'], ['preset', 'Presets'],
+] as const;
+
 export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
-  const equipment = useCharacter((s) => s.equipment);
-  const equipSlot = useCharacter((s) => s.equipSlot);
-  const setEquipSlot = useCharacter((s) => s.setEquipSlot);
-  const setEquip = useCharacter((s) => s.setEquip);
-  const setAssets = useCharacter((s) => s.setAssets);
-  const catalogues = useCharacter((s) => s.assetCatalogues);
-  const unrestrictedSlots = useCharacter((s) => s.unrestrictedSlots);
-  const toggleUnrestrictedSlots = useCharacter((s) => s.toggleUnrestrictedSlots);
-  const showGroundMeshes = useCharacter((s) => s.showGroundMeshes);
-  const workspace = useCharacter((s) => s.workspace);
-  const setWorkspace = useCharacter((s) => s.setWorkspace);
+  const name = useCharacter(s => s.name);
+  const equipment = useCharacter(s => s.equipment);
+  const equipSlot = useCharacter(s => s.equipSlot);
+  const catalogues = useCharacter(s => s.assetCatalogues);
+  const showGroundMeshes = useCharacter(s => s.showGroundMeshes);
+  const workspace = useCharacter(s => s.workspace);
+  const setWorkspace = useCharacter(s => s.setWorkspace);
+  const curated = useMemo(() => assetOptions(manifest, 'clothingMesh') as ClothingItem[], [manifest]);
+  const archive = useMemo(() => (catalogues.clothingMesh ?? []) as ClothingItem[], [catalogues.clothingMesh]);
 
-  const curated = useMemo(
-    () => assetOptions(manifest, 'clothingMesh') as ClothingItem[],
-    [manifest],
-  );
-
-  const archive = useMemo(
-    () => (catalogues.clothingMesh ?? []) as ClothingItem[],
-    [catalogues.clothingMesh],
-  );
-
-  // Combined options deduped by ID and weight pair
   const allClothing = useMemo(() => {
     const seen = new Set<string>();
     const seenWeightKeys = new Set<string>();
     const list: ClothingItem[] = [];
-
     const add = (item: ClothingItem) => {
-      // Skip static ground meshes unless explicitly enabled in settings
-      if (!showGroundMeshes && /_gnd\.nif$/i.test(item.file)) {
-        return;
-      }
-      // If it is the non-default _0 half of a weight pair, drop it!
-      if (item.weightVariants && item.weightVariants.w0 === item.id && item.weightVariants.w1 !== item.id) {
-        return;
-      }
-      if (item.weightKey && !item.weightDefault) {
-        return;
-      }
-      if (/_0\.nif$/i.test(item.file) && (item.weightVariants || item.weightKey)) {
-        return;
-      }
-
+      if (!showGroundMeshes && /_gnd\.nif$/i.test(item.file)) return;
+      if (item.weightVariants && item.weightVariants.w0 === item.id && item.weightVariants.w1 !== item.id) return;
+      if (item.weightKey && !item.weightDefault) return;
+      if (/_0\.nif$/i.test(item.file) && (item.weightVariants || item.weightKey)) return;
       const pairKey = item.weightVariants?.w1 ?? item.weightKey ?? item.id;
-      if (seenWeightKeys.has(pairKey) || seen.has(item.id)) {
-        return;
-      }
+      if (seenWeightKeys.has(pairKey) || seen.has(item.id)) return;
       seenWeightKeys.add(pairKey);
       seen.add(item.id);
       list.push(item);
     };
-
-    for (const c of curated) add(c);
-    for (const a of archive) add(a);
-
+    for (const item of curated) add(item);
+    for (const item of archive) add(item);
     return list;
   }, [curated, archive, showGroundMeshes]);
 
-  const nameFor = (id: string | undefined): string | undefined => {
-    if (!id) return undefined;
-    const found = allClothing.find((r) => {
-      if (r.id === id) return true;
-      if (r.weightVariants && (r.weightVariants.w0 === id || r.weightVariants.w1 === id)) return true;
-      return false;
-    });
-    if (!found) return undefined;
-    return cleanGarmentName(found.label || found.file);
+  const itemFor = (id: string | undefined) => id ? allClothing.find(item => item.id === id ||
+    item.weightVariants?.w0 === id || item.weightVariants?.w1 === id) : undefined;
+  const nameFor = (id: string | undefined) => {
+    const item = itemFor(id);
+    return item ? cleanGarmentName(item.label || item.file) : id ? 'Unavailable garment' : undefined;
   };
-
-  const itemFor = (id: string | undefined): ClothingItem | undefined => {
-    if (!id) return undefined;
-    return allClothing.find((r) => {
-      if (r.id === id) return true;
-      if (r.weightVariants && (r.weightVariants.w0 === id || r.weightVariants.w1 === id)) return true;
-      return false;
-    });
-  };
-
-  const wornCount = EQUIP_SLOTS.filter((slot) => equipment[slot]).length;
-  const currentSlot: EquipSlot = equipSlot ?? 'top';
-
+  const currentSlot = equipSlot ?? 'top';
+  const wornCount = EQUIP_SLOTS.filter(slot => equipment[slot]).length;
+  const activeWornId = equipment[currentSlot];
   const selectSlot = (slot: EquipSlot) => {
-    setEquipSlot(slot);
+    useCharacter.getState().setEquipSlot(slot);
     setWorkspace('wardrobe');
   };
-
-  const unequipSlot = (slot: EquipSlot, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    e?.preventDefault();
-    setEquip({ [slot]: null });
-    if (slot === 'outfit') {
-      setAssets({ clothingMesh: null });
-    }
+  const unequipSlot = (slot: EquipSlot, event?: MouseEvent) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    const state = useCharacter.getState();
+    state.setEquip({ [slot]: null });
+    if (slot === 'outfit') state.setAssets({ clothingMesh: null });
   };
 
-  const clearAllGear = () => {
-    setEquip({
-      outfit: null,
-      top: null,
-      bottom: null,
-      bra: null,
-      panties: null,
-      stockings: null,
-      hands: null,
-      feet: null,
-      accessories: null,
-    });
-    setAssets({ clothingMesh: null });
-  };
-
-  const activeWornId = equipment[currentSlot];
-  const activeWornName = nameFor(activeWornId);
-
-  return (
-    <StudioCard
-      title="EQUIPPED GEAR"
-      badge={`${wornCount}/${EQUIP_SLOTS.length} EQUIPPED`}
-      footerLeading={<span>CLICK TO BROWSE · RMB UNEQUIP</span>}
-      footerTrailing={<span>{allClothing.length} ITEMS</span>}
-    >
-      <div className="select-none text-[#e6e1d8]">
-        {/* ── Visual Paper-Doll 3x4 Layout with Silhouette ──────────── */}
-        <div className="relative mx-auto my-[1px] w-full max-w-[272px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[6px] backdrop-blur-md">
-        {/* Subtle Anatomical Wireframe SVG */}
-        <svg
-          viewBox="0 0 260 255"
-          className="pointer-events-none absolute inset-0 h-full w-full opacity-20"
-          fill="none"
-          stroke="#d4b483"
-          strokeWidth="0.85"
-        >
-          {/* Head & Cranium */}
-          <ellipse cx="130" cy="22" rx="12" ry="14" />
-          <path d="M125 36 L125 43 M135 36 L135 43" />
-          {/* Shoulders & Clavicle */}
-          <path d="M96 46 L130 43 L164 46" />
-          {/* Upper Arms to Forearms */}
-          <path d="M96 46 L70 85 L58 135 L50 185" />
-          <path d="M164 46 L190 85 L202 135 L210 185" />
-          {/* Ribcage Contour */}
-          <path d="M100 58 Q130 63 160 58" />
-          <path d="M104 74 Q130 79 156 74" />
-          <path d="M108 90 Q130 95 152 90" />
-          {/* Spine Guide */}
-          <line x1="130" y1="43" x2="130" y2="130" strokeDasharray="3 3" />
-          {/* Pelvis & Hip Contour */}
-          <path d="M110 105 Q130 108 150 105" />
-          <path d="M102 120 C102 140 120 148 130 148 C140 148 158 140 158 120" />
-          {/* Legs to Feet */}
-          <path d="M116 148 L111 190 L109 222 L107 250" />
-          <path d="M144 148 L149 190 L151 222 L153 250" />
-        </svg>
-
-        {/* 3-Column Slot Cards Grid */}
-        <div className="relative z-10 grid grid-cols-3 gap-x-[8px] gap-y-[4px]">
-          {/* ── Row 1: OUTFIT in center col ──────────────────────────── */}
-          <div className="col-start-2">
-            <SlotCard
-              slot="outfit"
-              isActive={currentSlot === 'outfit'}
-              equippedId={equipment.outfit}
-              item={itemFor(equipment.outfit)}
-              itemName={nameFor(equipment.outfit)}
-              onSelect={() => selectSlot('outfit')}
-              onUnequip={(e) => unequipSlot('outfit', e)}
-            />
-          </div>
-
-          {/* ── Row 2: TOP | BOTTOM | BRA ────────────────────────────── */}
-          <SlotCard
-            slot="top"
-            isActive={currentSlot === 'top'}
-            equippedId={equipment.top}
-            item={itemFor(equipment.top)}
-            itemName={nameFor(equipment.top)}
-            onSelect={() => selectSlot('top')}
-            onUnequip={(e) => unequipSlot('top', e)}
-          />
-          <SlotCard
-            slot="bottom"
-            isActive={currentSlot === 'bottom'}
-            equippedId={equipment.bottom}
-            item={itemFor(equipment.bottom)}
-            itemName={nameFor(equipment.bottom)}
-            onSelect={() => selectSlot('bottom')}
-            onUnequip={(e) => unequipSlot('bottom', e)}
-          />
-          <SlotCard
-            slot="bra"
-            isActive={currentSlot === 'bra'}
-            equippedId={equipment.bra}
-            item={itemFor(equipment.bra)}
-            itemName={nameFor(equipment.bra)}
-            onSelect={() => selectSlot('bra')}
-            onUnequip={(e) => unequipSlot('bra', e)}
-          />
-
-          {/* ── Row 3: PANTIES | (gap) | STOCKINGS ────────────────────── */}
-          <SlotCard
-            slot="panties"
-            isActive={currentSlot === 'panties'}
-            equippedId={equipment.panties}
-            item={itemFor(equipment.panties)}
-            itemName={nameFor(equipment.panties)}
-            onSelect={() => selectSlot('panties')}
-            onUnequip={(e) => unequipSlot('panties', e)}
-          />
-          <div className="pointer-events-none flex items-center justify-center opacity-40">
-            {/* Center silhouette pass-through */}
-          </div>
-          <SlotCard
-            slot="stockings"
-            isActive={currentSlot === 'stockings'}
-            equippedId={equipment.stockings}
-            item={itemFor(equipment.stockings)}
-            itemName={nameFor(equipment.stockings)}
-            onSelect={() => selectSlot('stockings')}
-            onUnequip={(e) => unequipSlot('stockings', e)}
-          />
-
-          {/* ── Row 4: HANDS | FEET | ACCESSORIES ─────────────────────── */}
-          <SlotCard
-            slot="hands"
-            isActive={currentSlot === 'hands'}
-            equippedId={equipment.hands}
-            item={itemFor(equipment.hands)}
-            itemName={nameFor(equipment.hands)}
-            onSelect={() => selectSlot('hands')}
-            onUnequip={(e) => unequipSlot('hands', e)}
-          />
-          <SlotCard
-            slot="feet"
-            isActive={currentSlot === 'feet'}
-            equippedId={equipment.feet}
-            item={itemFor(equipment.feet)}
-            itemName={nameFor(equipment.feet)}
-            onSelect={() => selectSlot('feet')}
-            onUnequip={(e) => unequipSlot('feet', e)}
-          />
-          <SlotCard
-            slot="accessories"
-            isActive={currentSlot === 'accessories'}
-            equippedId={equipment.accessories}
-            item={itemFor(equipment.accessories)}
-            itemName={nameFor(equipment.accessories)}
-            onSelect={() => selectSlot('accessories')}
-            onUnequip={(e) => unequipSlot('accessories', e)}
-          />
-        </div>
+  return <section className="creator-wardrobe-panel" aria-label="Wardrobe">
+    <nav className="creator-wardrobe-tabs" aria-label="Wardrobe categories">
+      {WARDROBE_TABS.map(([id, label]) => <button key={id} type="button" aria-pressed={id === 'outfit'}
+        onClick={() => { if (id !== 'outfit') navigateCategory(id); }}>{label}</button>)}
+    </nav>
+    <header className="creator-wardrobe-heading">
+      <div><h2>WARDROBE</h2><span>{name || 'Character'} · {wornCount}/{EQUIP_SLOTS.length} worn</span></div>
+      <button type="button" onClick={exitWardrobe} aria-label="Exit wardrobe">Exit <span aria-hidden="true">×</span></button>
+    </header>
+    <div className="min-w-0 select-none text-[#e6e1d8]">
+      <OutfitSets />
+      <h3 className="my-2 font-mono text-[10px] tracking-widest text-[#c4b595]">SLOTS</h3>
+      <div className="creator-wardrobe-slots grid grid-cols-3 gap-2">
+        {EQUIP_SLOTS.map(slot => <SlotCard key={slot} slot={slot} isActive={currentSlot === slot}
+          equippedId={equipment[slot]} item={itemFor(equipment[slot])} itemName={nameFor(equipment[slot])}
+          onSelect={() => selectSlot(slot)} onUnequip={event => unequipSlot(slot, event)} />)}
       </div>
-
-      {/* ── Active Slot Status & Wardrobe Drawer Launcher Card ──────── */}
-      <div className="my-[6px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[7px]">
-        {/* Header row: slot name + equipped item name */}
-        <div className="flex items-center justify-between border-b border-[#d4b483]/16 pb-[5px]">
-          <div className="flex items-center gap-[5px]">
-            <SlotIcon slot={currentSlot} className="h-3.5 w-3.5 text-[#eac87f]" />
-            <span className="font-mono text-[10px] font-bold tracking-wider text-[#eac87f] uppercase">
-              {EQUIP_SLOT_LABEL[currentSlot]}
-            </span>
-          </div>
-          <span className="max-w-[130px] truncate text-[9px] font-medium text-[#e2d8c6]">
-            {activeWornName ?? 'Empty'}
-          </span>
+      <div className="my-2 rounded-xs border border-[#d4b483]/22 bg-black/40 p-2">
+        <div className="flex min-w-0 items-center gap-1.5 text-[10px]">
+          <SlotIcon slot={currentSlot} className="h-3.5 w-3.5 shrink-0 text-[#eac87f]" />
+          <span className="shrink-0 font-mono text-[#eac87f]">{EQUIP_SLOT_LABEL[currentSlot]}</span>
+          <span className="min-w-0 flex-1 truncate" title={nameFor(activeWornId)}>{nameFor(activeWornId) ?? 'Empty'}</span>
+          <button type="button" onClick={event => unequipSlot(currentSlot, event)} disabled={!activeWornId}
+            className="shrink-0 text-[#e0a898] hover:text-[#f0b8a8] disabled:opacity-30">UNEQUIP</button>
         </div>
-
-        {/* Primary Action Button: Open/Toggle Wardrobe Browser */}
-        <button
-          type="button"
-          onClick={() => setWorkspace(workspace === 'wardrobe' ? 'edit' : 'wardrobe')}
-          className={cn(
-            'mt-[6px] flex w-full items-center justify-center gap-[5px] border py-[5px] text-[9.5px] font-mono tracking-widest transition-all duration-150',
-            workspace === 'wardrobe'
-              ? 'border-[#eac87f] bg-[#d4b483]/25 text-[#f2dfbe] shadow-[0_0_10px_rgba(234,200,127,0.3)]'
-              : 'border-[#d4b483]/35 bg-[#d4b483]/12 text-[#e8c98e] hover:border-[#eac87f] hover:bg-[#d4b483]/22 hover:text-[#fff0d4]'
-          )}
-        >
-          <IconHanger className="h-3 w-3" />
-          <span>{workspace === 'wardrobe' ? 'CLOSE WARDROBE [ESC]' : 'BROWSE WARDROBE →'}</span>
+        <button type="button" onClick={() => setWorkspace(workspace === 'wardrobe' ? 'edit' : 'wardrobe')}
+          aria-expanded={workspace === 'wardrobe'}
+          className="mt-2 flex w-full items-center justify-center gap-1.5 border border-[#d4b483]/40 bg-[#d4b483]/12 py-2 font-mono text-[10px] tracking-wider text-[#e8c98e] hover:bg-[#d4b483]/22">
+          <IconHanger className="h-3.5 w-3.5" />{workspace === 'wardrobe' ? 'CLOSE WARDROBE [ESC]' : 'BROWSE WARDROBE →'}
         </button>
-
-        {/* Action utility row: Unequip, Clear All, Unrestricted Toggle */}
-        <div className="mt-[5px] flex items-center justify-between gap-1 text-[8.5px]">
-          <div className="flex items-center gap-1.5">
-            {activeWornId && (
-              <button
-                type="button"
-                onClick={(e) => unequipSlot(currentSlot, e)}
-                className="rounded-xs border border-[#d09e88]/40 bg-[#d09e88]/10 px-1.5 py-[1.5px] font-mono tracking-wider text-[#e0a898] hover:border-[#d09e88]/80 hover:text-[#f0b8a8]"
-              >
-                UNEQUIP
-              </button>
-            )}
-
-            {wornCount > 0 && (
-              <button
-                type="button"
-                onClick={clearAllGear}
-                title="Unequip all worn garments and accessories"
-                className="rounded-xs border border-[#8f8778]/30 bg-black/40 px-1.5 py-[1.5px] font-mono tracking-wider text-[#8f8778] hover:border-[#d09e88]/50 hover:text-[#e0a898]"
-              >
-                CLEAR ALL
-              </button>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={toggleUnrestrictedSlots}
-            title={unrestrictedSlots ? 'Unrestricted Slots: Showing all items. Click to filter by current slot only.' : 'Strict Slots: Showing items matching this slot. Click to ignore naming and equip anything.'}
-            className={cn(
-              'flex items-center gap-1 rounded-xs border px-1.5 py-[1.5px] font-mono tracking-wider transition-all',
-              unrestrictedSlots
-                ? 'border-[#eac87f] bg-[#d4b483]/22 text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
-                : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/75 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]'
-            )}
-          >
-            <span className={cn(
-              'inline-block h-1.5 w-1.5 rounded-full',
-              unrestrictedSlots ? 'bg-[#eac87f] shadow-[0_0_5px_rgba(234,200,127,0.8)]' : 'bg-[#8f8778]/40'
-            )} />
-            <span>{unrestrictedSlots ? 'ALL ITEMS' : 'SLOT ONLY'}</span>
-          </button>
-        </div>
       </div>
-      </div>
-    </StudioCard>
-  );
+      <button type="button" onClick={() => navigateCategory('styling')}
+        className="creator-wardrobe-next flex w-full items-center gap-2 border border-[#eac87f]/45 bg-[#d4b483]/15 px-3 py-2 text-[#f2dfbe] hover:bg-[#d4b483]/25">
+        <IconSparkle className="h-4 w-4" /><span className="flex-1 text-left text-xs">Appearance</span><span aria-hidden="true">›</span>
+      </button>
+    </div>
+  </section>;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Individual Slot Box Card
-   ───────────────────────────────────────────────────────────────────────────── */
 interface SlotCardProps {
   slot: EquipSlot;
   isActive: boolean;
@@ -383,121 +136,31 @@ interface SlotCardProps {
   item?: ClothingItem;
   itemName?: string;
   onSelect: () => void;
-  onUnequip: (e: React.MouseEvent) => void;
+  onUnequip: (event: MouseEvent) => void;
 }
 
-function SlotCard({
-  slot,
-  isActive,
-  equippedId,
-  item,
-  itemName,
-  onSelect,
-  onUnequip,
-}: SlotCardProps) {
-  const isFilled = Boolean(equippedId);
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onContextMenu={(e) => {
-        if (isFilled) onUnequip(e);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') onSelect();
-      }}
-      title={`${EQUIP_SLOT_LABEL[slot]}: ${itemName ?? 'None'}\nClick to browse garments in Wardrobe Drawer\nRight-click to unequip`}
-      className="group flex cursor-pointer flex-col items-center"
-    >
-      {/* Slot Label Above */}
-      <span
-        className={cn(
-          'text-[8px] font-mono tracking-wider text-center uppercase transition-colors mb-[1px]',
-          isActive
-            ? 'font-bold text-[#f2dfbe] drop-shadow-[0_0_5px_rgba(234,200,127,0.7)]'
-            : isFilled
-              ? 'text-[#d4b483]/90'
-              : 'text-[#8f8778]/70 group-hover:text-[#c4b9a3]',
-        )}
-      >
-        {EQUIP_SLOT_LABEL[slot]}
-      </span>
-
-      {/* Square Slot Box Card */}
-      <div
-        className={cn(
-          'relative flex aspect-square w-full max-w-[54px] items-center justify-center rounded-xs transition-all duration-150',
-          isActive
-            ? 'border-2 border-[#eac87f] bg-[#eac87f]/20 shadow-[0_0_10px_rgba(234,200,127,0.4)] ring-1 ring-[#eac87f]/70'
-            : isFilled
-              ? 'border border-[#d4b483]/60 bg-[#16130e]/90 shadow-[0_0_6px_rgba(0,0,0,0.6)] group-hover:border-[#eac87f]/80'
-              : 'border border-[#d4b483]/24 bg-black/40 group-hover:border-[#d4b483]/50 group-hover:bg-black/60',
-        )}
-      >
-        {/* Active Corner Accent Glow */}
-        {isActive && (
-          <span className="pointer-events-none absolute -top-[1.5px] -left-[1.5px] h-[3px] w-[3px] rounded-full bg-[#f2dfbe] shadow-[0_0_5px_#f2dfbe]" />
-        )}
-
-        {/* Filled amber indicator dot */}
-        {isFilled && !isActive && (
-          <span className="pointer-events-none absolute top-1 left-1 h-1 w-1 rounded-full bg-[#eac87f] shadow-[0_0_3px_rgba(234,200,127,0.8)]" />
-        )}
-
-        {/* Slot Icon or 3D Garment Thumbnail inside Box */}
-        {isFilled && equippedId ? (
-          <GarmentThumbnail
-            id={item?.weightVariants?.w1 ?? item?.id ?? equippedId}
+function SlotCard({ slot, isActive, equippedId, item, itemName, onSelect, onUnequip }: SlotCardProps) {
+  return <div className="creator-wardrobe-slot relative min-w-0">
+    <button type="button" onClick={onSelect} onContextMenu={event => { if (equippedId) onUnequip(event); }}
+      aria-pressed={isActive} aria-label={`Browse ${EQUIP_SLOT_LABEL[slot]}: ${itemName ?? 'Empty'}`}
+      title={`${EQUIP_SLOT_LABEL[slot]}: ${itemName ?? 'Empty'}\nClick to browse; right-click to unequip`}
+      className={cn('group flex w-full min-w-0 flex-col items-center gap-1 rounded-xs border p-1 text-[10px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#eac87f]',
+        isActive ? 'border-[#eac87f] bg-[#eac87f]/15 text-[#f2dfbe] ring-1 ring-[#eac87f]/40'
+          : equippedId ? 'border-[#d4b483]/55 bg-[#16130e]/90 text-[#d4b483] hover:border-[#eac87f]'
+            : 'border-[#d4b483]/24 bg-black/40 text-[#8f8778] hover:border-[#d4b483]/50')}>
+      <span className="block w-full truncate font-mono uppercase">{EQUIP_SLOT_LABEL[slot]}</span>
+      <span className="relative flex aspect-square w-full items-center justify-center">
+        {equippedId ? <>
+          <GarmentThumbnail id={item?.weightVariants?.w1 ?? item?.id ?? equippedId}
             meshUrl={item?.weightVariants ? convertUrl({ kind: 'clothingMesh', id: item.weightVariants.w1, mode: 'mesh' }) : item?.meshUrl}
-            slot={slot}
-            label={itemName}
-            className="h-full w-full p-0.5"
-            iconClassName={cn(
-              'transition-all duration-150',
-              isActive
-                ? 'h-5 w-5 text-[#f2dfbe] drop-shadow-[0_0_6px_rgba(242,223,190,0.6)] scale-105'
-                : 'h-4 w-4 text-[#e0cfab]',
-            )}
-            imgClassName="scale-95"
-          />
-        ) : (
-          <SlotIcon
-            slot={slot}
-            className={cn(
-              'transition-all duration-150',
-              isActive
-                ? 'h-5 w-5 text-[#f2dfbe] drop-shadow-[0_0_6px_rgba(242,223,190,0.6)] scale-105'
-                : 'h-3.5 w-3.5 text-[#8f8778]/40 group-hover:text-[#d4b483]/60',
-            )}
-          />
-        )}
-
-        {/* Quick Unequip "×" button on hover when equipped */}
-        {isFilled && (
-          <button
-            type="button"
-            onClick={onUnequip}
-            title={`Unequip ${EQUIP_SLOT_LABEL[slot]}`}
-            className="absolute -top-[4px] -right-[4px] flex h-[13px] w-[13px] items-center justify-center rounded-full border border-[#d4b483]/40 bg-black/90 text-[9px] leading-none text-[#a89e8c] opacity-0 transition-opacity hover:border-[#e0a898] hover:text-[#e0a898] group-hover:opacity-100"
-          >
-            ×
-          </button>
-        )}
-      </div>
-
-      {/* Item Name in Brackets Below */}
-      <span
-        className={cn(
-          'mt-[1px] max-w-[62px] truncate text-center text-[7.5px] font-mono tracking-tight transition-colors',
-          isFilled
-            ? 'font-medium text-[#e8ddc8]'
-            : 'text-[#8f8778]/50 group-hover:text-[#8f8778]/80',
-        )}
-      >
-        [{itemName ?? 'None'}]
+            slot={slot} label={itemName} className="h-full w-full p-0.5" iconClassName="h-6 w-6 text-[#e0cfab]" imgClassName="scale-95" />
+          <span aria-hidden="true" className="absolute bottom-0 left-0 h-1.5 w-1.5 rounded-full bg-[#eac87f]" />
+        </> : <SlotIcon slot={slot} className="h-6 w-6 opacity-50" />}
       </span>
-    </div>
-  );
+      <span className="block w-full truncate text-[9px]">{itemName ?? 'Empty'}</span>
+    </button>
+    {equippedId && <button type="button" onClick={onUnequip} aria-label={`Unequip ${EQUIP_SLOT_LABEL[slot]}`}
+      title={`Unequip ${EQUIP_SLOT_LABEL[slot]}`}
+      className="absolute right-0 bottom-5 flex h-5 w-5 items-center justify-center rounded-xs border border-[#d4b483]/35 bg-black/90 text-xs text-[#e0a898] hover:border-[#e0a898] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]">×</button>}
+  </div>;
 }

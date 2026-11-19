@@ -81,8 +81,8 @@ function UnavailableNotice({ manifest }: { manifest: Mo2Manifest | null }) {
     <div className="absolute inset-0 z-[6] flex items-center justify-center px-6">
       <ViewportBackdrop />
       <div className="relative max-w-[420px] border border-[#b56a5a]/32 bg-black/55 px-5 py-4 text-center backdrop-blur-md">
-        <div className="text-[8px] tracking-[0.16em] text-[#dda898]/85">ASSETS UNAVAILABLE</div>
-        <p className="mt-[7px] text-[7.5px] leading-[1.6] tracking-[0.04em] text-[#cbc1af]/72">
+        <div className="text-[10px] font-mono tracking-[0.16em] uppercase text-[#dda898]/90">ASSETS UNAVAILABLE</div>
+        <p className="mt-[7px] text-[11px] leading-[1.6] tracking-[0.04em] text-[#cbc1af]/85">
           {manifest?.sourceLayout === 'pack'
             ? 'The preset pack manifest could not be read. Run the pack sync, then reload.'
             : manifest?.sourceLayout === 'mo2'
@@ -90,7 +90,7 @@ function UnavailableNotice({ manifest }: { manifest: Mo2Manifest | null }) {
               : 'The asset source is not known. Start the app server and reload.'}
         </p>
         {notes.length ? (
-          <div className="mt-[8px] border-t border-[#b56a5a]/22 pt-[6px] text-left text-[6.5px] leading-[1.5] text-[#c08f80]/72">
+          <div className="mt-[8px] border-t border-[#b56a5a]/22 pt-[6px] text-left text-[10px] leading-[1.5] text-[#c08f80]/85">
             {notes.slice(0, 4).map((note) => (
               <div key={note} className="truncate" title={note}>
                 {note}
@@ -114,7 +114,7 @@ function SceneIssue({ issue }: { issue: string }) {
       className="pointer-events-none absolute inset-x-0 bottom-[14%] z-[6] flex justify-center px-6"
     >
       <div className="border border-[#b56a5a]/32 bg-black/55 px-4 py-2 text-center backdrop-blur-md">
-        <div className="text-[7.5px] leading-[1.5] tracking-[0.05em] text-[#dda898]/85">
+        <div className="text-[11px] leading-[1.5] tracking-[0.05em] text-[#dda898]/90 font-mono">
           HEAD UNAVAILABLE — {issue}
         </div>
       </div>
@@ -276,6 +276,7 @@ export function CharacterCreation() {
   const unavailable = manifestSettled && !sceneReady;
 
   const previewMode = useCharacter(s => s.previewMode);
+  const outfitMode = useCharacter(s => s.primaryTab === 'EQUIPMENT');
   const loaded = sceneReady && (assetsReady || revealFailsafe);
 
   return (
@@ -284,7 +285,7 @@ export function CharacterCreation() {
           an early mount would issue legacy asset requests that pack mode must
           never make. */}
       {sceneReady ? (
-        <div className={`absolute inset-y-0 right-0 transition-[left] duration-200 motion-reduce:transition-none ${previewMode ? 'left-0' : 'left-0 min-[1100px]:left-[150px] min-[1500px]:left-[220px]'}`}>
+        <div className={`absolute inset-y-0 right-0 transition-[left] duration-200 motion-reduce:transition-none ${previewMode ? 'left-0' : outfitMode ? 'creator-stage-wardrobe' : 'left-0 min-[1100px]:left-[150px] min-[1500px]:left-[220px]'}`}>
         <WebGLErrorBoundary>
           <CharacterScene
             manifest={resolved}
