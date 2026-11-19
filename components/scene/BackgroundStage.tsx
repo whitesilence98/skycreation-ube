@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
@@ -447,6 +447,59 @@ function CustomGlbScene({ url }: { url: string }) {
 /* ──────────────────────────────────────────────────────────────────────────
    MAIN STAGE ROUTER
    ────────────────────────────────────────────────────────────────────────── */
+/**
+ * The reference stage: a bright radial pool behind the character falling off
+ * to a near-black vignette at the frame edges.
+ *
+ * Values are sampled from the 1920x1080 reference, not guessed — centre
+ * ~#d2d3d8, mid ~#8f9199, corners ~#121216. It renders as a full-screen quad
+ * behind everything, so it costs one draw call and no geometry.
+ */
+function StudioPool() {
+  const material = useMemo(() => new THREE.ShaderMaterial({
+    depthWrite: false,
+    depthTest: false,
+    uniforms: {
+      uCentre: { value: new THREE.Color('#d6d7dc') },
+      uMid: { value: new THREE.Color('#90939c') },
+      uEdge: { value: new THREE.Color('#121216') },
+      uFocus: { value: new THREE.Vector2(0.52, 0.47) },
+    },
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = vec4(position.xy, 0.999, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      uniform vec3 uCentre;
+      uniform vec3 uMid;
+      uniform vec3 uEdge;
+      uniform vec2 uFocus;
+      varying vec2 vUv;
+      void main() {
+        /* Elliptical falloff, wider than tall so the pool hugs a standing
+           figure rather than reading as a spotlight circle. */
+        vec2 d = (vUv - uFocus) * vec2(1.05, 1.45);
+        float r = length(d);
+        float core = smoothstep(0.52, 0.04, r);
+        float halo = smoothstep(1.05, 0.30, r);
+        vec3 colour = mix(uEdge, uMid, halo);
+        colour = mix(colour, uCentre, core * 0.92);
+        gl_FragColor = vec4(colour, 1.0);
+      }
+    `,
+  }), []);
+  useEffect(() => () => material.dispose(), [material]);
+  return (
+    <mesh renderOrder={-1000} frustumCulled={false}>
+      <planeGeometry args={[2, 2]} />
+      <primitive object={material} attach="material" />
+    </mesh>
+  );
+}
+
 export function BackgroundStage({ mode, customUrl }: BackgroundStageProps) {
   const { scene } = useThree();
 
@@ -464,7 +517,9 @@ export function BackgroundStage({ mode, customUrl }: BackgroundStageProps) {
   }, [mode, scene]);
 
   if (mode === 'void') {
-    return <color attach="background" args={['#07070a']} />;
+    /* The pool is the backdrop; no <color> attachment, or it would paint over
+       the quad's edges and turn the vignette flat black again. */
+    return <StudioPool />;
   }
 
   return (

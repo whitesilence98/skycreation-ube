@@ -22,18 +22,18 @@ export function Footer({ manifest }: { manifest: Mo2Manifest | null }) {
           onLostPointerCapture={() => state().endFaceCompare()} onBlur={() => state().endFaceCompare()}
           onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); state().beginFaceCompare(); } }}
           onKeyUp={e => { if (e.key === ' ' || e.key === 'Enter') state().endFaceCompare(); }}>
-          {comparing ? 'Showing original' : 'Hold to compare'}
+          {comparing ? 'Showing last saved point' : 'Hold to compare'}
         </button>
         <button type="button" disabled={comparing} onClick={() => state().resetFaceRegion()}>Reset region</button>
       </> : <span className="creator-footer-hint">Drag to orbit · Scroll to zoom</span>}
     </div>
     <div className="creator-footer-actions">
       <PresetIO manifest={manifest} />
-      <button type="button" className="creator-primary-action" disabled={comparing}
-        onClick={() => {
-          state().applyFaceBaseline(); state().setPreviewMode(true);
-          state().showToast('Preview · face comparison baseline updated');
-        }}>Apply &amp; preview</button>
+        <button type="button" className="creator-primary-action" disabled={comparing}
+          onClick={() => {
+            state().applyFaceBaseline(); state().setPreviewMode(true);
+            state().showToast('Preview on · compare now returns to this point');
+          }}>Preview &amp; set compare point</button>
     </div>
   </footer>;
 }

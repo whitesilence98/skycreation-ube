@@ -1,61 +1,89 @@
 @import 'tailwindcss';
 
-/* Character editor: subdued bronze navigation, one contextual left workspace. */
-.creator-shell { --creator-canvas-offset: 0px; --creator-surface: rgba(12, 12, 13, .92); --creator-text: #e3ddcf; --creator-muted: #b8b0a0; }
+/* Character editor — measured from the reference comp.
+   Palette sampled from the 1920x1080 reference: centre pool #d2d3d8, mid
+   #8f9199, corners #121216, primary button #a08a5f, tiles translucent grey.
+   The stage is dark at the edges with a bright centre, so chrome uses white
+   type with low-opacity dark glass rather than a light theme. */
+.creator-shell {
+  --creator-canvas-offset: 0px;
+  --creator-glass: rgba(28, 30, 34, .46);
+  --creator-glass-strong: rgba(24, 26, 30, .72);
+  --creator-text: #f2f3f5;
+  --creator-muted: rgba(238, 240, 244, .72);
+  --creator-line: rgba(255, 255, 255, .18);
+  --creator-line-soft: rgba(255, 255, 255, .10);
+  --creator-accent: #a08a5f;
+}
 .creator-shell button, .creator-shell input, .creator-shell select, .creator-shell summary { pointer-events: auto; }
-.creator-shell button:focus-visible, .creator-shell summary:focus-visible, .creator-shell input:focus-visible, .creator-shell select:focus-visible { outline: 2px solid var(--hud-gold-bright); outline-offset: 3px; }
-.creator-shell button:disabled { opacity: .4; cursor: not-allowed; }
-.creator-header { position: absolute; inset: 0 0 auto; min-height: 64px; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; background: linear-gradient(to bottom, rgba(7,7,10,.86), transparent); color: var(--creator-text); pointer-events: auto; }
-.creator-wordmark { font-family: var(--font-display); font-size: 22px; letter-spacing: .14em; color: var(--hud-gold); }
-.creator-header-caption { font-size: 12px; color: var(--creator-muted); margin-left: 16px; }
-.creator-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 12px; }
-.creator-header-actions input { width: 112px; padding: 5px 8px; border-bottom: 1px solid var(--hud-line); background: transparent; }
-.creator-header-actions button { padding: 6px 12px; border: 1px solid var(--hud-line); }
-.creator-categories { position: absolute; left: 16px; top: 100px; bottom: 105px; width: 78px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; pointer-events: auto; }
-.creator-category { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; padding: 12px 4px; color: var(--creator-muted); font-size: 11px; border: 1px solid transparent; transition: color 150ms ease, background 150ms ease; }
-.creator-category:hover, .creator-category[aria-pressed="true"] { color: var(--hud-gold-bright); background: rgba(212,180,131,.08); }
-.creator-category[aria-pressed="true"] { border-bottom-color: var(--hud-gold); }
-.creator-editor-toggle { position: absolute; left: 110px; top: 74px; font-size: 11px; padding: 4px 0; color: var(--creator-muted); pointer-events: auto; }
-.creator-editor { position: absolute; top: 122px; bottom: 105px; left: 110px; width: 290px; max-width: calc(100vw - 190px); overflow-y: auto; overflow-x: hidden; pointer-events: auto; color: var(--creator-text); scrollbar-width: thin; scrollbar-color: var(--hud-gold-dim) transparent; }
-.creator-editor-face { display: grid; grid-template-columns: 122px minmax(0, 240px); width: 378px; gap: 16px; overflow: hidden; }
+.creator-shell button:focus-visible, .creator-shell summary:focus-visible, .creator-shell input:focus-visible, .creator-shell select:focus-visible { outline: 2px solid #f0d9a8; outline-offset: 3px; }
+.creator-shell button:disabled { opacity: .45; cursor: not-allowed; }
+.creator-header { position: absolute; inset: 0 0 auto; min-height: 64px; padding: 16px 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; background: none; color: var(--creator-text); pointer-events: auto; text-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.creator-wordmark { font-family: var(--font-ui); font-size: 19px; font-weight: 400; letter-spacing: .01em; color: var(--creator-text); }
+.creator-header-caption { font-size: 12px; color: var(--creator-muted); margin-left: 14px; }
+.creator-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 12px; color: var(--creator-text); }
+.creator-header-actions input { width: 112px; padding: 5px 8px; border: 1px solid var(--creator-line); border-radius: 2px; background: rgba(20,22,26,.42); color: var(--creator-text); }
+.creator-header-actions button { padding: 6px 14px; border: 1px solid var(--creator-line); border-radius: 2px; background: rgba(28,30,34,.42); color: var(--creator-text); transition: background 150ms ease, border-color 150ms ease; }
+.creator-header-actions button:hover { background: rgba(48,52,58,.62); border-color: rgba(255,255,255,.34); }
+.creator-categories { position: absolute; left: 24px; top: 104px; bottom: 112px; width: 76px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; pointer-events: auto; }
+.creator-category { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; padding: 11px 4px; color: var(--creator-muted); font-size: 11px; background: none; border: 1px solid transparent; border-radius: 2px; transition: color 150ms ease, background 150ms ease; }
+.creator-category:hover { color: var(--creator-text); background: rgba(255,255,255,.12); }
+.creator-category[aria-pressed="true"] { color: #fff; background: rgba(255, 255, 255, .24); border-color: rgba(255,255,255,.46); }
+.creator-editor-toggle { position: absolute; left: 116px; top: 74px; font-size: 11px; padding: 4px 0; color: var(--creator-muted); pointer-events: auto; }
+.creator-editor { position: absolute; top: 122px; bottom: 105px; left: 116px; width: 268px; max-width: calc(100vw - 190px); padding: 14px; overflow-y: auto; overflow-x: hidden; pointer-events: auto; color: var(--creator-text); background: linear-gradient(to right, rgba(24,26,30,.62), rgba(24,26,30,.30)); border: 1px solid var(--creator-line-soft); border-left: 0; border-radius: 0 3px 3px 0; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.30) transparent; }
+/* One panel geometry for every category. The face used to add a second
+   navigation column, which made the most slider-heavy category the narrowest
+   track on screen (240px of controls inside a 378px panel) and taught two
+   different models for the same job. The region list is now a chip row on
+   top, exactly the shape already used below 760px, and the controls get the
+   full 290px like every other category. */
+.creator-editor-face { display: flex; flex-direction: column; gap: 14px; }
 .creator-editor[hidden] { display: none; }
-.creator-sublist { overflow-y: auto; min-height: 0; padding-right: 4px; scrollbar-width: thin; }
-.creator-sublist h2, .creator-controls h2 { font-family: var(--font-display); font-size: 15px; color: var(--creator-text); margin: 0 0 20px; font-weight: 400; }
-.creator-sublist button { display: block; width: 100%; text-align: left; padding: 9px 8px; font-size: 12px; color: var(--creator-muted); border-bottom: 1px solid transparent; }
-.creator-sublist button:hover { color: var(--creator-text); }
-.creator-sublist button[aria-pressed="true"] { color: var(--hud-gold-bright); background: rgba(212,180,131,.09); border-bottom-color: var(--hud-line); }
+.creator-sublist { display: flex; flex-wrap: wrap; gap: 6px; min-height: 0; }
+.creator-sublist h2 { width: 100%; margin: 0 0 4px; }
+.creator-sublist button { width: auto; padding: 6px 10px; font-size: 12px; color: var(--creator-muted); background: rgba(255,255,255,.10); border: 1px solid transparent; border-radius: 2px; }
+.creator-sublist button:hover { color: var(--creator-text); background: rgba(255,255,255,.20); }
+.creator-sublist button[aria-pressed="true"] { color: #fff; background: rgba(255, 255, 255, .26); border-color: rgba(255,255,255,.44); }
+.creator-sublist h2, .creator-controls h2 { font-family: var(--font-ui); font-size: 14px; font-weight: 500; color: var(--creator-text); margin: 0 0 16px; letter-spacing: .01em; }
 .creator-editor > *, .creator-controls > *, .creator-library > * { min-width: 0; max-width: 100%; }
 .creator-controls { min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 0 8px 20px 0; scrollbar-width: thin; }
 .creator-hint { font-size: 11px; line-height: 1.6; color: var(--creator-muted); margin-bottom: 14px; }
-.creator-details { padding: 14px 0; border-top: 1px solid var(--hud-line-soft); }
+.creator-details { padding: 14px 0; border-top: 1px solid var(--creator-line-soft); }
 .creator-details summary { cursor: pointer; font-size: 12px; color: var(--creator-text); padding: 4px 0; }
 .creator-inline-options { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-.creator-inline-options button { padding: 5px 8px; border-bottom: 1px solid var(--hud-line); font-size: 11px; color: var(--creator-muted); }
-.creator-inline-options button[aria-pressed="true"] { color: var(--hud-gold-bright); border-color: var(--hud-gold); }
+.creator-inline-options button { padding: 5px 10px; background: rgba(255,255,255,.10); border: 1px solid transparent; border-radius: 2px; font-size: 11px; color: var(--creator-muted); }
+.creator-inline-options button[aria-pressed="true"] { color: #fff; background: rgba(255,255,255,.26); border-color: rgba(255,255,255,.44); }
 .creator-check { display: flex; align-items: center; gap: 8px; margin: 14px 0; font-size: 12px; }
-.creator-check input { accent-color: var(--hud-gold); }
+.creator-check input { accent-color: var(--creator-accent); }
 .creator-library { min-width: 0; padding-right: 6px; }
 /* Existing asset browsers stay functional; quiet only their enclosing presentation. */
 .creator-library > div > div:first-child { border-color: transparent; box-shadow: none; }
-.creator-library [class*="text-[8.5px]"], .creator-library [class*="text-[9px]"], .creator-library [class*="text-[9.5px]"] { font-size: 11px; }
+/* PRODUCT.md sets a 10px floor. The first three rewrites caught the common
+   utilities; 8px / 7.5px / 7px in the outfit tiles slipped through, so the
+   floor is applied to every sub-10px utility the library actually uses. */
+.creator-library [class*="text-[7px]"], .creator-library [class*="text-[7.5px]"],
+.creator-library [class*="text-[8px]"], .creator-library [class*="text-[8.5px]"],
+.creator-library [class*="text-[9px]"], .creator-library [class*="text-[9.5px]"] { font-size: 10px; }
 .creator-library [class*="shadow-"] { box-shadow: none; }
-.creator-style-tabs { display: flex; flex-wrap: wrap; gap: 6px 12px; padding-bottom: 18px; }
-.creator-style-tabs button { font-size: 12px; color: var(--creator-muted); padding-bottom: 5px; border-bottom: 1px solid transparent; }
-.creator-style-tabs button[aria-pressed="true"] { color: var(--hud-gold-bright); border-bottom-color: var(--hud-gold); }
-.creator-tools { position: absolute; right: 12px; top: 110px; bottom: 105px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; pointer-events: auto; width: 62px; }
-.creator-tools button { display: flex; align-items: center; flex-direction: column; gap: 5px; color: var(--creator-muted); font-size: 10px; padding: 8px 0; }
-.creator-tools button:hover, .creator-tools button[aria-pressed="true"] { color: var(--hud-gold-bright); }
-.creator-tool-drawer { position: absolute; top: 95px; bottom: 105px; right: 90px; width: 276px; max-width: calc(100vw - 110px); overflow-y: auto; pointer-events: auto; scrollbar-width: thin; z-index: 50; }
-.creator-footer { position: absolute; inset: auto 0 0; min-height: 80px; padding: 18px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: linear-gradient(to top, rgba(7,7,10,.96), rgba(7,7,10,.72)); pointer-events: auto; color: var(--creator-text); font-size: 12px; }
-.creator-footer-context, .creator-footer-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.creator-footer button { min-height: 32px; padding: 4px 2px; }
+.creator-style-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 18px; }
+.creator-style-tabs button { font-size: 12px; color: var(--creator-muted); padding: 6px 10px; background: rgba(255,255,255,.10); border: 1px solid transparent; border-radius: 2px; }
+.creator-style-tabs button[aria-pressed="true"] { color: #fff; background: rgba(255, 255, 255, .26); border-color: rgba(255,255,255,.44); }
+.creator-tools { position: absolute; right: 20px; top: 110px; bottom: 105px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; pointer-events: auto; width: 62px; }
+.creator-tools button { display: flex; align-items: center; flex-direction: column; gap: 5px; color: var(--creator-muted); font-size: 10px; padding: 9px 0; border-radius: 50%; transition: background 150ms ease, color 150ms ease; }
+.creator-tools button:hover { color: var(--creator-text); background: rgba(255,255,255,.16); }
+.creator-tools button[aria-pressed="true"] { color: #fff; background: rgba(255, 255, 255, .26); }
+.creator-tool-drawer { position: absolute; top: 95px; bottom: 105px; right: 96px; width: 288px; max-width: calc(100vw - 116px); padding: 10px; overflow-y: auto; pointer-events: auto; scrollbar-width: thin; z-index: 50; background: var(--creator-glass-strong); border: 1px solid var(--creator-line-soft); border-radius: 3px; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.creator-footer { position: absolute; inset: auto 0 0; min-height: 84px; padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: linear-gradient(to top, rgba(8,9,12,.90), rgba(8,9,12,.42) 58%, transparent); pointer-events: auto; color: var(--creator-text); font-size: 12px; }
+.creator-footer-context, .creator-footer-actions { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.creator-footer button { min-height: 34px; padding: 6px 4px; color: var(--creator-text); }
+.creator-footer button:not(.creator-primary-action):hover { color: #fff; text-decoration: underline; text-underline-offset: 4px; }
 .creator-footer-hint { color: var(--creator-muted); font-size: 11px; }
-.creator-footer button.creator-primary-action { background: var(--hud-gold); color: #181510; padding: 10px 22px; min-height: 40px; }
-.creator-toast { position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 10px 16px; background: var(--creator-surface); color: var(--creator-text); font-size: 12px; border: 1px solid var(--hud-line); }
+.creator-footer button.creator-primary-action { background: var(--creator-accent); color: #17140f; padding: 11px 26px; min-height: 42px; border-radius: 2px; font-weight: 600; }
+.creator-footer button.creator-primary-action:hover { background: #b59c6b; }
+.creator-toast { position: absolute; bottom: 104px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 10px 18px; background: rgba(24,26,30,.94); color: #f2f3f5; font-size: 12px; border: 1px solid var(--creator-line); border-radius: 3px; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
 @media (min-width: 1100px) { .creator-shell { --creator-canvas-offset: 150px; } }
 @media (min-width: 1500px) { .creator-shell { --creator-canvas-offset: 220px; } }
 @media (max-width: 1100px) {
-  .creator-editor-face { grid-template-columns: 100px minmax(0, 205px); width: 320px; gap: 12px; }
   .creator-footer { padding: 12px 16px; font-size: 11px; }
   .creator-footer-context, .creator-footer-actions { gap: 8px; }
 }
@@ -67,18 +95,17 @@
   .creator-categories { left: 10px; top: 80px; bottom: 150px; width: 58px; gap: 2px; }
   .creator-category { font-size: 10px; padding: 10px 2px; }
   .creator-editor-toggle { left: 82px; top: 75px; }
-  .creator-editor { left: 78px; top: 105px; bottom: 236px; width: calc(100vw - 96px); max-width: 340px; background: rgba(10,10,12,.92); padding: 14px; overflow-x: hidden; }
-  .creator-editor-face { grid-template-columns: 1fr; gap: 16px; overflow-y: auto; }
-  .creator-sublist { display: flex; flex-wrap: wrap; gap: 6px; overflow: visible; }
+  .creator-editor { left: 78px; top: 105px; bottom: 236px; width: calc(100vw - 96px); max-width: 340px; background: var(--creator-glass-strong); padding: 14px; overflow-x: hidden; }
+  .creator-editor-face { gap: 16px; overflow-y: auto; }
+  .creator-sublist { gap: 6px; overflow: visible; }
   .creator-sublist h2 { width: 100%; margin-bottom: 4px; }
-  .creator-sublist button { width: auto; padding: 6px; }
+  .creator-sublist button { padding: 6px 8px; }
   .creator-controls { overflow: visible; }
-  .creator-tools { top: auto; bottom: 112px; right: 12px; left: 78px; width: auto; flex-direction: row; flex-wrap: wrap; justify-content: space-around; gap: 4px; background: var(--creator-surface); z-index: 45; padding: 8px 6px; overflow: visible; }
-  .creator-tools button { flex-direction: column; gap: 3px; flex: 1 1 56px; padding: 2px 0; min-width: 0; font-size: 9px; }
-  .creator-tools button span { font-size: 9px; }
+  .creator-tools { top: auto; bottom: 112px; right: 12px; left: 78px; width: auto; flex-direction: row; flex-wrap: wrap; justify-content: space-around; gap: 4px; background: var(--creator-glass-strong); border: 1px solid var(--creator-line-soft); border-radius: 3px; z-index: 45; padding: 8px 6px; overflow: visible; }
+  .creator-tools button { flex-direction: column; gap: 3px; flex: 1 1 56px; padding: 2px 0; min-width: 0; font-size: 10px; }
+  .creator-tools button span { font-size: 10px; }
   .creator-tools svg { width: 16px; height: 16px; }
-  .creator-tool-drawer { right: 16px; left: 78px; width: auto; top: 95px; bottom: 158px; max-width: 340px; background: var(--creator-surface); }
-  .creator-footer { min-height: 108px; flex-wrap: wrap; padding: 10px 14px; }
+  .creator-tool-drawer { right: 16px; left: 78px; width: auto; top: 95px; bottom: 158px; max-width: 340px; background: var(--creator-glass-strong); }  .creator-footer { min-height: 108px; flex-wrap: wrap; padding: 10px 14px; }
   .creator-footer-context, .creator-footer-actions { width: 100%; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
   .creator-footer-context button, .creator-footer-actions button { min-height: 28px; font-size: 11px; }
   .creator-footer button.creator-primary-action { padding: 8px 12px; min-height: 30px; }

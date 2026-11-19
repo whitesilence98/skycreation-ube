@@ -64,7 +64,7 @@ export function BracketSlider({
           {label} [{readout}]
         </span>
       </div>
-      <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#736b5e]">
+      <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#8f8576]">
         <span className="select-none text-[#8f8576] font-light">[</span>
         <div
           ref={trackRef}

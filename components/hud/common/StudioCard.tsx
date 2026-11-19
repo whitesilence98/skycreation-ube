@@ -114,7 +114,7 @@ export function StudioCard({
 
         {/* Footer */}
         {hasFooter && (
-          <div className="flex items-center justify-between border-t border-[#463a2e]/50 pt-2 text-[9px] font-mono tracking-wider text-[#736b5e]">
+          <div className="flex items-center justify-between border-t border-[#463a2e]/50 pt-2 text-[10px] font-mono tracking-wider text-[#8f8576]">
             <div className="flex items-center gap-[4px]">{footerLeading}</div>
             <div className="flex items-center gap-1.5">
               {footerTrailing && <span>{footerTrailing}</span>}

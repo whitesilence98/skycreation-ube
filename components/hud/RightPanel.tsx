@@ -14,7 +14,7 @@ export function RightPanel({ manifest: _manifest, onClose }: { manifest?: Mo2Man
         {{ translate: 'Move', rotate: 'Rotate', scale: 'Scale' }[value]}
       </button>)}
     </div>
-    <label className="creator-check"><input type="checkbox" checked={showMesh}
+    <label className="creator-check" htmlFor="creator-show-mesh"><input id="creator-show-mesh" type="checkbox" checked={showMesh}
       onChange={e => useCharacter.getState().setShowMesh(e.target.checked)} />Show face mesh</label>
     <p className="creator-hint">Handles reshape whole regions. Independent left/right sculpting is not connected yet.</p>
     {onClose && <button type="button" onClick={onClose}>Close handles</button>}

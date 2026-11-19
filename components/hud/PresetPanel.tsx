@@ -39,6 +39,11 @@ export function PresetPanel({ manifest: _manifest }: PresetPanelProps) {
   };
 
   const handleSelectPreset = (card: PresetCard) => {
+    if (currentPreset === card.id) return;
+    /* Applying a preset replaces every face value and clears its history, so a
+       stray click is unrecoverable. Ask once, and only when there is something
+       to lose: a fresh visit to the same preset stays a single click. */
+    if (!window.confirm(`Apply “${card.label}”? This replaces the current face and clears undo history.`)) return;
     applyPreset(card.id as any);
     setName(card.label.toUpperCase());
     setAssets({ preset: undefined });

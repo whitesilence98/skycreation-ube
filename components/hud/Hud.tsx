@@ -52,13 +52,20 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
     }
     setEditorOpen(true);
     // Explicit category selection only; never reframe on reload or while editing a slider.
-    state().setCameraFraming(id === 'body' || id === 'outfit' ? 'body' : id === 'face' ? 'face' : 'bust');
+    /* Every category frames the standing figure, matching the reference's
+       full-body preview. FACE keeps the face framing because that is the only
+       category whose controls act on the face at slider scale. */
+    state().setCameraFraming(id === 'face' ? 'face' : 'body');
   };
   const closeTool = () => state().setWorkspace('edit');
   useEffect(() => {
     if (toolOpen) {
+      /* Focus the drawer container itself (tabIndex -1), never its first
+         control: in CameraPanel that is the destructive RESET, so a keyboard
+         user pressing Enter on arrival would wipe their framing before
+         reading the panel title. */
       if (!previousTool.current) toolTrigger.current = document.activeElement as HTMLElement;
-      tools.current?.querySelector<HTMLElement>('button, input, select')?.focus({ preventScroll: true });
+      tools.current?.focus({ preventScroll: true });
     } else if (previousTool.current && toolTrigger.current?.isConnected) toolTrigger.current.focus({ preventScroll: true });
     previousTool.current = toolOpen;
   }, [toolOpen, workspace]);
@@ -88,7 +95,8 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
     <TopBar manifest={manifest} />
     {!preview && <>
       <CategoryRail selected={category} onSelect={selectCategory} />
-      <button type="button" className="creator-editor-toggle" aria-controls="creator-editor" aria-expanded={editorOpen}
+      <button type="button" className="creator-editor-toggle" aria-controls="creator-editor"
+        aria-expanded={editorOpen && !toolOpen} hidden={toolOpen}
         onClick={() => setEditorOpen(v => !v)}>{editorOpen ? 'Hide panel' : 'Show panel'}</button>
       <aside id="creator-editor" className={`creator-editor ${category === 'face' ? 'creator-editor-face' : ''}`}
         aria-label={`${CATEGORY_LABELS[category]} editor`} hidden={!editorOpen || toolOpen} inert={compare}>
@@ -96,7 +104,7 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
           : <LeftPanel manifest={manifest} category={category} />}
       </aside>
       <ToolStrip />
-      {toolOpen && <aside ref={tools} className="creator-tool-drawer" aria-label="Studio properties">
+      {toolOpen && <aside ref={tools} className="creator-tool-drawer" aria-label="Studio properties" tabIndex={-1}>
         {workspace === 'camera' && <CameraPanel onClose={closeTool} />}
         {workspace === 'hdr' && <HdrPanel onClose={closeTool} />}
         {workspace === 'graphics' && <GraphicsPanel onClose={closeTool} />}
