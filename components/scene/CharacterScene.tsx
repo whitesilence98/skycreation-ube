@@ -316,12 +316,15 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
     <>
       <BackgroundStage mode={backgroundMode} customUrl={customBackgroundUrl} />
       {backgroundMode === 'void' && (
+        /* Fog colour matches the pool's outer value: a near-black fog over the
+           grey pool pulled the character's edges toward a colour the backdrop
+           no longer contains. */
         <fog
           attach="fog"
           args={
             bodyFraming
-              ? ['#07070a', 4.5, 7]
-              : ['#07070a', hair ? 2.1 : 1.35, hair ? 3.65 : 2.9]
+              ? ['#121216', 4.5, 7]
+              : ['#121216', hair ? 2.1 : 1.35, hair ? 3.65 : 2.9]
           }
         />
       )}
@@ -500,7 +503,9 @@ export function CharacterScene({ manifest, onAssetsReady, onIssue }: CharacterSc
       camera={{ fov: 27, near: 0.1, far: 8, position: [0, CAM.y, CAM.z] }}
       onCreated={({ gl }) => {
         gl.outputColorSpace = THREE.SRGBColorSpace;
-        gl.setClearColor('#07070a', 1);
+        /* Matches the studio pool's outer edge, so a frame cleared before the
+           backdrop quad draws does not flash black. */
+        gl.setClearColor('#121216', 1);
         /* The composer issues several internal renders per frame; with the
            default auto-reset the counters would only describe the last one.
            StatsProbe reads and resets them once per window instead. */

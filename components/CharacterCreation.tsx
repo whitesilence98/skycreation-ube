@@ -28,9 +28,13 @@ const CharacterScene = dynamic(
 function ViewportBackdrop() {
   return (
     <>
-      <div className="absolute inset-0 bg-[#07070a]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_42%,#241a12_0%,#0d0b09_46%,#060608_100%)]" />
-      <div className="absolute left-1/2 top-1/2 h-[420px] w-[320px] -translate-x-1/2 -translate-y-1/2 animate-pulse rounded-full bg-[#d4b483]/[0.04] blur-3xl" />
+      {/* The same pool the 3D stage draws, so the JS-chunk wait, the asset
+          wait and the rendered frame read as one continuous backdrop. The
+          previous warm brown-black gradient was the visible "black before
+          loading" the user reported. */}
+      <div className="absolute inset-0 bg-[#1a1b1f]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_62%_58%_at_52%_47%,#d2d3d8_0%,#b9bbc2_22%,#8f9199_46%,#4b4d54_72%,#121216_100%)]" />
+      <div className="absolute left-1/2 top-1/2 h-[420px] w-[320px] -translate-x-1/2 -translate-y-1/2 animate-pulse rounded-full bg-white/[0.06] blur-3xl" />
     </>
   );
 }
@@ -272,7 +276,7 @@ export function CharacterCreation() {
   const loaded = sceneReady && (assetsReady || revealFailsafe);
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden bg-[#07070a]">
+    <main className="relative h-dvh w-full overflow-hidden bg-[#1a1b1f]">
       {/* Nothing is mounted before the manifest settles and names its source:
           an early mount would issue legacy asset requests that pack mode must
           never make. */}
