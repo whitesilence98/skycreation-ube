@@ -24,6 +24,7 @@ import { convertUrl } from '@/lib/mo2/client';
 import { loadMask, compositeHeadAtlas, type OverlayInput } from '@/lib/head/overlayLayers';
 import { SLIDER_DEFS, REGIONS_BY_ID, type RegionId } from '@/lib/regions';
 import { anatomySliderBank } from '@/lib/anatomy/bind';
+import { bodyScaleFactors } from '@/lib/anatomy/bodyScale';
 import { useCharacter } from '@/lib/store';
 import { MeshOverlay } from '@/components/scene/MeshOverlay';
 import { FaceGizmo } from '@/components/scene/FaceGizmo';
@@ -299,6 +300,17 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
      all resolve their weights to the same `THREE.Bone` objects — a pose must
      move them together, and separate bone sets would drift apart. */
   const skeletonRegistry = useMemo(() => new SkeletonRegistry('head'), []);
+  const characterRef = useRef<THREE.Group>(null);
+  const applyBodyScale = useCallback(() => {
+    const result = applySkeletonWeight(skeletonRegistry, weight, bodyScaleFactors(useCharacter.getState().anatomy));
+    if (characterRef.current) {
+      characterRef.current.position.y = result.footDrop;
+      characterRef.current.updateMatrixWorld(true);
+    }
+    if (useCharacter.getState().characterHeight !== result.height) {
+      useCharacter.setState({ characterHeight: result.height });
+    }
+  }, [skeletonRegistry, weight]);
   const bodyPoseId = useCharacter((s) => s.bodyPoseId);
   const poseIntensity = useCharacter((s) => s.poseIntensity);
   /* Unweighted parts are routed through `SkinnedPart` (which auto-rigs them)
@@ -463,7 +475,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     const builtin = BODY_POSES.find((p) => p.id === bodyPoseId);
     if (builtin) {
       applyBodyPose(skeletonRegistry, builtin, poseIntensity);
-      applySkeletonWeight(skeletonRegistry, weight);
+      applyBodyScale();
       finish();
       return;
     }
@@ -474,14 +486,36 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
       if (cancelled) return;
       if (track) applyPoseTrack(skeletonRegistry, track, poseIntensity);
       else applyBodyPose(skeletonRegistry, BODY_POSES[0], poseIntensity);
-      applySkeletonWeight(skeletonRegistry, weight);
+      applyBodyScale();
       finish();
     });
 
     return () => {
       cancelled = true;
     };
-  }, [skeletonRegistry, bodyPoseId, poseIntensity, rig, weight, headBuild, bodyMesh, handsMesh, feetMesh, clothingResource.mesh, hairParts, onDirty, syncFollow, applyFollow]);
+  }, [skeletonRegistry, bodyPoseId, poseIntensity, rig, weight, headBuild, bodyMesh, handsMesh, feetMesh, clothingResource.mesh, hairParts, onDirty, syncFollow, applyFollow, applyBodyScale]);
+
+  useEffect(() => {
+    const apply = () => {
+      if (!skeletonRegistry.byName.size) return;
+      applyBodyScale();
+      const { relTransform, followHead } = syncFollow();
+      applyFollow(relTransform, followHead);
+    };
+    apply();
+    let frame = 0;
+    const unsubscribe = useCharacter.subscribe((state, prev) => {
+      if (state.anatomy === prev.anatomy || frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        apply();
+      });
+    });
+    return () => {
+      unsubscribe();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [applyBodyScale, skeletonRegistry, syncFollow, applyFollow]);
 
   /* Dev-only: the paired-bone naming bug left every eyebrow and cheek bone
      unresolvable for the entire life of this app and nothing logged. Cheap
@@ -1261,7 +1295,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     packMode && state !== 'loaded' ? flatGrey : material;
 
   return (
-    <group name="character" visible={visible}>
+    <group ref={characterRef} name="character" visible={visible}>
       {/* The skeleton is a scene graph, not a drawn object: bones are visible
           only as `SkinnedMesh` inputs.
 

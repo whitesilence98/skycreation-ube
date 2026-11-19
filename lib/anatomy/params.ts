@@ -1,4 +1,5 @@
 import { hasAnatomyBinding } from '@/lib/anatomy/bind';
+import { hasBodyScale } from '@/lib/anatomy/bodyScale';
 
 export const ANATOMY_GROUPS = {
   face: 'Face & Jawline', eyes: 'Eyes', brows: 'Eyebrows', nose: 'Nose',
@@ -14,9 +15,15 @@ type Param = {
 };
 function param<const Id extends string>(id: Id, group: AnatomyGroupId, label: string,
   target: Param['target'] = 'morph', bilateral = false,
-  min = 0, max = 100, initial = 50) {
-  return { id, group, label, target: hasAnatomyBinding(id) ? 'rig' as const : target, bilateral, min, max, default: initial,
-    step: 1, status: hasAnatomyBinding(id) ? 'wired' as const : 'stored-only' as const };
+  min = 0, max = 100, initial = 50): Param & { id: Id } {
+  /* A value is implemented if it drives a facial rig binding or a skeleton
+     bone scale (`lib/anatomy/bodyScale.ts`); both are structural, live edits.
+     The explicit return type above breaks the inference cycle: `AnatomyParamId`
+     is derived from these ids, and the predicates consult tables typed with
+     that same union. */
+  const implemented: boolean = hasAnatomyBinding(id) || hasBodyScale(id);
+  return { id, group, label, target: implemented ? 'rig' as const : target, bilateral, min, max, default: initial,
+    step: 1, status: implemented ? 'wired' as const : 'stored-only' as const };
 }
 
 /** Broad bindings reuse existing rig fields; precise micro-shapes remain stored-only. */
@@ -63,6 +70,7 @@ export const ANATOMY_PARAMS = [
   param('ear.size', 'ears', 'Ear size', 'morph', true),
   param('ear.angle', 'ears', 'Ear angle', 'rig', true),
   param('body.heightCm', 'body', 'Standing height (cm)', 'rig', false, 150, 200, 170),
+  param('body.headScale', 'body', 'Head size'),
   param('body.muscleDefinition', 'body', 'Muscle definition', 'material'),
   param('body.fat', 'body', 'Body fat'),
   param('body.shoulderWidth', 'body', 'Shoulder width'),

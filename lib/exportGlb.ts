@@ -19,6 +19,12 @@ export interface ExportOptions {
 }
 
 export interface ExportTransform {
+  /** Ground elevation, **added** to whatever translation the root node already
+   *  carries. The root node is the `character` wrapper, and the body-scale
+   *  feature lifts it (`character.position.y = footDrop`) so the feet stay on
+   *  the preview floor — that lift is already written by the exporter and must
+   *  not be discarded. `computeGroundOffset` measured the world position the
+   *  lift produced, so adding the two yields soles at Y=0. */
   translation?: [number, number, number];
   rotation?: [number, number, number, number];
   rootName?: string;
@@ -76,7 +82,19 @@ export function patchGlbIor(
     }
     if (rootNode) {
       if (transform.translation) {
-        rootNode.translation = transform.translation;
+        /* ADD to the exporter's own root translation, never replace it: the
+           `character` wrapper is lifted by `footDrop` in the live scene so the
+           soles sit on the preview floor, and GLTFExporter already serialised
+           that lift. `computeGroundOffset` measured the world minima *after*
+           the lift, so the correct soles-at-0 translation is the lift plus the
+           measured offset. Overwriting dropped the lift and sank the character
+           by `footDrop`. */
+        const existing = (rootNode.translation as number[] | undefined) ?? [0, 0, 0];
+        rootNode.translation = [
+          (existing[0] ?? 0) + transform.translation[0],
+          (existing[1] ?? 0) + transform.translation[1],
+          (existing[2] ?? 0) + transform.translation[2],
+        ];
       }
       if (transform.rotation) {
         rootNode.rotation = transform.rotation;

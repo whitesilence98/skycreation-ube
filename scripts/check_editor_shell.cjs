@@ -18,7 +18,18 @@ const ui = load('lib/faceControls'), anatomy = load('lib/anatomy/params');
 const regions = load('lib/regions');
 const displayed = regions.REGIONS.flatMap(r => ui.faceControlIds(r.id));
 assert.equal(displayed.length, new Set(displayed).size);
-assert.equal(JSON.stringify([...displayed].sort()), JSON.stringify(anatomy.ANATOMY_PARAMS.filter(p => p.status === 'wired').map(p => p.id).sort()));
+/* Only face-section groups live in the face control column. Body params are
+   wired too (skeleton scale) but their home is the Body tab, so they must not
+   appear here — nor may the check demand that they do. */
+const faceGroups = new Set(ui.FACE_SECTIONS.flatMap(s => s.groups));
+assert.equal(JSON.stringify([...displayed].sort()), JSON.stringify(anatomy.ANATOMY_PARAMS
+  .filter(p => p.status === 'wired' && faceGroups.has(p.group)).map(p => p.id).sort()));
+/* Nothing from the body group leaks into a face section's controls. */
+for (const section of ui.FACE_SECTIONS) {
+  for (const id of ui.faceControlIds(section.region ?? 'nose')) {
+    assert.notEqual(anatomy.ANATOMY_BY_ID[id].group, 'body', id + ' leaked into the face column');
+  }
+}
 for (const section of ui.FACE_SECTIONS) {
   for (const id of ui.storedFaceControlIds(section.id)) assert.equal(anatomy.ANATOMY_BY_ID[id].status, 'stored-only');
 }

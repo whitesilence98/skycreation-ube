@@ -35,7 +35,7 @@ export function LeftPanel({ manifest, category }: { manifest: Mo2Manifest | null
     {category === 'preset' && <PresetPanel manifest={manifest} />}
     {category === 'hair' && <>
       <HairStyles manifest={manifest} />
-      <details className="creator-details"><summary>Color &amp; finish</summary><HairProperties /></details>
+      <details className="creator-details"><summary>Fit, color &amp; finish</summary><HairProperties /></details>
     </>}
     {category === 'body' && <>
       <BodyPanel manifest={manifest} />

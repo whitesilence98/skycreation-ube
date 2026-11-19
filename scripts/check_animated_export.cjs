@@ -69,7 +69,7 @@ function load(name) {
   return module.exports;
 }
 const anim = load('lib/character/animation');
-const { exportCharacterScene } = load('lib/exportGlb');
+const { exportCharacterScene, createHeadSkinnedMesh } = load('lib/exportGlb');
 const { GLTFExporter } = require('three-stdlib');
 
 /** Two-bone chain with a distinct rest and posed state. */
@@ -380,6 +380,134 @@ function accessorValues(json, bin, index) {
   assertPreviewIntact(overlap, 'after overlap');
 
   console.log(`scene export: success/pre-parse-failure/overlap restore preview (pre-parse threw=${threw})`);
+
+  /* ── scaled head bone: export == preview, head size applied exactly once ──
+     The body-scale feature scales `NPC Head [Head]` and drives `SkyrimHeadRoot`
+     from the scaled head world matrix (follow). `createHeadSkinnedMesh` bakes
+     each facial vertex via `getVertexPosition`, whose attached bind cancels the
+     rig root — leaving head-LOCAL positions — then binds them to the head bone
+     with the *rest* inverse. The exported world position is therefore
+     `headWorld · restHead⁻¹ · local`, which is exactly the preview's
+     `follow · local`. If the baked positions already carried the scale this
+     would double it; assert they do not. */
+  {
+    const scene = new THREE.Scene();
+    const character = new THREE.Group();
+    character.name = 'character';
+    scene.add(character);
+    const skeletonGroup = new THREE.Group();
+    skeletonGroup.name = 'SkeletonRoot';
+    character.add(skeletonGroup);
+    const hips = new THREE.Bone();
+    hips.name = 'NPC COM [COM ]';
+    const head = new THREE.Bone();
+    head.name = 'NPC Head [Head]';
+    head.position.set(0, 1.2, 0);
+    hips.add(head);
+    skeletonGroup.add(hips);
+    const restHead = new THREE.Matrix4().makeTranslation(0, 1.2, 0);
+    hips.userData.__boneRest = { world: new THREE.Matrix4() };
+    head.userData.__boneRest = { world: restHead.clone() };
+
+    const headRoot = new THREE.Group();
+    headRoot.name = 'SkyrimHeadRoot';
+    character.add(headRoot);
+    const facialBone = new THREE.Bone();
+    facialBone.name = 'Nose';
+    headRoot.add(facialBone);
+    const faceGeo = new THREE.BufferGeometry();
+    faceGeo.setAttribute('position', new THREE.BufferAttribute(
+      new Float32Array([0, 0, 0.1, 0.05, 0, 0.1, 0, 0.2, 0.1]), 3));
+    faceGeo.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint16Array(12), 4));
+    faceGeo.setAttribute('skinWeight', new THREE.BufferAttribute(
+      new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]), 4));
+    const face = new THREE.SkinnedMesh(faceGeo, new THREE.MeshStandardMaterial());
+    face.name = 'FemaleHead_hph';
+    headRoot.add(face);
+    character.updateMatrixWorld(true);
+    face.bind(new THREE.Skeleton([facialBone]));
+    character.updateMatrixWorld(true);
+
+    const SCALE = 1.3; // head size slider extreme
+    head.scale.set(SCALE, SCALE, SCALE);
+    character.updateMatrixWorld(true);
+    /* Mirror `syncFollow`: rig root = group⁻¹ · headWorld · restHead⁻¹. */
+    const follow = skeletonGroup.matrixWorld.clone().invert()
+      .multiply(head.matrixWorld).multiply(restHead.clone().invert());
+    headRoot.matrixAutoUpdate = false;
+    headRoot.matrix.copy(follow);
+    headRoot.updateMatrixWorld(true);
+    character.updateMatrixWorld(true);
+    face.updateMatrixWorld(true); // refresh attached bindMatrixInverse
+
+    const preview = [0, 1, 2].map((i) =>
+      face.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(face.matrixWorld));
+
+    const exported = createHeadSkinnedMesh(face, 'Face', hips, head, restHead.clone());
+    /* GLTF skin transform: jointWorld · inverseBindMatrix = headWorld · restHead⁻¹. */
+    const skin = new THREE.Matrix4().multiplyMatrices(head.matrixWorld, restHead.clone().invert());
+    const pos = exported.geometry.getAttribute('position');
+    const exportedWorld = [0, 1, 2].map((i) =>
+      new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(skin));
+    for (let i = 0; i < 3; i++) {
+      assert.ok(exportedWorld[i].distanceTo(preview[i]) < 1e-6,
+        `scaled head vertex ${i} exports where the preview draws it (no double scale)`);
+    }
+    const spread = exportedWorld[0].distanceTo(exportedWorld[1]);
+    assert.ok(Math.abs(spread - 0.05 * SCALE) < 1e-6,
+      `head size applied exactly once (spread ${spread.toFixed(6)}, want ${(0.05 * SCALE).toFixed(6)})`);
+    console.log(`scaled head: export==preview at S=${SCALE}, single scale`);
+  }
+
+  /* ── a lifted wrapper (body-scale foot drop) must stay grounded ──────────
+     The scale feature lifts `character.position.y` by the foot-drop so the
+     soles sit on the preview floor. The exporter serialises that lift as the
+     root node's translation; `patchGlbIor` must ADD the measured ground offset
+     to it, not overwrite it, or the exported figure sinks by the lift. */
+  {
+    const scene = new THREE.Scene();
+    const character = new THREE.Group();
+    character.name = 'character';
+    const LIFT = 0.2;
+    character.position.y = LIFT;
+    scene.add(character);
+    const skeletonGroup = new THREE.Group();
+    skeletonGroup.name = 'SkeletonRoot';
+    character.add(skeletonGroup);
+    const hips = new THREE.Bone();
+    hips.name = 'NPC COM [COM ]';
+    const head = new THREE.Bone();
+    head.name = 'NPC Head [Head]';
+    head.position.set(0, 1, 0);
+    hips.add(head);
+    skeletonGroup.add(hips);
+    hips.userData.__boneRest = { world: new THREE.Matrix4() };
+    head.userData.__boneRest = { world: new THREE.Matrix4().makeTranslation(0, 1, 0) };
+
+    /* Character-local sole; + LIFT places it at world -1.476 = the floor. */
+    const LOCAL_MIN = -1.676;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(
+      new Float32Array([0, LOCAL_MIN, 0, 0, LOCAL_MIN + 1, 0, 1, LOCAL_MIN, 0]), 3));
+    geo.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint16Array(12), 4));
+    geo.setAttribute('skinWeight', new THREE.BufferAttribute(
+      new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]), 4));
+    const body = new THREE.SkinnedMesh(geo, new THREE.MeshStandardMaterial());
+    body.name = 'Body';
+    body.bind(new THREE.Skeleton([hips, head], anim.restInverses([hips, head])), new THREE.Matrix4());
+    character.add(body);
+    character.updateMatrixWorld(true);
+
+    lastBlob = null;
+    await exportCharacterScene(scene, 'Lifted', { animated: false });
+    const { json } = await parseGlb(await lastBlob.arrayBuffer());
+    const rootNode = json.nodes[json.scenes[json.scene ?? 0].nodes[0]];
+    const rootY = (rootNode.translation ?? [0, 0, 0])[1];
+    const soleY = rootY + LOCAL_MIN;
+    assert.ok(rootY > LIFT, 'ground offset is ADDED to the wrapper lift, not replacing it');
+    assert.ok(Math.abs(soleY) < 1e-3, `lifted export grounds the soles at Y=0 (got ${soleY.toFixed(4)})`);
+    console.log(`wrapper lift: soles grounded at Y=${soleY.toFixed(4)} with lift=${LIFT}`);
+  }
 })().catch((e) => {
   console.error(e);
   process.exitCode = 1;

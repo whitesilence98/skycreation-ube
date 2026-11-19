@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCharacter } from '@/lib/store';
 import { presetFileName } from '@/lib/presetIO';
+import { downloadPresetJson } from '@/lib/presets/download';
 import { exportCharacterGlb } from '@/lib/exportGlb';
 import { exportCharacterPackage } from '@/lib/exportPackage';
 import { importPresetFromFiles } from '@/lib/head/nifImport';
@@ -98,15 +99,7 @@ export function PresetIO({ manifest }: PresetIOProps) {
 
   const onExport = () => {
     const file = snapshotPreset();
-    const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = presetFileName(file.name);
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+    downloadPresetJson(file);
     flash({ kind: 'ok', text: `EXPORTED ${presetFileName(file.name)}` });
   };
 

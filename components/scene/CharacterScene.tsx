@@ -33,6 +33,7 @@ import { useViewState } from '@/lib/viewState';
 import { useCharacter, type ToneMappingId } from '@/lib/store';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { GlbExportBridge } from '@/lib/exportGlb';
+import { PresetCaptureBridge } from '@/components/scene/PresetCaptureBridge';
 
 interface CharacterSceneProps {
   manifest: Mo2Manifest | null;
@@ -81,6 +82,7 @@ function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
   const { camera, controls, gl } = useThree();
   const hair = useCharacter((s) => s.primaryTab === 'HAIR');
   const cameraFov = useCharacter((s) => s.cameraFov);
+  const characterHeight = useCharacter((s) => s.characterHeight);
   const cameraFraming = useCharacter((s) => s.cameraFraming);
   const cameraPoseRequest = useCharacter((s) => s.cameraPoseRequest);
 
@@ -119,6 +121,12 @@ function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
       baseTargetY = FRAMING_SPECS[cameraFraming].targetY;
     }
 
+    if ((cameraFraming === 'auto' && bodyFraming) || cameraFraming === 'body') {
+      const ratio = characterHeight / 1.554;
+      baseStandoff *= ratio;
+      baseTargetY = -1.476 + (baseTargetY + 1.476) * ratio;
+    }
+
     const orbit = controls as OrbitControlsImpl | null;
     const req = cameraPoseRequest;
 
@@ -148,7 +156,7 @@ function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
     }
 
     moving.current = true;
-  }, [hair, bodyFraming, cameraFraming, cameraPoseRequest, controls, camera]);
+  }, [hair, bodyFraming, characterHeight, cameraFraming, cameraPoseRequest, controls, camera]);
 
   useEffect(() => {
     const orbit = controls as OrbitControlsImpl | null;
@@ -403,6 +411,7 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
       </Suspense>
 
       <GlbExportBridge />
+      <PresetCaptureBridge />
 
       <ViewControls />
 

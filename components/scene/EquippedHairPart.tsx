@@ -9,6 +9,7 @@ import { useMeshResource } from '@/components/scene/useMeshGeometry';
 import { SkinnedPart } from '@/components/scene/SkinnedPart';
 import { AuthoredPart } from '@/components/scene/AuthoredPart';
 import type { SkeletonRegistry } from '@/lib/character/skeleton';
+import { hairOffsetMetres } from '@/lib/hair/settings';
 
 export interface EquippedHairPartProps {
   /** One resolved companion hair part from `manifest.parts.hairParts` */
@@ -20,7 +21,7 @@ export interface EquippedHairPartProps {
   defaultRole?: MaterialRole;
   fallbackTexture?: string;
   fallbackNormalByRole?: Partial<Record<MaterialRole, string>>;
-  hair?: { tone: string; gloss: number; alpha?: number };
+  hair?: { tone: string; gloss: number; alpha?: number; hairOffset?: number };
   renderOrder?: number;
 }
 
@@ -49,6 +50,8 @@ export function EquippedHairPart({
   const mesh = resource.mesh;
 
   const normalFallback = useMemo(() => fallbackNormalByRole ?? {}, [fallbackNormalByRole]);
+  /* One vertical placement for the whole hairstyle (all parts share it). */
+  const offset = hairOffsetMetres(hair?.hairOffset ?? 0);
 
   if (!mesh) return null;
 
@@ -64,20 +67,28 @@ export function EquippedHairPart({
         fallbackNormalByRole={normalFallback}
         hair={hair}
         renderOrder={renderOrder}
+        /* A bound `SkinnedMesh` cancels its own transform, so the offset has to
+           move vertices; `SkinnedPart` does that on a private geometry clone. */
+        verticalOffset={offset}
       />
     );
   }
 
+  /* A rigid part has no bind matrix to cancel an object transform, so its
+     offset rides a wrapper group — mounted under `rig.root` through the same
+     portal as the part itself. */
   const authored = (
-    <AuthoredPart
-      name={part.label || 'Hair'}
-      mesh={mesh}
-      defaultRole={defaultRole}
-      fallbackTexture={part.texture ?? fallbackTexture}
-      fallbackNormalByRole={normalFallback}
-      hair={hair}
-      renderOrder={renderOrder}
-    />
+    <group name={`${part.label || 'Hair'} offset`} position={[0, offset, 0]}>
+      <AuthoredPart
+        name={part.label || 'Hair'}
+        mesh={mesh}
+        defaultRole={defaultRole}
+        fallbackTexture={part.texture ?? fallbackTexture}
+        fallbackNormalByRole={normalFallback}
+        hair={hair}
+        renderOrder={renderOrder}
+      />
+    </group>
   );
 
   return rigRoot ? createPortal(authored, rigRoot) : authored;

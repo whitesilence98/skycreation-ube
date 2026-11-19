@@ -18,6 +18,15 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
         <path d="M12 11.6c-3.6 0-6.2 2.2-6.6 6.2h13.2c-.4-4-3-6.2-6.6-6.2z" fill="currentColor" />
       </svg>
       <span className="creator-header-name">{preview ? name : 'Preview'}</span>
+      <a
+        href="/rigger"
+        target="_blank"
+        rel="noreferrer"
+        className="ml-4 px-2 py-0.5 rounded text-[11px] font-medium bg-zinc-800/80 hover:bg-zinc-700 text-sky-400 border border-zinc-700/60 transition-colors flex items-center gap-1.5 no-underline"
+        title="Open Auto-Rigger Studio"
+      >
+        <span>🦴</span> Auto-Rigger
+      </a>
     </div>
     <button type="button" className="creator-header-collapse" onClick={() => useCharacter.getState().setPreviewMode(!preview)}
       aria-pressed={preview} title={preview ? 'Return to editor' : 'Preview without panels'}>

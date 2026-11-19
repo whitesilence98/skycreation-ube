@@ -102,6 +102,21 @@ assert.equal(coerceHair({ gloss: Infinity }).gloss, DEFAULT_HAIR.gloss,
   'a non-finite gloss falls back to the default');
 assert.equal(coerceHair({ tone: 'x' }).tone, DEFAULT_HAIR.tone, 'bad tone falls back');
 assert.equal(coerceHair({ lengthCm: 999 }).lengthCm, 55, 'length clamps to the 55 cm cap');
+
+// ── hair height (hairOffset) — default, clamp, NaN, metre mapping ───────────
+assert.equal(settings.HAIR_OFFSET_METRES, 0.0015, 'one slider unit is 1.5 mm');
+assert.equal(DEFAULT_HAIR.hairOffset, 0, 'hair height defaults to neutral');
+assert.equal(coerceHair({}).hairOffset, 0, 'absent hairOffset coerces to neutral');
+assert.equal(coerceHair({ hairOffset: 10 }).hairOffset, 10, 'the +10 cap is kept');
+assert.equal(coerceHair({ hairOffset: -10 }).hairOffset, -10, 'the -10 cap is kept');
+assert.equal(coerceHair({ hairOffset: 99 }).hairOffset, 10, 'hairOffset clamps at +10');
+assert.equal(coerceHair({ hairOffset: -99 }).hairOffset, -10, 'hairOffset clamps at -10');
+assert.equal(coerceHair({ hairOffset: NaN }).hairOffset, 0, 'NaN falls back to neutral');
+assert.equal(coerceHair({ hairOffset: Infinity }).hairOffset, 0, 'Infinity falls back to neutral');
+assert.equal(coerceHair({ hairOffset: '5' }).hairOffset, 0, 'a string is not a slider value');
+assert.equal(settings.hairOffsetMetres(10), 0.015, '+10 maps to +15 mm');
+assert.equal(settings.hairOffsetMetres(-10), -0.015, '-10 maps to -15 mm');
+assert.equal(settings.hairOffsetMetres(0), 0, 'neutral maps to zero metres');
 // The selection survives a preset load; the mesh is an asset choice, not hair data.
 assert.equal(useCharacter.getState().assetSelection.hair, 'hair-test-atlas');
 

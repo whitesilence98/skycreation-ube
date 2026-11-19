@@ -1,11 +1,39 @@
 'use client';
 
 import { useCharacter, BODY_WEIGHT_ENABLED } from '@/lib/store';
+import { ANATOMY_PARAMS, type AnatomyParamId } from '@/lib/anatomy/params';
+import { hasBodyScale } from '@/lib/anatomy/bodyScale';
 import { StudioCard } from '@/components/hud/common/StudioCard';
 import { HudSlider } from '@/components/hud/HudSlider';
 import { IconSparkle } from '@/components/hud/Icons';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
+
+/** The body-build sliders this panel owns: the skeleton-scale values only.
+ *  `body.muscleDefinition` is a material stub, not a shape. */
+const BODY_SHAPE_IDS = ANATOMY_PARAMS
+  .filter((p) => p.group === 'body' && hasBodyScale(p.id))
+  .map((p) => p.id);
+
+function BodyShapeSlider({ id }: { id: AnatomyParamId }) {
+  const value = useCharacter((s) => s.anatomy[id]);
+  const p = ANATOMY_PARAMS.find((entry) => entry.id === id)!;
+  const s = useCharacter.getState;
+  const isHeight = id === 'body.heightCm';
+  return (
+    <HudSlider
+      label={p.label}
+      min={p.min}
+      max={p.max}
+      step={p.step}
+      value={value}
+      display={isHeight ? `${Math.round(value)} cm` : String(Math.round(value))}
+      onChange={(v) => s().setAnatomy(id, v)}
+      onActiveChange={(active) => (active ? s().beginAnatomyEdit() : s().endAnatomyEdit())}
+      bracketed
+    />
+  );
+}
 
 interface BodyPanelProps {
   manifest?: Mo2Manifest | null;
@@ -39,6 +67,22 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
       footerLeading={<span>+ COR · UBE · 3D SCULPT</span>}
       footerTrailing={<span>DUAL-WEIGHT BLEND</span>}
     >
+
+      {/* ── 0. Body Shape (RaceMenu-style bone scale) ──────────────── */}
+      <div className="mb-[6px] rounded-xs border border-[#d4b483]/22 bg-black/45 p-[9px] backdrop-blur-md">
+        <div className="mb-2 flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
+          <span className="font-mono text-[9.5px] font-semibold text-[#efece6] uppercase">
+            BODY SHAPE
+          </span>
+          <span className="font-mono text-[8.5px] text-[#8f8778]">SKELETON SCALE</span>
+        </div>
+        {BODY_SHAPE_IDS.map((id) => (
+          <BodyShapeSlider key={id} id={id} />
+        ))}
+        <p className="mt-1 text-[8.5px] leading-snug text-[#8f8778]">
+          Bone-transform scaling (RaceMenu parity). 50 = unchanged; height reads in cm.
+        </p>
+      </div>
 
       {/* ── 1. Body Weight Slider (0–100% lerp) ────────────────────── */}
       <div className="rounded-xs border border-[#d4b483]/22 bg-black/45 p-[9px] backdrop-blur-md">

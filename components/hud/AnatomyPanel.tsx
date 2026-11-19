@@ -64,7 +64,7 @@ export function AnatomyPanel({ onClose }: { onClose?: () => void }) {
       <button type="button" className={buttonClass} disabled={!canRedo} onClick={() => s().redoAnatomy()}>Redo values</button>
     </div>
     <p role="note" className="border border-[#d4b483]/35 p-2 text-[12px] leading-relaxed text-[#ecd9b5]">
-      Seven broad-region controls are connected to the existing rig. Their appearance still needs visual review. Other controls and all asymmetry values are stored only. Switching to legacy sculpt previews the original face without these advanced offsets.
+      These controls are connected: broad face regions to the facial rig and body shape to skeleton bone scaling. The body values live in the Body tab. Appearance still needs visual review; unreviewed controls and all asymmetry values are stored only. Switching to legacy sculpt previews the original face without these advanced offsets.
     </p>
     {(Object.entries(ANATOMY_GROUPS) as [AnatomyGroupId, string][]).map(([group, label]) => <details key={group} className="border-b border-[#d4b483]/25 py-2">
       <summary className="cursor-pointer py-2 text-[12px] text-[#eee0c8] focus-visible:outline focus-visible:outline-[#eac87f]">{label} · {ANATOMY_PARAMS.some(p => p.group === group && p.status === 'wired') ? 'broad rig + stored drafts' : 'stored only'}</summary>
@@ -95,7 +95,7 @@ export function AnatomyPanel({ onClose }: { onClose?: () => void }) {
             title={Object.keys(p.values).length ? 'Apply sample stored values only' : 'Tip-specific shape targets have not been authored'}
             onClick={() => s().applyAnatomyPreset(p.id)}>{p.label}</button>)}</div>
         </fieldset>}
-        {group === 'body' && <p className="text-[11px] text-[#d8c9b2]">Body morphs, calibrated height and garment fitting are not implemented by these values.</p>}
+        {group === 'body' && <p className="text-[11px] text-[#d8c9b2]">Body shape and height are driven from the Body tab as skeleton bone scaling. Authored BodySlide morphs and garment fitting are a later phase.</p>}
         {group === 'surface' && <div className="space-y-3 border-t border-[#d4b483]/25 pt-3">
           <label className="flex items-center justify-between text-[11px] text-[#e3d3b9]">Existing hair color · live
             <input type="color" aria-label="Existing hair color (live)" value={hairTone}

@@ -77,6 +77,13 @@ export interface SkinnedPartProps {
   rigDonor?: LoadedMesh | null;
   /** Body weight [0..1] forwarded for bounds updates and reactivity. */
   weight?: number;
+  /**
+   * Vertical placement in metres (hair height). Applied to a cloned geometry,
+   * never to the loader's cached one: an attached `SkinnedMesh` cancels its
+   * own object transform out of the bind, so the offset has to live in the
+   * vertex positions.
+   */
+  verticalOffset?: number;
 }
 
 interface Slot {
@@ -195,6 +202,7 @@ export function SkinnedPart({
   skinDetail,
   rigDonor,
   weight,
+  verticalOffset = 0,
 }: SkinnedPartProps) {
   /* Opt-in auto-rig for a shape that cannot skin itself. The helper returns a
      geometry clone plus a bone table; the loader's cached mesh is untouched,
@@ -247,12 +255,59 @@ export function SkinnedPart({
      neither set of descriptors is ever mutated. */
   const effectiveMesh = derived?.mesh ?? mesh;
 
+  /* Hair height is a *vertex* offset, not an object translation. An attached
+     `SkinnedMesh` re-derives `bindMatrixInverse` from its world matrix each
+     frame, so moving the object cancels out of the skinning result. The
+     loader's geometry is shared through its cache and (for weight variants)
+     written in place, so the offset always goes onto a private clone that
+     this component owns and disposes.
+
+     The clone and a copy of its rest Y values are keyed on the *presence* of
+     an offset, not its value: dragging the slider then rewrites one channel
+     in place instead of cloning (and re-binding the mesh) per step. A mesh
+     that never takes an offset is never cloned at all. */
+  const hasOffset = verticalOffset !== 0;
+  const offsetState = useMemo<{ mesh: LoadedMesh; baseY: Float32Array } | null>(() => {
+    if (!hasOffset) return null;
+    const geometry = effectiveMesh.geometry.clone();
+    const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
+    const baseY = new Float32Array(pos.count);
+    const array = pos.array as Float32Array;
+    for (let i = 0; i < pos.count; i++) {
+      baseY[i] = array[i * 3 + 1];
+      /* Apply the current offset immediately; the effect below then only
+         rewrites Y as the slider moves. */
+      array[i * 3 + 1] = baseY[i] + verticalOffset;
+    }
+    pos.needsUpdate = true;
+    geometry.computeBoundingSphere();
+    geometry.computeBoundingBox();
+    return { mesh: { ...effectiveMesh, geometry }, baseY };
+    // Keyed on presence only; `verticalOffset` is read at creation and kept
+    // live by the effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveMesh, hasOffset]);
+  useEffect(() => () => offsetState?.mesh.geometry.dispose(), [offsetState]);
+
+  const renderedMesh = offsetState?.mesh ?? effectiveMesh;
+  useEffect(() => {
+    if (!offsetState) return;
+    const pos = offsetState.mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const array = pos.array as Float32Array;
+    for (let i = 0; i < offsetState.baseY.length; i++) {
+      array[i * 3 + 1] = offsetState.baseY[i] + verticalOffset;
+    }
+    pos.needsUpdate = true;
+    offsetState.mesh.geometry.computeBoundingSphere();
+    offsetState.mesh.geometry.computeBoundingBox();
+  }, [offsetState, verticalOffset]);
+
   /* Keep geometry bounding volumes accurate when body weight changes */
   useEffect(() => {
     if (weight === undefined) return;
-    effectiveMesh.geometry.computeBoundingSphere();
-    effectiveMesh.geometry.computeBoundingBox();
-  }, [weight, effectiveMesh]);
+    renderedMesh.geometry.computeBoundingSphere();
+    renderedMesh.geometry.computeBoundingBox();
+  }, [weight, renderedMesh]);
 
   const slots = useMemo(
     () => slotsFor({
@@ -521,11 +576,11 @@ export function SkinnedPart({
   /* One-ring cavity for the skin shader. Attached to the whole geometry even
      when only some slots are skin; non-skin materials never sample it. */
   useEffect(() => {
-    attachSkinCavity(effectiveMesh.geometry);
-  }, [effectiveMesh.geometry]);
+    attachSkinCavity(renderedMesh.geometry);
+  }, [renderedMesh.geometry]);
 
   const object = useMemo(
-    () => buildPart(effectiveMesh, registry, renderOrder, name, defaultRole),
+    () => buildPart(renderedMesh, registry, renderOrder, name, defaultRole),
     // The registry is stable for the scene's lifetime. Materials are swapped
     // in below rather than passed here: rebuilding the object on every texture
     // load would re-register the bones and re-bind mid-pose. `effectiveMesh`
@@ -533,7 +588,7 @@ export function SkinnedPart({
     // (and may change a plain Mesh into a SkinnedMesh); the loader's own mesh
     // object is never rebound in place.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [effectiveMesh, renderOrder, name, defaultRole],
+    [renderedMesh, renderOrder, name, defaultRole],
   );
 
   useEffect(() => {

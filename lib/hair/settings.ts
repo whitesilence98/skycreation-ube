@@ -20,6 +20,8 @@ export interface HairSettings {
   highlights: boolean;
   gloss: number;
   alpha: number;
+  /** Vertical placement of the worn hairstyle, in slider units (-10..10). */
+  hairOffset: number;
 }
 export const HAIR_TABS = ['STYLE', 'COLOR', 'GLOSS'] as const;
 export type HairTab = (typeof HAIR_TABS)[number];
@@ -28,7 +30,7 @@ export const DEFAULT_HAIR: HairSettings = {
   style: 'asymmetrical-bob', lengthCm: 28, bangs: 'side', side: 'straight', back: 'layered',
   volume: -3, curl: 7, wave: 0.45, wispiness: 0.15, asymmetry: 0.22,
   tone: '#ffffff', rootShift: 5, midShift: 2, tipShift: 8,
-  gradient: true, highlights: false, gloss: 0.65, alpha: 1.0,
+  gradient: true, highlights: false, gloss: 0.65, alpha: 1.0, hairOffset: 0,
 };
 type Shape = Pick<HairSettings, 'lengthCm' | 'bangs' | 'side' | 'back' | 'volume' | 'curl' | 'wave' | 'wispiness' | 'asymmetry'>;
 export interface HairStyleDef { id: string; label: string; settings: Shape }
@@ -48,8 +50,14 @@ export const HAIR_STYLES: HairStyleDef[] = [
 export const HAIR_LIMITS = {
   lengthCm: [0, 55], volume: [-10, 10], curl: [-10, 10], wave: [0, 1], wispiness: [0, 1],
   asymmetry: [0, 1], rootShift: [-10, 10], midShift: [-10, 10], tipShift: [-10, 10], gloss: [0, 1],
-  alpha: [0, 1],
+  alpha: [0, 1], hairOffset: [-10, 10],
 } as const;
+/** Metres per hair-height slider unit; -10..10 maps to -15..15 mm. */
+export const HAIR_OFFSET_METRES = 0.0015;
+/** Slider units → metres for the worn hairstyle's vertical placement. */
+export function hairOffsetMetres(offset: number): number {
+  return offset * HAIR_OFFSET_METRES;
+}
 export function coerceHair(raw: unknown): HairSettings {
   const s = { ...DEFAULT_HAIR };
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return s;

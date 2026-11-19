@@ -30,7 +30,9 @@ const defaults = validate.coerceAnatomy();
 assert.equal(new Set(params.ANATOMY_PARAMS.map(p => p.id)).size, params.ANATOMY_PARAMS.length);
 for (const p of params.ANATOMY_PARAMS) {
   assert.ok(Number.isFinite(p.min) && p.min <= p.default && p.default <= p.max && p.min < p.max && p.step > 0);
-  assert.equal(p.status, load('lib/anatomy/bind').hasAnatomyBinding(p.id) ? 'wired' : 'stored-only');
+  assert.equal(p.status,
+    load('lib/anatomy/bind').hasAnatomyBinding(p.id) || load('lib/anatomy/bodyScale').hasBodyScale(p.id)
+      ? 'wired' : 'stored-only');
 }
 assert.equal(validate.coerceAnatomy({ 'nose.width': 900 })['nose.width'], 100);
 assert.equal(validate.coerceAnatomy({ 'body.heightCm': -5 })['body.heightCm'], 150);

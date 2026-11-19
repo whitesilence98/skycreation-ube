@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { MeshBone } from '@/components/scene/useMeshGeometry';
+import { BODY_SCALE_BASELINE_HEIGHT, type BodyScale } from '@/lib/anatomy/bodyScale';
 
 /**
  * One bone set shared by every skinned part of the character.
@@ -309,7 +310,15 @@ export class SkeletonRegistry {
     this.group.updateMatrixWorld(true);
   }
 
-  /** Restores every bone to its rest pose. */
+  /**
+   * Restores every bone to its rest pose.
+   *
+   * This wipes any body-scale pass too (`bone.scale` returns to rest). Every
+   * caller that resets a pose — `applyBodyPose` / `applyPoseTrack` are the
+   * current ones — must re-apply the body scale afterwards, or a pose switch
+   * silently reverts the figure to its authored height until the next slider
+   * drag. Pass the factors into `applySkeletonWeight` on that re-apply.
+   */
   reset(): void {
     for (const bone of this.byName.values()) {
       const rest = this.restOf(bone);
@@ -382,11 +391,51 @@ const ANCHOR_BONES = [
   'NPC R Hand [RHnd]',
 ] as const;
 
+/** What the scene needs back from a scale pass, in registry-local space. */
+export interface SkeletonScaleResult {
+  /**
+   * Vertical displacement the body-scale pass introduced at the foot bone,
+   * measured posed-before vs posed-after in registry-local coordinates
+   * (positive = the foot sank, so the scene should set the character wrapper's
+   * `position.y` to this value to lift it back onto the floor). A uniform root
+   * scale moves the soles whenever the root is not exactly at the floor, so
+   * the scene re-plants them by exactly this measurement.
+   */
+  footDrop: number;
+  /**
+   * Height to frame the character with: the authored baseline
+   * (`BODY_SCALE_BASELINE_HEIGHT`) ratio-calibrated by how much this pass
+   * grew the pose's head-to-foot span. Neutral body scale returns exactly the
+   * baseline for any pose, so the camera never reframes on a pose change.
+   */
+  height: number;
+}
+
+const HEAD_BONE = 'NPC Head [Head]';
+const FOOT_BONES = ['NPC L Foot [Lft ]', 'NPC R Foot [Rft ]'] as const;
+
 /**
- * Apply Creation Engine body weight bone scaling over the skeleton registry.
+ * Apply Creation Engine body weight bone scaling, then the RaceMenu-style
+ * body/head scale, over the skeleton registry.
+ *
+ * Order is deliberate: the anchor counter-scale runs on the **weight** pass
+ * only. Applying body scale before it would let the neck anchor pin the head
+ * to its rest world scale, so a taller figure would not grow its head. With
+ * body scale last the head, hands and feet inherit the height uniformly.
+ *
+ * Feet therefore move with the root scale; `footDrop` reports that movement so
+ * the scene can lift the character back onto the floor.
+ *
+ * Only `bone.scale` is written; pose rotations and positions are untouched.
  */
-export function applySkeletonWeight(registry: SkeletonRegistry, weight: number): void {
+export function applySkeletonWeight(
+  registry: SkeletonRegistry,
+  weight: number,
+  bodyScale?: BodyScale,
+): SkeletonScaleResult {
   const w = Math.max(0, Math.min(1, weight));
+  const rootScale = bodyScale?.rootScale ?? 1;
+  const boneFactors = bodyScale?.bones ?? {};
 
   // 1. Reset scale to authored rest TRS first so scale is absolute, never accumulating across frames
   for (const bone of registry.byName.values()) {
@@ -427,6 +476,61 @@ export function applySkeletonWeight(registry: SkeletonRegistry, weight: number):
     }
   }
 
-  // 5. Final world matrix update with normalized anchors
+  // 5. Normalized anchors, then measure the posed baseline body scale grows from
   registry.updateWorld();
+  const groupInverse = new THREE.Matrix4().copy(registry.group.matrixWorld).invert();
+  const localPosition = (name: string, out: THREE.Vector3): boolean => {
+    const bone = registry.byName.get(name);
+    if (!bone) return false;
+    out.setFromMatrixPosition(bone.matrixWorld).applyMatrix4(groupInverse);
+    return true;
+  };
+  /* One foot bone, chosen consistently before and after so the delta is never
+     taken across different feet. */
+  const footBone = FOOT_BONES.find((name) => registry.byName.has(name));
+  const beforeHead = new THREE.Vector3();
+  const beforeFoot = new THREE.Vector3();
+  const hasHead = localPosition(HEAD_BONE, beforeHead);
+  const hasFoot = footBone ? localPosition(footBone, beforeFoot) : false;
+  /* Distance is frame-independent: the registry group only carries the scene
+     wrapper's lift, never rotation or scale. */
+  const beforeSpan = hasHead && hasFoot ? beforeHead.distanceTo(beforeFoot) : 0;
+  const beforeFootY = beforeFoot.y;
+
+  // 6. RaceMenu-style scale: uniform root scale for height, then per-bone build factors
+  if (rootScale !== 1) {
+    for (const bone of registry.byName.values()) {
+      /* Every bone whose parent is the registry group is a root; scaling a
+         root multiplies every descendant offset exactly once. */
+      if (bone.parent === registry.group) bone.scale.multiplyScalar(rootScale);
+    }
+  }
+  for (const [boneName, factors] of Object.entries(boneFactors)) {
+    const bone = registry.byName.get(boneName);
+    if (!bone) continue;
+    bone.scale.set(
+      bone.scale.x * factors.x,
+      bone.scale.y * factors.y,
+      bone.scale.z * factors.z,
+    );
+  }
+
+  // 7. Final world update, then measure what the scale pass changed
+  registry.updateWorld();
+  let footDrop = 0;
+  let height = BODY_SCALE_BASELINE_HEIGHT;
+  if (hasHead && hasFoot && footBone) {
+    const afterHead = new THREE.Vector3();
+    const afterFoot = new THREE.Vector3();
+    localPosition(HEAD_BONE, afterHead);
+    localPosition(footBone, afterFoot);
+    /* Posed-before vs posed-after, both in registry-local space: comparing the
+       live foot against its *rest* world position would read the pose (a bent
+       knee) as grounding drift. */
+    footDrop = beforeFootY - afterFoot.y;
+    if (beforeSpan > 1e-6) {
+      height = BODY_SCALE_BASELINE_HEIGHT * (afterHead.distanceTo(afterFoot) / beforeSpan);
+    }
+  }
+  return { footDrop, height };
 }

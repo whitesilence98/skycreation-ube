@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { PresetLibrary } from '@/components/hud/PresetLibrary';
 import { useCharacter } from '@/lib/store';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
@@ -106,6 +107,8 @@ export function PresetPanel({ manifest: _manifest }: PresetPanelProps) {
             })}
           </div>
         </div>
+
+        <PresetLibrary />
 
         {/* Status Message Toast */}
         {status && (

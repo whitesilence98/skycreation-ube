@@ -6,6 +6,7 @@ import { StudioCard } from '@/components/hud/common/StudioCard';
 import { BracketSlider } from '@/components/hud/common/BracketSlider';
 import { ColorStudio2D, type ColorSwatchItem } from '@/components/hud/common/ColorStudio2D';
 import { cn } from '@/lib/cn';
+import { HAIR_LIMITS, HAIR_OFFSET_METRES } from '@/lib/hair/settings';
 
 export const HAIR_PALETTE_SWATCHES: ColorSwatchItem[] = [
   { name: 'Raven Black', hex: '#110e0c' },
@@ -36,6 +37,12 @@ export function HairProperties() {
   const hairTone = hair.tone || '#b5834f';
   const hairAlpha = hair.alpha ?? 1.0;
   const hairGloss = hair.gloss ?? 0.5;
+  const hairOffset = hair.hairOffset ?? 0;
+  /* The slider reads in millimetres, which is what the user sees move; the
+     stored value stays in neutral slider units so presets survive a retune of
+     `HAIR_OFFSET_METRES`. A unit is 1.5 mm, so an integer step can land on a
+     half millimetre. */
+  const offsetMm = hairOffset * HAIR_OFFSET_METRES * 1000;
 
   return (
     <StudioCard
@@ -94,8 +101,17 @@ export function HairProperties() {
         swatchCols={8}
       />
 
-      {/* Fine-Tuning Sliders: OPACITY, GLOSS */}
+      {/* Fit + fine-tuning: HEIGHT, OPACITY, GLOSS */}
       <div className="flex flex-col gap-2 pt-0.5">
+        <BracketSlider
+          label="HAIR HEIGHT"
+          value={hairOffset}
+          min={HAIR_LIMITS.hairOffset[0]}
+          max={HAIR_LIMITS.hairOffset[1]}
+          step={1}
+          display={offsetMm === 0 ? 'NEUTRAL' : `${offsetMm > 0 ? '+' : ''}${offsetMm.toFixed(1)}mm`}
+          onChange={(v) => setHair({ hairOffset: v })}
+        />
         <BracketSlider
           label="HAIR OPACITY"
           value={hairAlpha}

@@ -422,6 +422,8 @@ export interface CharacterState extends AnatomySnapshot {
   presetNonce: number;
   /** Camera vertical field-of-view in degrees [15..60]. Default 27. */
   cameraFov: number;
+  /** Derived framing height; never persisted. */
+  characterHeight: number;
   /** Active camera framing: auto, or locked to face / bust / body. */
   cameraFraming: CameraFraming;
   /** Nonce request for programmatic camera angle / framing transitions. */
@@ -1043,6 +1045,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   cameraOpen: false,
   workspace: 'edit',
   previewMode: false,
+  characterHeight: 1.554,
   cameraFov: CAMERA_FOV_DEFAULT,
   cameraFraming: 'auto',
   cameraPoseRequest: null,
@@ -1374,6 +1377,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
           ?? (((payload as { linkBrowToHair?: boolean }).linkBrowToHair ?? s.linkBrowToHair) && payload.hair?.tone && payload.hair.tone.toLowerCase() !== '#ffffff'
             ? payload.hair.tone
             : s.browColor),
+        browGloss: payload.browGloss ?? s.browGloss,
+        browGlossy: payload.browGlossy ?? s.browGlossy,
         hair: payload.hair ? coerceHair({ ...s.hair, ...payload.hair }) : s.hair,
         overlayLayers: payload.overlays ?? s.overlayLayers,
         /* A replacement stack invalidates the panel's `kind:id` selection; a
