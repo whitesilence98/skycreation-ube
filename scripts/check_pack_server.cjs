@@ -36,10 +36,49 @@ function load(file) {
   assert.equal(await server.resolveArchivePath({ rel: '..\\..\\outside.dds' }), null);
   assert.equal(await server.resolveArchivePath({ rel: 'missing.dds' }), null);
   const manifestRoute = load(path.resolve('app/api/mo2/manifest/route.ts'));
-  const manifestResponse = await manifestRoute.GET();
+  const manifestResponse = await manifestRoute.GET(new Request('http://localhost/api/mo2/manifest'));
   assert.equal(manifestResponse.status, 200);
-  assert.equal(manifestResponse.headers.get('cache-control'), 'no-store');
+  assert.equal(manifestResponse.headers.get('cache-control'), 'private, no-cache');
   assert.equal((await manifestResponse.json()).sourceKey, ASSET_SOURCE.key);
+  // Ids are path hashes, not content hashes: no success may be immutable.
+  assert.ok(!manifestResponse.headers.get('cache-control').includes('immutable'));
+  const manifestEtag = manifestResponse.headers.get('etag');
+  assert.ok(manifestEtag, 'manifest must expose an ETag');
+  const manifestRevalidated = await manifestRoute.GET(
+    new Request('http://localhost/api/mo2/manifest', { headers: { 'If-None-Match': manifestEtag } }),
+  );
+  assert.equal(manifestRevalidated.status, 304);
+  assert.equal(manifestRevalidated.headers.get('etag'), manifestEtag);
+  assert.equal(await manifestRevalidated.text(), '');
+  // A validator the current bytes do not produce must never yield 304.
+  assert.equal((await manifestRoute.GET(new Request('http://localhost/api/mo2/manifest', {
+    headers: { 'If-None-Match': '"stale"' },
+  }))).status, 200);
+
+  const catalogueRoute = load(path.resolve('app/api/mo2/catalogue/route.ts'));
+  const indexResponse = await catalogueRoute.GET(new Request('http://localhost/api/mo2/catalogue'));
+  assert.equal(indexResponse.status, 200);
+  assert.equal(indexResponse.headers.get('cache-control'), 'private, no-cache');
+  const indexEtag = indexResponse.headers.get('etag');
+  assert.ok(indexEtag, 'catalogue index must expose an ETag');
+  const indexRevalidated = await catalogueRoute.GET(new Request('http://localhost/api/mo2/catalogue', {
+    headers: { 'If-None-Match': indexEtag },
+  }));
+  assert.equal(indexRevalidated.status, 304);
+  assert.equal(indexRevalidated.headers.get('cache-control'), 'private, no-cache');
+  const kindResponse = await catalogueRoute.GET(new Request('http://localhost/api/mo2/catalogue?kind=headMesh'));
+  assert.equal(kindResponse.status, 200);
+  const kindEtag = kindResponse.headers.get('etag');
+  assert.ok(kindEtag);
+  assert.equal((await catalogueRoute.GET(new Request('http://localhost/api/mo2/catalogue?kind=headMesh', {
+    headers: { 'If-None-Match': kindEtag },
+  }))).status, 304);
+  // The index and a kind list are different payloads and must not share tags.
+  assert.notEqual(kindEtag, indexEtag);
+  const unknownKind = await catalogueRoute.GET(new Request('http://localhost/api/mo2/catalogue?kind=nope'));
+  assert.equal(unknownKind.status, 400);
+  assert.equal(unknownKind.headers.get('cache-control'), 'no-store');
+
   const route = load(path.resolve('app/api/mo2/convert/route.ts'));
   assert.equal((await route.GET(new Request('http://localhost/api/mo2/convert?kind=skin&id=x&role=../../outside'))).status, 400);
   assert.equal((await route.GET(new Request('http://localhost/api/mo2/convert?kind=headMesh&id=missing&mode=mesh'))).status, 404);
@@ -73,9 +112,27 @@ function load(file) {
   const head = heads.find((e) => e.decodable !== false);
   const response = await route.GET(new Request(`http://localhost/api/mo2/convert?${new URLSearchParams({ kind: 'headMesh', id: head.id, mode: 'mesh' })}`));
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(response.headers.get('cache-control'), 'private, no-cache');
+  assert.ok(!response.headers.get('cache-control').includes('immutable'));
   const geometry = await response.json();
   assert.ok(geometry.vertexCount > 0);
+  // Revalidation is only a 304 after the current bytes hash to the same tag.
+  const convertEtag = response.headers.get('etag');
+  assert.ok(convertEtag, 'convert must expose an ETag');
+  const convertUrl = `http://localhost/api/mo2/convert?${new URLSearchParams({ kind: 'headMesh', id: head.id, mode: 'mesh' })}`;
+  const revalidated = await route.GET(new Request(convertUrl, { headers: { 'If-None-Match': convertEtag } }));
+  assert.equal(revalidated.status, 304);
+  assert.equal(revalidated.headers.get('etag'), convertEtag);
+  assert.equal(revalidated.headers.get('cache-control'), 'private, no-cache');
+  assert.equal(revalidated.headers.get('content-type'), null);
+  // A validator the current bytes do not produce must never yield 304.
+  assert.equal((await route.GET(new Request(convertUrl, {
+    headers: { 'If-None-Match': '"stale"' },
+  }))).status, 200);
+  // Failures stay uncacheable so a fixed source is picked up immediately.
+  const errorResponse = await route.GET(new Request('http://localhost/api/mo2/convert?kind=headMesh&id=missing&mode=mesh'));
+  assert.equal(errorResponse.status, 404);
+  assert.equal(errorResponse.headers.get('cache-control'), 'no-store');
   assert.equal(geometry.positions.length, geometry.vertexCount * 3);
   const bodies = await server.readCatalogue('bodyMesh');
   const embedded = bodies.find((e) => e.geometryRole === 'skin' && e.decodable !== false);

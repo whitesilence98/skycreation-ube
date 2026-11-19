@@ -22,9 +22,16 @@ export interface GizmoTipState {
   setTip: (x: number, y: number, visible: boolean) => void;
 }
 
-export const useGizmoTip = create<GizmoTipState>((set) => ({
+export const useGizmoTip = create<GizmoTipState>((set, get) => ({
   x: 0,
   y: 0,
   visible: false,
-  setTip: (x, y, visible) => set({ x, y, visible }),
+  setTip: (x, y, visible) => {
+    x = Math.round(x);
+    y = Math.round(y);
+    const previous = get();
+    if (x !== previous.x || y !== previous.y || visible !== previous.visible) {
+      set({ x, y, visible });
+    }
+  },
 }));

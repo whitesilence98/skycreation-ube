@@ -60,13 +60,17 @@ export interface PresetFile extends Partial<AnatomySnapshot> {
   equipment?: EquipSelection;
   /** Body weight, 0–1 — the same field a `.jslot` calls `actor.weight`/100. */
   weight?: number;
-  /** The makeup / tattoo / wrinkle stack, in draw order. */
+  /** The makeup / tattoo stack, in draw order. */
   hair?: HairSettings;
   browColor?: string;
   browOpacity?: number;
   browGloss?: number;
   browGlossy?: number;
   linkBrowToHair?: boolean;
+  /** Eyelash tint `#rrggbb`. */
+  lashesColor?: string;
+  /** Eyelash opacity 0–1. */
+  lashesOpacity?: number;
   overlays?: OverlayLayer[];
 }
 
@@ -203,13 +207,17 @@ export interface PresetPayload extends Partial<AnatomySnapshot> {
    * BODY tab's slider drives.
    */
   weight?: number;
-  /** Makeup / tattoo / wrinkle layers, when the file records them. */
+  /** Makeup / tattoo layers, when the file records them. */
   hair?: HairSettings;
   browColor?: string;
   browOpacity?: number;
   browGloss?: number;
   browGlossy?: number;
   linkBrowToHair?: boolean;
+  /** Eyelash tint `#rrggbb`, when the file records it. */
+  lashesColor?: string;
+  /** Eyelash opacity 0–1, when the file records it. */
+  lashesOpacity?: number;
   overlays?: OverlayLayer[];
 }
 
@@ -367,6 +375,8 @@ export function buildPresetFile(args: {
   browGloss?: number;
   browGlossy?: number;
   linkBrowToHair?: boolean;
+  lashesColor?: string;
+  lashesOpacity?: number;
   overlays?: OverlayLayer[];
 } & Partial<AnatomySnapshot>): PresetFile {
   return {
@@ -389,6 +399,8 @@ export function buildPresetFile(args: {
     browGloss: args.browGloss,
     browGlossy: args.browGlossy,
     linkBrowToHair: args.linkBrowToHair,
+    lashesColor: args.lashesColor,
+    lashesOpacity: args.lashesOpacity,
     overlays: args.overlays,
     anatomyMode: args.anatomyMode === 'advanced' ? 'advanced' : 'legacy',
     anatomy: coerceAnatomy(args.anatomy),
@@ -433,6 +445,14 @@ export function isAssetSelection(v: unknown): v is AssetSelection {
   );
 }
 
+/** Keep valid picks when legacy payloads name removed kinds. */
+export function sanitizeAssetSelection(v: unknown): AssetSelection | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  return Object.fromEntries(Object.entries(v).filter(
+    ([kind, id]) => (ASSET_KINDS as readonly string[]).includes(kind) && typeof id === 'string',
+  )) as AssetSelection;
+}
+
 /**
  * The blend modes a layer may name. `normal` is the historical behaviour and
  * is what an absent `blend` means, so every file written before this field
@@ -447,30 +467,39 @@ export const OVERLAY_BLENDS = ['normal', 'multiply', 'screen', 'overlay'] as con
  * they must be the real vocabulary / a finite 0–1 number, because both reach
  * the compositor directly.
  */
+/** One well-formed layer. Factored out of `isOverlayLayers` so the strict
+ *  predicate and `sanitizeOverlayLayers` share a single per-row rule. */
+export function isOverlayLayer(raw: unknown): raw is OverlayLayer {
+  if (!raw || typeof raw !== 'object') return false;
+  const o = raw as Record<string, unknown>;
+  return (
+    typeof o.kind === 'string' &&
+    (ASSET_KINDS as readonly string[]).includes(o.kind) &&
+    typeof o.id === 'string' &&
+    typeof o.color === 'string' &&
+    /^#[0-9a-f]{6}$/i.test(o.color) &&
+    typeof o.opacity === 'number' &&
+    Number.isFinite(o.opacity) &&
+    o.opacity >= 0 &&
+    o.opacity <= 1 &&
+    (o.blend === undefined ||
+      (typeof o.blend === 'string' && (OVERLAY_BLENDS as readonly string[]).includes(o.blend))) &&
+    (o.coverage === undefined ||
+      (typeof o.coverage === 'number' &&
+        Number.isFinite(o.coverage) &&
+        o.coverage >= 0 &&
+        o.coverage <= 1))
+  );
+}
+
 export function isOverlayLayers(v: unknown): v is OverlayLayer[] {
-  if (!Array.isArray(v) || v.length > 16) return false;
-  return v.every((raw) => {
-    if (!raw || typeof raw !== 'object') return false;
-    const o = raw as Record<string, unknown>;
-    return (
-      typeof o.kind === 'string' &&
-      (ASSET_KINDS as readonly string[]).includes(o.kind) &&
-      typeof o.id === 'string' &&
-      typeof o.color === 'string' &&
-      /^#[0-9a-f]{6}$/i.test(o.color) &&
-      typeof o.opacity === 'number' &&
-      Number.isFinite(o.opacity) &&
-      o.opacity >= 0 &&
-      o.opacity <= 1 &&
-      (o.blend === undefined ||
-        (typeof o.blend === 'string' && (OVERLAY_BLENDS as readonly string[]).includes(o.blend))) &&
-      (o.coverage === undefined ||
-        (typeof o.coverage === 'number' &&
-          Number.isFinite(o.coverage) &&
-          o.coverage >= 0 &&
-          o.coverage <= 1))
-    );
-  });
+  return Array.isArray(v) && v.length <= 16 && v.every(isOverlayLayer);
+}
+
+/** Drop removed kinds and malformed rows; an empty result clears the stack. */
+export function sanitizeOverlayLayers(v: unknown): OverlayLayer[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  return v.filter(isOverlayLayer).slice(0, 16);
 }
 
 function identityPose(): GizmoPose {
@@ -554,7 +583,7 @@ export function parsePreset(text: string, fileName?: string): PresetPayload {
       anatomy: coerceAnatomy(obj.anatomy),
       anatomyAsymmetry: coerceAsymmetry(obj.anatomyAsymmetry),
       anatomyColors: coerceAnatomyColors(obj.anatomyColors),
-      assets: isAssetSelection(obj.assets) ? obj.assets : undefined,
+      assets: sanitizeAssetSelection(obj.assets),
       equipment: isEquipSelection(obj.equipment) ? obj.equipment : undefined,
       weight: coerceWeight(obj.weight),
       hair: obj.hair && typeof obj.hair === 'object' && !Array.isArray(obj.hair) ? coerceHair(obj.hair) : undefined,
@@ -563,7 +592,9 @@ export function parsePreset(text: string, fileName?: string): PresetPayload {
       browGloss: typeof obj.browGloss === 'number' && Number.isFinite(obj.browGloss) ? Math.min(1, Math.max(0, obj.browGloss)) : undefined,
       browGlossy: typeof obj.browGlossy === 'number' && Number.isFinite(obj.browGlossy) ? Math.min(1, Math.max(0, obj.browGlossy)) : undefined,
       linkBrowToHair: typeof obj.linkBrowToHair === 'boolean' ? obj.linkBrowToHair : undefined,
-      overlays: isOverlayLayers(obj.overlays) ? obj.overlays : undefined,
+      lashesColor: typeof obj.lashesColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(obj.lashesColor) ? obj.lashesColor : undefined,
+      lashesOpacity: typeof obj.lashesOpacity === 'number' && Number.isFinite(obj.lashesOpacity) ? Math.min(1, Math.max(0, obj.lashesOpacity)) : undefined,
+      overlays: sanitizeOverlayLayers(obj.overlays),
     };
   }
 

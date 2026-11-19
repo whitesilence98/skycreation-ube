@@ -46,7 +46,7 @@ PACK_KINDS = [
     "handsMesh", "feetMesh", "hairMesh", "clothingMesh",
     "skeleton",
     "skin", "eyes", "lashes", "brows", "mouth", "body", "hair", "clothing",
-    "preset", "makeup", "tattoo", "wrinkle", "other",
+    "preset", "makeup", "tattoo", "other",
 ]
 PACK_MESH_KINDS = frozenset(k for k in PACK_KINDS if k.endswith("Mesh"))
 TEXTURE_KIND_FOR_MESH = {
@@ -148,9 +148,9 @@ PARTS: dict[str, dict[str, Any]] = {
     "overlays": {
         "label": "Overlays (Makeup / Tattoos)",
         "subdirs": ["overlays"],
-        "kinds": ["makeup", "tattoo", "wrinkle"],
-        "manifest_keys": ["makeup", "tattoo", "wrinkle"],
-        "aliases": ["overlay", "makeup", "tattoo", "tattoos", "wrinkle", "wrinkles"],
+        "kinds": ["makeup", "tattoo"],
+        "manifest_keys": ["makeup", "tattoo"],
+        "aliases": ["overlay", "makeup", "tattoo", "tattoos"],
     },
 }
 
@@ -2274,7 +2274,7 @@ def build_manifest(cfg: dict, part: str | None = None, force: bool = False) -> i
             print("[+] skeleton updated")
 
         elif target_part == "overlays":
-            for k in ("makeup", "tattoo", "wrinkle"):
+            for k in ("makeup", "tattoo"):
                 manifest.setdefault("assets", {})[k] = _read_entries(out, k)
             print("[+] overlays updated")
 

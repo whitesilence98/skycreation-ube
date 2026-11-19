@@ -10,22 +10,22 @@ import { buildHairGroups, findHairGroupForPartId } from '@/lib/hair';
 
 export type PartMeshKind = 'headMesh' | 'eyeMesh' | 'lashesMesh' | 'browsMesh' | 'mouthMesh' | 'bodyMesh' | 'handsMesh' | 'feetMesh' | 'hairMesh' | 'clothingMesh';
 export type AssetKind = PartMeshKind | 'skin' | 'eyes' | 'lashes' | 'brows' | 'mouth' | 'body' | 'hair' | 'clothing'
-  | 'skeleton' | 'preset' | 'makeup' | 'tattoo' | 'wrinkle';
+  | 'skeleton' | 'preset' | 'makeup' | 'tattoo';
 export type AssetSelection = Partial<Record<AssetKind, string>>;
 export type AssetCatalogues = Partial<Record<AssetKind, CatalogueEntry[]>>;
 
 export const ASSET_KINDS: AssetKind[] = [
   'headMesh', 'eyeMesh', 'lashesMesh', 'browsMesh', 'mouthMesh', 'bodyMesh', 'handsMesh', 'feetMesh', 'hairMesh', 'clothingMesh',
   'skin', 'eyes', 'lashes', 'brows', 'mouth', 'body', 'hair', 'clothing',
-  'skeleton', 'preset', 'makeup', 'tattoo', 'wrinkle',
+  'skeleton', 'preset', 'makeup', 'tattoo',
 ];
-export const OVERLAY_KINDS = ['makeup', 'tattoo', 'wrinkle'] as const;
+export const OVERLAY_KINDS = ['makeup', 'tattoo'] as const;
 export const MANIFEST_KINDS = ASSET_KINDS.filter((kind) => !isOverlayKind(kind));
 export function isOverlayKind(kind: string): boolean {
   return (OVERLAY_KINDS as readonly string[]).includes(kind);
 }
 export interface CategorySpec { label: string; mesh?: AssetKind; texture?: AssetKind }
-export const CATEGORY_MAP: Record<'headMesh' | 'eyes' | 'lashes' | 'brows' | 'mouth' | 'body' | 'hands' | 'feet' | 'hair' | 'clothing' | 'equipment' | 'skin' | 'makeup' | 'tattoo' | 'wrinkle' | 'skeleton' | 'preset', CategorySpec> = {
+export const CATEGORY_MAP: Record<'headMesh' | 'eyes' | 'lashes' | 'brows' | 'mouth' | 'body' | 'hands' | 'feet' | 'hair' | 'clothing' | 'equipment' | 'skin' | 'makeup' | 'tattoo' | 'skeleton' | 'preset', CategorySpec> = {
   headMesh: { label: 'HEAD', mesh: 'headMesh', texture: 'skin' },
   eyes: { label: 'EYES', mesh: 'eyeMesh', texture: 'eyes' },
   lashes: { label: 'LASHES', mesh: 'lashesMesh', texture: 'lashes' },
@@ -46,7 +46,6 @@ export const CATEGORY_MAP: Record<'headMesh' | 'eyes' | 'lashes' | 'brows' | 'mo
   skin: { label: 'SKIN', texture: 'skin' },
   makeup: { label: 'MAKEUP', texture: 'makeup' },
   tattoo: { label: 'TATTOO', texture: 'tattoo' },
-  wrinkle: { label: 'WRINKLE', texture: 'wrinkle' },
   skeleton: { label: 'SKELETON' }, preset: { label: 'PRESET' },
 } satisfies Record<string, CategorySpec>;
 export type UiCategory = keyof typeof CATEGORY_MAP;
@@ -234,10 +233,10 @@ export function resolveManifest(
    * feet wear the shared BODY atlas, so their routes say `kind=body` even
    * though their part keys are `hands`/`feet`.
    */
-  const companionEyeMesh = (head as { eyeMeshUrl?: string })?.eyeMeshUrl;
-  const companionLashesMesh = (head as { lashesMeshUrl?: string })?.lashesMeshUrl;
+  const companionEyeMesh = selection.eyeMesh ? undefined : (head as { eyeMeshUrl?: string })?.eyeMeshUrl;
+  const companionLashesMesh = selection.lashesMesh ? undefined : (head as { lashesMeshUrl?: string })?.lashesMeshUrl;
   const companionBrowsMesh = selection.browsMesh ? undefined : (head as { browsMeshUrl?: string })?.browsMeshUrl;
-  const companionMouthMesh = (head as { mouthMeshUrl?: string })?.mouthMeshUrl;
+  const companionMouthMesh = selection.mouthMesh ? undefined : (head as { mouthMeshUrl?: string })?.mouthMeshUrl;
 
   const part = (
     name: 'mouth' | 'brows' | 'lashes' | 'body' | 'hands' | 'feet' | 'hair' | 'clothing',

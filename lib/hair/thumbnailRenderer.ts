@@ -132,7 +132,10 @@ function loadTextureWithTimeout(url: string, timeoutMs = 800): Promise<THREE.Tex
     new THREE.TextureLoader().load(
       url,
       (tex) => {
-        if (settled) return;
+        if (settled) {
+          tex.dispose();
+          return;
+        }
         settled = true;
         clearTimeout(timer);
         tex.colorSpace = THREE.SRGBColorSpace;
@@ -358,27 +361,19 @@ export function requestHairThumbnail(
 
   const promise = (async () => {
     try {
-      const meshDataList: MeshData[] = [];
-
-      for (const url of urls) {
-        if (!url) continue;
-        const data = await enqueueFetch(async () => {
-          const res = await fetch(url);
-          if (!res.ok) return null;
-          return (await res.json()) as MeshData;
-        });
-
-        if (data && data.positions) {
-          meshDataList.push(data);
-        }
-      }
+      const parts = await Promise.all(urls.filter(Boolean).map((url) => enqueueFetch(async () => {
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        return (await res.json()) as MeshData;
+      })));
+      const meshDataList = parts.filter((data): data is MeshData => Boolean(data?.positions));
 
       if (!meshDataList.length) {
         FAILED_RENDERS.add(id);
         return null;
       }
 
-      return new Promise<string | null>((resolve) => {
+      return await new Promise<string | null>((resolve) => {
         renderQueue.push({
           id,
           meshDataList,

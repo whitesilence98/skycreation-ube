@@ -27,8 +27,10 @@
     "check:pack": "python -I scripts/check_pack_contract.py && node scripts/check_pack_server.cjs",
     "check:skin": "python -I scripts/check_skin_assets.py",
     "check:selection": "node scripts/check_asset_selection.cjs && node scripts/check_pack_selection.cjs",
+    "check:face": "node scripts/check_face_panels.cjs",
     "check:neck": "node scripts/verify_neck_seam_3d.cjs",
     "check:skeleton": "node scripts/check_skeleton_hierarchy.cjs",
+    "check:retarget": "node scripts/check_retarget.cjs",
     "check:jslot": "node scripts/check_dynamic_jslot_import.cjs",
     "check:nif": "node scripts/check_nif_import.cjs",
     "check:equip": "node scripts/check_equipment_thumbnails.cjs",
@@ -38,7 +40,7 @@
     "check:editor:screens": "node scripts/check_editor_browser.cjs",
     "check:deform": "node scripts/check_anatomy_deformation.cjs",
     "check:anatomy": "node scripts/check_anatomy_params.cjs",
-    "check:brows": "node scripts/verify_brows_panel.cjs"
+    "check:brows": "node scripts/verify_brows_panel.cjs && node scripts/check_brow_rendering.cjs"
   },
   "dependencies": {
     "@react-three/drei": "10.7.9",

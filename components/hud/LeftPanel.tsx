@@ -15,7 +15,10 @@ import { BrowsPicker } from '@/components/hud/BrowsPicker';
 import { BrowProperties } from '@/components/hud/BrowProperties';
 import { MakeupPicker } from '@/components/hud/MakeupPicker';
 import { MakeupProperties } from '@/components/hud/MakeupProperties';
-import { AssetPanel } from '@/components/hud/AssetPanel';
+import { LashesPicker } from '@/components/hud/LashesPicker';
+import { LashesProperties } from '@/components/hud/LashesProperties';
+import { MouthPicker } from '@/components/hud/MouthPicker';
+import { TattooPicker } from '@/components/hud/TattooPicker';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import type { EditorCategory } from '@/lib/faceControls';
 import type { UiCategory } from '@/lib/manifestSelect';
@@ -23,7 +26,7 @@ import type { UiCategory } from '@/lib/manifestSelect';
 const STYLE_TABS = [
   ['SKIN', 'Skin', 'skin'], ['EYES', 'Eyes', 'eyes'], ['BROWS', 'Brows', 'brows'],
   ['MAKEUP', 'Makeup', 'makeup'], ['LASHES', 'Lashes', 'lashes'], ['MOUTH', 'Mouth', 'mouth'],
-  ['TATTOO', 'Tattoos', 'tattoo'], ['WRINKLE', 'Wrinkles', 'wrinkle'],
+  ['TATTOO', 'Tattoos', 'tattoo'],
 ] as const;
 export function LeftPanel({ manifest, category }: { manifest: Mo2Manifest | null; category: EditorCategory }) {
   const subTab = useCharacter(s => s.subTab);
@@ -49,11 +52,16 @@ export function LeftPanel({ manifest, category }: { manifest: Mo2Manifest | null
           {label}
         </button>)}
       </nav>
+      {/* Every FACE style tab is explicit now; the generic AssetPanel fallback is
+          gone (AssetPanel itself remains for the dormant ASSETS workspace). */}
       {subTab === 'SKIN' ? <><SkinPicker manifest={manifest} /><details className="creator-details"><summary>Color &amp; finish</summary><SkinProperties /></details></>
         : subTab === 'EYES' ? <EyePicker manifest={manifest} />
           : subTab === 'BROWS' ? <><BrowsPicker manifest={manifest} /><details className="creator-details"><summary>Color &amp; finish</summary><BrowProperties /></details></>
             : subTab === 'MAKEUP' ? <><MakeupPicker /><details className="creator-details"><summary>Selected layer properties</summary><MakeupProperties /></details></>
-              : <AssetPanel manifest={manifest} active={true} />}
+              : subTab === 'LASHES' ? <><LashesPicker /><details className="creator-details"><summary>Color &amp; finish</summary><LashesProperties /></details></>
+                : subTab === 'MOUTH' ? <MouthPicker />
+                  : subTab === 'TATTOO' ? <><TattooPicker /><details className="creator-details"><summary>Selected layer properties</summary><MakeupProperties kind="tattoo" /></details></>
+                    : <><SkinPicker manifest={manifest} /><details className="creator-details"><summary>Color &amp; finish</summary><SkinProperties /></details></>}
     </>}
   </div>;
 }

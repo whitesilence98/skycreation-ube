@@ -109,7 +109,7 @@ export interface Rig {
   regionBoneKeys: Record<RegionId, string[]>;
   /** flat list used by the CPU mirror of the skinning. */
   bindData: {
-    skinIndex: Float32Array;
+    skinIndex: Uint16Array;
     skinWeight: Float32Array;
     basePosition: Float32Array;
     boneInverses: THREE.Matrix4[];
@@ -122,6 +122,94 @@ function smoothstep(a: number, b: number, x: number) {
   return t * t * (3 - 2 * t);
 }
 
+/** The head and fitted facial overlays must evaluate the same weight fields. */
+export function applyFacialWeights(geometry: THREE.BufferGeometry, boneList: THREE.Bone[]): void {
+  const position = geometry.getAttribute('position');
+  const count = position.count;
+  const bones = Object.fromEntries(boneList.map((bone) => [bone.name, bone]));
+  const skinIndex = new Float32Array(count * 4);
+  const skinWeight = new Float32Array(count * 4);
+
+  const fields: Array<{
+    boneIndex: number;
+    center: THREE.Vector3;
+    inv: THREE.Vector3;
+    strength: number;
+  }> = [];
+
+  for (const rb of REGION_BONES) {
+    const def = REGIONS_BY_ID[rb.region];
+    if (isPairedRegion(rb.region)) {
+      /* The brow influence sits at x = 0, so choosing the bone from the sign
+         of the centre put both mirrored fields on the same bone. */
+      const sides = ['L', 'R'] as const;
+      const centers = [rb.influence, mirror(rb.influence)];
+      for (let i = 0; i < 2; i++) {
+        const c = centers[i];
+        fields.push({
+          boneIndex: boneList.indexOf(bones[pairedBoneKey(def, sides[i])]),
+          center: new THREE.Vector3(c[0], c[1], c[2]),
+          inv: new THREE.Vector3(1 / rb.radii[0], 1 / rb.radii[1], 1 / rb.radii[2]),
+          strength: rb.strength,
+        });
+      }
+    } else {
+      fields.push({
+        boneIndex: boneList.indexOf(bones[def.bone]),
+        center: new THREE.Vector3(rb.influence[0], rb.influence[1], rb.influence[2]),
+        inv: new THREE.Vector3(1 / rb.radii[0], 1 / rb.radii[1], 1 / rb.radii[2]),
+        strength: rb.strength,
+      });
+    }
+  }
+
+  const acc: Array<{ i: number; w: number }> = [];
+  for (let v = 0; v < count; v++) {
+    const x = position.getX(v);
+    const y = position.getY(v);
+    const z = position.getZ(v);
+
+    acc.length = 0;
+    for (const fd of fields) {
+      const dx = (x - fd.center.x) * fd.inv.x;
+      const dy = (y - fd.center.y) * fd.inv.y;
+      const dz = (z - fd.center.z) * fd.inv.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      // Smooth falloff at the back of the head; pin the lower neck seam.
+      const depth = smoothstep(-0.004, 0.011, z);
+      const neckPin = y < -0.075 ? (z < 0.025 ? 0.0 : smoothstep(-0.082, -0.075, y)) : 1.0;
+      const w = Math.exp(-2.1 * d2) * fd.strength * (0.18 + 0.82 * depth) * neckPin;
+      if (w > 0.004) acc.push({ i: fd.boneIndex, w });
+    }
+
+    acc.sort((a, b) => b.w - a.w);
+    const top = acc.slice(0, 4);
+    const sum = top.reduce((s, t) => s + t.w, 0);
+    if (sum < 0.02) {
+      skinIndex[v * 4] = 0;
+      skinWeight[v * 4] = 1;
+      continue;
+    }
+    const norm = Math.min(1, 1 / sum);
+    for (let k = 0; k < top.length; k++) {
+      skinIndex[v * 4 + k] = top[k].i;
+      skinWeight[v * 4 + k] = top[k].w * norm;
+    }
+    const total = top.reduce((s, t) => s + t.w * norm, 0);
+    if (total < 1) {
+      const free = 1 - total;
+      if (top.length < 4) {
+        skinIndex[v * 4 + top.length] = 0;
+        skinWeight[v * 4 + top.length] = free;
+      } else {
+        skinWeight[v * 4] += free;
+      }
+    }
+  }
+  geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndex, 4));
+  geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeight, 4));
+}
+
 /**
  * Builds a flat bone hierarchy under a head root and skins the procedural
  * head to it. Weights are smooth ellipsoidal fields so a dragged nose bone
@@ -129,7 +217,6 @@ function smoothstep(a: number, b: number, x: number) {
  */
 export function createRig(geometry: THREE.BufferGeometry): Rig {
   const position = geometry.getAttribute('position') as THREE.BufferAttribute;
-  const count = position.count;
 
   const root = new THREE.Group();
   root.name = 'SkyrimHeadRoot';
@@ -178,103 +265,9 @@ export function createRig(geometry: THREE.BufferGeometry): Rig {
     jaw: ['Jaw'],
   };
 
-  // ── weights ────────────────────────────────────────────────────
-  const skinIndex = new Float32Array(count * 4);
-  const skinWeight = new Float32Array(count * 4);
-
-  const fields: Array<{
-    boneIndex: number;
-    center: THREE.Vector3;
-    inv: THREE.Vector3;
-    strength: number;
-  }> = [];
-
-  for (const rb of REGION_BONES) {
-    const def = REGIONS_BY_ID[rb.region];
-    if (isPairedRegion(rb.region)) {
-      /* The brow influence sits at x = 0, so choosing the bone from the sign
-         of the centre put *both* mirrored fields on the same bone and left
-         the other one unweighted. The side has to come from the loop index. */
-      const sides = ['L', 'R'] as const;
-      const centers = [rb.influence, mirror(rb.influence)];
-      for (let i = 0; i < 2; i++) {
-        const c = centers[i];
-        fields.push({
-          boneIndex: boneList.indexOf(bones[pairedBoneKey(def, sides[i])]),
-          center: new THREE.Vector3(c[0], c[1], c[2]),
-          inv: new THREE.Vector3(1 / rb.radii[0], 1 / rb.radii[1], 1 / rb.radii[2]),
-          strength: rb.strength,
-        });
-      }
-    } else {
-      fields.push({
-        boneIndex: boneList.indexOf(bones[def.bone]),
-        center: new THREE.Vector3(rb.influence[0], rb.influence[1], rb.influence[2]),
-        inv: new THREE.Vector3(1 / rb.radii[0], 1 / rb.radii[1], 1 / rb.radii[2]),
-        strength: rb.strength,
-      });
-    }
-  }
-
-  const acc: Array<{ i: number; w: number }> = [];
-
-  for (let v = 0; v < count; v++) {
-    const x = position.getX(v);
-    const y = position.getY(v);
-    const z = position.getZ(v);
-
-    acc.length = 0;
-    for (let f = 0; f < fields.length; f++) {
-      const fd = fields[f];
-      const dx = (x - fd.center.x) * fd.inv.x;
-      const dy = (y - fd.center.y) * fd.inv.y;
-      const dz = (z - fd.center.z) * fd.inv.z;
-      const d2 = dx * dx + dy * dy + dz * dz;
-      /* exp(-2.1 d²) → ~0.12 at the ellipse boundary, effectively zero at
-         1.6×. The back-of-head term used to be a hard cliff (`z > 0.004 ? 1 :
-         0.18`), which sheared the nape whenever a slider moved the face; a
-         smoothstep over 1.5 cm keeps the falloff continuous. */
-      const depth = smoothstep(-0.004, 0.011, z);
-      /* Pin the neck seam: lower neck vertices (y < -0.075) must stay 100% rigid on the head bone
-         so facial bone deformations (jaw, chin, lips) never tear the seam with the body mesh. */
-      const neckPin = y < -0.075 ? (z < 0.025 ? 0.0 : smoothstep(-0.082, -0.075, y)) : 1.0;
-      const w = Math.exp(-2.1 * d2) * fd.strength * (0.18 + 0.82 * depth) * neckPin;
-      if (w > 0.004) acc.push({ i: fd.boneIndex, w });
-    }
-
-    // keep the 4 strongest (the skinning shader's limit)
-    acc.sort((a, b) => b.w - a.w);
-    const top = acc.slice(0, 4);
-    let sum = 0;
-    for (const t of top) sum += t.w;
-
-    if (sum < 0.02) {
-      // stays rigid on the head bone
-      skinIndex[v * 4] = 0;
-      skinWeight[v * 4] = 1;
-      continue;
-    }
-
-    const norm = Math.min(1, 1 / sum);
-    for (let k = 0; k < top.length; k++) {
-      skinIndex[v * 4 + k] = top[k].i;
-      skinWeight[v * 4 + k] = top[k].w * norm;
-    }
-    // feather the residual onto the head bone so nothing snaps
-    const total = top.reduce((s, t) => s + t.w * norm, 0);
-    if (total < 1) {
-      const free = 1 - total;
-      if (top.length < 4) {
-        skinIndex[v * 4 + top.length] = 0;
-        skinWeight[v * 4 + top.length] = free;
-      } else {
-        skinWeight[v * 4] += free;
-      }
-    }
-  }
-
-  geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndex, 4));
-  geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeight, 4));
+  applyFacialWeights(geometry, boneList);
+  const skinIndex = geometry.getAttribute('skinIndex').array as Uint16Array;
+  const skinWeight = geometry.getAttribute('skinWeight').array as Float32Array;
 
   attachSkinCavity(geometry);
   const material = new THREE.MeshPhysicalMaterial({

@@ -268,6 +268,19 @@ export function createHeadSkinnedMesh(
 ): THREE.SkinnedMesh {
   const geo = mesh.geometry.clone();
   const count = geo.attributes.position.count;
+  if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) {
+    // Bake facial deformation before replacing facial weights with the unified head bone.
+    // Attached binding cancels the animated root, leaving positions in head-local space.
+    mesh.updateWorldMatrix(true, false);
+    const position = geo.getAttribute('position');
+    const point = new THREE.Vector3();
+    for (let i = 0; i < count; i++) {
+      mesh.getVertexPosition(i, point);
+      position.setXYZ(i, point.x, point.y, point.z);
+    }
+    position.needsUpdate = true;
+    geo.computeVertexNormals();
+  }
 
   // Vertex skinning: index 1 is headBone, weight 1.0
   const skinIndices = new Uint16Array(count * 4);

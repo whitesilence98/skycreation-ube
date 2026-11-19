@@ -59,7 +59,7 @@ const mockJslot = {
     sculptDivisor: 10000,
     sculpt: [
       {
-        host: "femaleheadchargen.tri",
+        host: "!UBE\\Head\\femaleHeadCharGen.tri",
         vertices: 11498,
         data: [
           [100, 1500, 2000, 1200],

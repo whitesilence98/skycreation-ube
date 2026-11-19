@@ -29,6 +29,7 @@ for (const [tab, category] of [['FACE SHAPE', 'face'], ['FACE', 'styling'], ['HA
 const shell = fs.readFileSync('components/hud/LeftPanel.tsx', 'utf8') + fs.readFileSync('components/hud/Hud.tsx', 'utf8');
 for (const component of ['PresetPanel', 'HairStyles', 'HairProperties', 'BodyPanel', 'BodyProperties', 'EquipmentPanel', 'WardrobeDrawer',
   'SkinPicker', 'SkinProperties', 'EyePicker', 'BrowsPicker', 'BrowProperties', 'MakeupPicker', 'MakeupProperties',
+  'LashesPicker', 'LashesProperties', 'MouthPicker', 'TattooPicker',
   'AssetPanel', 'HdrPanel', 'CameraPanel', 'GraphicsPanel', 'PosePanel', 'SettingsPanel']) assert.ok(shell.includes('<' + component), component + ' unreachable');
 for (const file of ['TopBar.tsx', 'Footer.tsx', 'RightPanel.tsx', 'shell/CategoryRail.tsx', 'shell/SubList.tsx', 'shell/ToolStrip.tsx', 'shell/ControlColumn.tsx']) {
   const source = ts.createSourceFile(file, fs.readFileSync('components/hud/' + file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

@@ -1,4 +1,11 @@
 import { ASSET_SOURCE } from '@/lib/mo2/assetSource';
+import {
+  ERROR_CACHE_CONTROL,
+  ifNoneMatchMatches,
+  notModifiedResponse,
+  revalidateHeaders,
+  responseEtag,
+} from '@/lib/mo2/httpCache';
 import { findEntry, companionGeometry, convert, readCatalogueIndex } from '@/lib/mo2/server';
 import {
   CONVERT_MODES,
@@ -14,13 +21,20 @@ import {
  * paths the indexer walked, so an id that is not listed cannot name a file —
  * that is the traversal guard, and it runs before any filesystem call.
  *
- * Responses are `immutable` for a year. The cache filename carries the source
- * id, and `lib/mo2/server.ts` rebuilds it whenever the source or the converter
- * is newer, so an id's bytes only change when the entry behind it does.
+ * Catalogue ids are path hashes, not content hashes: the same id can resolve
+ * to different bytes after a source switch, a re-sync, or an upstream edit.
+ * The response is therefore never `immutable`. Every successful body carries
+ * an ETag over the bytes this request actually resolved (freshness-checked
+ * cache or a fresh conversion), so a 304 is only issued after validation
+ * passed and the current bytes were confirmed to match the client's copy.
+ * `private` keeps a user's local mod content out of shared proxy caches.
  */
 
 function bad(status: number, message: string, extra: Record<string, unknown> = {}) {
-  return Response.json({ ok: false, error: message, ...extra }, { status });
+  return Response.json(
+    { ok: false, error: message, ...extra },
+    { status, headers: { 'Cache-Control': ERROR_CACHE_CONTROL } },
+  );
 }
 
 export async function GET(request: Request) {
@@ -89,13 +103,22 @@ export async function GET(request: Request) {
   }
 
   try {
+    // `convert` only returns bytes it confirmed fresh against the source file
+    // and the converter (or just produced from them), so the ETag below always
+    // describes current content.
     const result = await convert(kind, entry, mode, role);
     const body = new Uint8Array(result.bytes);
+    const etag = responseEtag(
+      'convert',
+      body,
+      [kind, entry.id, mode, role ?? '', entry.rel].join('\0'),
+    );
+    if (ifNoneMatchMatches(request, etag)) return notModifiedResponse(etag);
     return new Response(body, {
       headers: {
         'Content-Type': result.mime,
         'Content-Length': String(body.byteLength),
-        'Cache-Control': ASSET_SOURCE.layout === 'pack' ? 'no-store' : 'public, max-age=31536000, immutable',
+        ...revalidateHeaders(etag),
         'X-Mo2-Id': entry.id,
         'X-Mo2-Rel': encodeURIComponent(entry.rel),
         ...(result.iris ? { 'X-Mo2-Iris': JSON.stringify(result.iris) } : {}),

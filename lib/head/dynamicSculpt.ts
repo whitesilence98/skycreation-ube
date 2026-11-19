@@ -347,8 +347,7 @@ export async function resolveOrBuildSculptHead(
     mouthMeshUrl,
   };
 
-  // Add to in-memory heads list so manifest lookups find it
-  DYNAMIC_HEAD_OPTIONS.unshift(dynamicOption);
+  addDynamicHeadOption(dynamicOption);
 
   return dynamicOption;
 }
