@@ -25,9 +25,9 @@ import {
   coercePose,
   coerceSliderValues,
   coerceWeight,
-  isAssetSelection,
-  isOverlayLayers,
   isRegionId,
+  sanitizeAssetSelection,
+  sanitizeOverlayLayers,
 } from '@/lib/presetIO';
 import { CATEGORY_MAP, type AssetSelection, type UiCategory } from '@/lib/manifestSelect';
 import { isEquipSelection, isEquipSlot, type EquipSelection, type EquipSlot } from '@/lib/equipment';
@@ -123,6 +123,10 @@ export interface PersistedSession extends AnatomySnapshot {
   browGloss?: number;
   browGlossy?: number;
   linkBrowToHair?: boolean;
+  /** Eyelash tint `#rrggbb`. */
+  lashesColor?: string;
+  /** Eyelash opacity 0–1. */
+  lashesOpacity?: number;
   toneMapping: ToneMappingId;
   sliders: Record<RegionId, SliderValues>;
   poses: Record<RegionId, GizmoPose>;
@@ -155,7 +159,7 @@ const UTIL_KEYS: Array<keyof UtilityToggles> = [
    list: an unknown tab id highlights nothing and renders an empty panel,
    which reads as a bug rather than as "your old tab no longer exists". */
 const PRIMARY_TABS = ['PRESET', 'HAIR', 'FACE SHAPE', 'FACE', 'BODY', 'EQUIPMENT'];
-const SECONDARY_TABS = ['SKIN', 'EYES', 'LASHES', 'BROWS', 'MOUTH', 'MAKEUP', 'TATTOO', 'WRINKLE'];
+const SECONDARY_TABS = ['SKIN', 'EYES', 'LASHES', 'BROWS', 'MOUTH', 'MAKEUP', 'TATTOO'];
 const BODY_TABS: readonly BodyTab[] = ['gear', 'physique'];
 
 const isOneOf = <T extends string>(list: readonly T[], v: unknown): v is T =>
@@ -294,16 +298,20 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     browGloss: clamp(finite(o.browGloss, defaults.browGloss ?? 0.15), 0, 1),
     browGlossy: clamp(finite(o.browGlossy, defaults.browGlossy ?? 0.15), 0, 1),
     linkBrowToHair: bool(o.linkBrowToHair, defaults.linkBrowToHair ?? true),
+    lashesColor: typeof o.lashesColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.lashesColor) ? o.lashesColor : (defaults.lashesColor ?? '#1a1412'),
+    lashesOpacity: clamp(finite(o.lashesOpacity, defaults.lashesOpacity ?? 1), 0, 1),
     toneMapping: isOneOf(TONE_MAPPINGS, o.toneMapping) ? o.toneMapping : defaults.toneMapping,
     sliders,
     poses,
     preset: PRESETS.some((p) => p.id === o.preset) ? (o.preset as string) : defaults.preset,
     utils: coerceToggleSet(o.utils, UTIL_KEYS, defaults.utils),
-    /* `isAssetSelection` already refuses unknown kinds and non-string ids.
-       An id that no longer exists in the pack resolves to the manifest's own
-       default rather than crashing — `resolveManifest` treats an unmatched id
-       as "no explicit pick". */
-    assetSelection: isAssetSelection(o.assetSelection) ? o.assetSelection : defaults.assetSelection,
+    /* `sanitizeAssetSelection` drops unknown kinds and non-string ids but
+       keeps the surviving picks, so a session written before a kind was
+       removed still restores the rest of the map. An id that
+       no longer exists in the pack resolves to the manifest's own default
+       rather than crashing — `resolveManifest` treats an unmatched id as "no
+       explicit pick". */
+    assetSelection: sanitizeAssetSelection(o.assetSelection) ?? defaults.assetSelection,
     /* Worn garments are a slot map of their own; a slot the vocabulary no
        longer names, or a non-string id, drops rather than poisoning the
        render. `resolveManifest` ignores an id the pack no longer ships. */
@@ -311,7 +319,7 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     equipSlot: isEquipSlot(o.equipSlot) ? o.equipSlot : defaults.equipSlot,
     panelMode: o.panelMode === 'mesh' || o.panelMode === 'texture' ? o.panelMode : defaults.panelMode,
     activeCategory: coerceCategory(o.activeCategory),
-    overlayLayers: isOverlayLayers(o.overlayLayers) ? o.overlayLayers : defaults.overlayLayers,
+    overlayLayers: sanitizeOverlayLayers(o.overlayLayers) ?? defaults.overlayLayers,
     cameraFov: clamp(finite(o.cameraFov, defaults.cameraFov ?? 27), 15, 60),
   };
 }
@@ -370,6 +378,8 @@ export function pickSession(s: PersistedSession): PersistedSession {
     browGloss: s.browGloss ?? 0.15,
     browGlossy: s.browGlossy ?? 0.15,
     linkBrowToHair: s.linkBrowToHair ?? true,
+    lashesColor: s.lashesColor ?? '#1a1412',
+    lashesOpacity: s.lashesOpacity ?? 1,
     toneMapping: s.toneMapping,
     sliders: Object.fromEntries(
       Object.entries(s.sliders).map(([id, values]) => [id, { ...values }]),

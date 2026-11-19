@@ -751,6 +751,5 @@ export function AssetPanel({ manifest, active = false, onClose }: AssetPanelProp
 const DEFAULT_OVERLAY_COLOR: Partial<Record<AssetKind, string>> = {
   makeup: '#b0645a',
   tattoo: '#4a4f52',
-  wrinkle: '#5a4a42',
   brows: '#3e2c20',
 };

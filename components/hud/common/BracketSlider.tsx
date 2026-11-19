@@ -68,6 +68,23 @@ export function BracketSlider({
         <span className="select-none text-[#8f8576] font-light">[</span>
         <div
           ref={trackRef}
+          role="slider"
+          tabIndex={disabled ? -1 : 0}
+          aria-label={label}
+          aria-valuemin={min}
+          aria-valuemax={max}
+          aria-valuenow={value}
+          aria-valuetext={readout}
+          aria-disabled={disabled || undefined}
+          onKeyDown={(e) => {
+            if (disabled) return;
+            const next = e.key === 'Home' ? min : e.key === 'End' ? max
+              : ['ArrowRight', 'ArrowUp'].includes(e.key) ? value + step
+                : ['ArrowLeft', 'ArrowDown'].includes(e.key) ? value - step : null;
+            if (next === null) return;
+            e.preventDefault();
+            onChange(Math.max(min, Math.min(max, Number(next.toFixed(4)))));
+          }}
           onPointerDown={(e) => {
             if (!disabled) {
               setDragging(true);

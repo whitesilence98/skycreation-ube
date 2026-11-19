@@ -309,15 +309,6 @@ export function AuthoredPart({
         material.roughnessMap = rough;
       }
 
-      if (slot.spec.role === 'hair' && hair) {
-        material.color.set(hair.tone);
-        material.roughness = Math.max(0.12, 0.62 - hair.gloss * 0.46);
-        const alpha = hair.alpha !== undefined ? hair.alpha : 1.0;
-        material.opacity = alpha;
-        material.depthWrite = alpha > 0.85;
-        material.alphaTest = alpha < 0.95 ? 0.08 : (slot.spec.alphaTest ?? 0.35);
-        material.alphaToCoverage = alpha >= 0.99;
-      }
       material.needsUpdate = true;
     });
 
@@ -329,7 +320,7 @@ export function AuthoredPart({
       for (let i = 0; i < slots.length; i++) clearSlot(i);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [standardMaterials, slots, hiddenKey, hair?.tone, hair?.gloss, hair?.alpha]);
+  }, [standardMaterials, slots, hiddenKey]);
 
   useEffect(
     () => () => {

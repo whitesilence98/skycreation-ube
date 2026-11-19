@@ -31,7 +31,7 @@ let hairCache;
 /** `manifestSelect` imports the slot vocabulary as values, so the vm needs it. */
 const equipmentModule = () => (equipmentCache ??= loadModule('../lib/equipment.ts'));
 const hairModule = () => (hairCache ??= loadModule('../lib/hair.ts'));
-const { resolveManifest, assetOptions, CATEGORY_MAP } = loadModule('../lib/manifestSelect.ts');
+const { resolveManifest, assetOptions, CATEGORY_MAP, ASSET_KINDS, OVERLAY_KINDS } = loadModule('../lib/manifestSelect.ts');
 const { EQUIP_SLOTS, isEquipSelection, equipSlotOf, normalizeEquipSlot } = equipmentModule();
 
 const asset = (id, more = {}) => ({ id, mod: 'pack', file: id, rel: `pack/${id}`, ...more });
@@ -62,6 +62,31 @@ assert.ok(CATEGORY_MAP.clothing, 'CLOTHING is a picker category');
 assert.equal(CATEGORY_MAP.clothing.mesh, 'clothingMesh');
 assert.equal(CATEGORY_MAP.clothing.texture, 'clothing');
 assert.ok(assetOptions(pack, 'clothingMesh').length, 'clothing meshes are manifest options');
+
+assert.equal(Object.hasOwn(CATEGORY_MAP, 'wrinkle'), false);
+assert.ok(!ASSET_KINDS.includes('wrinkle'));
+assert.ok(!OVERLAY_KINDS.includes('wrinkle'));
+
+const companionPack = {
+  ...pack,
+  assets: {
+    ...pack.assets,
+    headMesh: [asset('head', {
+      meshUrl: '/head.json', isRealMesh: true,
+      eyeMeshUrl: '/head-eyes.json', lashesMeshUrl: '/head-lashes.json',
+      browsMeshUrl: '/head-brows.json', mouthMeshUrl: '/head-mouth.json',
+    })],
+  },
+};
+for (const part of ['eyes', 'lashes', 'brows', 'mouth']) {
+  const kind = part === 'eyes' ? 'eyeMesh' : `${part}Mesh`;
+  const choices = { [kind]: [asset('explicit', { mapRole: 'mesh', decodable: true })] };
+  const defaults = resolveManifest(companionPack, {}, choices);
+  assert.equal(part === 'eyes' ? defaults.eye.meshUrl : defaults.parts[part].meshUrl, `/head-${part}.json`);
+  const picked = resolveManifest(companionPack, { [kind]: 'explicit' }, choices);
+  const url = part === 'eyes' ? picked.eye.meshUrl : picked.parts[part].meshUrl;
+  assert.ok(url.includes(`kind=${kind}`) && url.includes('id=explicit'), `${kind} explicit pick beats head companion`);
+}
 
 // Default outfit is the supplied authored mesh with its authored atlas.
 let resolved = resolveManifest(pack, {}, catalogue);

@@ -10,6 +10,7 @@ import {
   type HeadBuild,
 } from '@/lib/head/geometry';
 import { detectHeadBaseWeight } from '@/lib/head/neckDeltas';
+import { createBrowMesh, prepareBrowTexture } from '@/lib/head/brows';
 import { createRig, poseRegionBone, applyCreationEngineWeight, verifyRigWiring, type Rig } from '@/lib/head/rig';
 import {
   buildDetailTexture,
@@ -21,7 +22,7 @@ import {
 } from '@/lib/head/faceTexture';
 import { convertUrl } from '@/lib/mo2/client';
 import { loadMask, compositeHeadAtlas, type OverlayInput } from '@/lib/head/overlayLayers';
-import { SLIDER_DEFS, REGIONS_BY_ID } from '@/lib/regions';
+import { SLIDER_DEFS, REGIONS_BY_ID, type RegionId } from '@/lib/regions';
 import { anatomySliderBank } from '@/lib/anatomy/bind';
 import { useCharacter } from '@/lib/store';
 import { MeshOverlay } from '@/components/scene/MeshOverlay';
@@ -80,7 +81,10 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const packMode = manifest?.sourceLayout === 'pack';
 
   const weight = useCharacter((s) => s.weight);
-  const linkFaceToWeight = useCharacter((s) => s.linkFaceToWeight);
+  /* `linkFaceToWeight` is not read in the render body any more: the facial
+     pose pass below reads it from `getState()` when it runs. A render-level
+     subscription would re-render the whole character tree for a value only
+     that pass consumes. */
 
   const headMeshUrl = manifest?.headMesh?.meshUrl;
   const headWeightVariants = (manifest?.headMesh as { weightVariants?: { w0: string; w1: string } })?.weightVariants;
@@ -286,6 +290,8 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   }, [neckGeo, mouthGeo, bodyGeo]);
 
   const rig = useMemo(() => createRig(headBuild.geometry), [headBuild.geometry]);
+  const browsMesh = useMemo(() => browsGeo ? createBrowMesh(browsGeo, rig) : null, [browsGeo, rig]);
+  useEffect(() => () => { browsMesh?.geometry.dispose(); }, [browsMesh]);
 
   /* ── the pack skeleton ────────────────────────────────────────────
      One registry for the whole character. Every skinned part registers its own
@@ -490,12 +496,10 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   /** The selected skin's own `femalehead_n.dds`, projected; null when absent. */
   const [skinNormal, setSkinNormal] = useState<THREE.CanvasTexture | null>(null);
 
-  const activeRegion = useCharacter((s) => s.activeRegion);
-  const sliders = useCharacter((s) => s.sliders);
-  const anatomy = useCharacter(s => s.anatomy);
-  const anatomyMode = useCharacter(s => s.anatomyMode);
-  const poses = useCharacter((s) => s.poses);
   const overlayLayers = useCharacter((s) => s.overlayLayers);
+  /** The pack a converted tintmask URL belongs to; a switch invalidates the
+   *  cached mask promises below. */
+  const assetSourceId = useCharacter((s) => s.assetSourceId);
 
   /* Each tintmask is a catalogue id; the route serves it as a greyscale mask.
      Loading them here rather than inside the bake keeps `buildFaceTexture`
@@ -514,17 +518,36 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     [overlayLayers],
   );
   const [overlayImages, setOverlayImages] = useState<OverlayInput[]>([]);
+  /* Decoded tintmasks, keyed by their source URL. A colour, opacity, blend or
+     coverage change rebuilds the layer objects (so the baked composite picks
+     up the new parameters) but must never refetch the same image. The cache
+     is scoped to this component and cleared when the asset source changes:
+     a picked id is only meaningful inside the pack that served it. */
+  const maskCacheRef = useRef(new Map<string, Promise<HTMLImageElement | null>>());
+  useEffect(() => {
+    maskCacheRef.current = new Map();
+  }, [assetSourceId]);
   useEffect(() => {
     if (!overlayLayers.length) {
       setOverlayImages([]);
       return;
     }
     let cancelled = false;
+    const cache = maskCacheRef.current;
     Promise.all(
-      overlayLayers.map(async (layer) => ({
-        layer,
-        mask: await loadMask(convertUrl({ kind: layer.kind, id: layer.id, mode: 'alpha' })),
-      })),
+      overlayLayers.map(async (layer) => {
+        const src = convertUrl({ kind: layer.kind, id: layer.id, mode: 'alpha' });
+        let mask = cache.get(src);
+        if (!mask) {
+          mask = loadMask(src);
+          cache.set(src, mask);
+        }
+        const resolved = await mask;
+        /* A miss stays retryable: keeping `null` cached would make a transient
+           fetch failure permanent for as long as the source lives. */
+        if (!resolved) cache.delete(src);
+        return { layer, mask: resolved };
+      }),
     ).then((loaded) => {
       if (!cancelled) setOverlayImages(loaded);
     });
@@ -533,7 +556,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the
     // serialised stack; the array identity changes on every store write.
-  }, [overlayKey]);
+  }, [overlayKey, assetSourceId]);
 
   const skinSrc = manifest?.textures?.skin;
   const skinNormalSrc = manifest?.textures?.normal;
@@ -647,6 +670,8 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const skinDetail = useCharacter((s) => s.skinDetail);
   const skinSheen = useCharacter((s) => s.skinSheen);
   const skinColor = useCharacter((s) => s.skinColor);
+  const lashesColor = useCharacter((s) => s.lashesColor);
+  const lashesOpacity = useCharacter((s) => s.lashesOpacity);
   const browColor = useCharacter((s) => s.browColor);
   const browOpacity = useCharacter((s) => s.browOpacity);
   const browGloss = useCharacter((s) => s.browGloss);
@@ -914,9 +939,10 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         roughness: 0.9,
         metalness: 0.0,
         transparent: true,
-        alphaTest: 0.15,
-        alphaToCoverage: true,
-        depthWrite: true,
+        alphaTest: 0,
+        alphaToCoverage: false,
+        depthWrite: false,
+        forceSinglePass: true,
         side: THREE.DoubleSide,
       }),
     [],
@@ -929,18 +955,26 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     { colorSpace: THREE.SRGBColorSpace, wrap: true },
   );
 
-  /* The atlas already carries the brow colour; the material tint is only the
-     stand-in for the frame before it arrives. Multiplying a brown atlas by
-     `#1a1412` crushed it to near-black, which read as a painted-on stripe
-     rather than hair. */
   useEffect(() => {
-    if (browsTexState === 'loaded') {
-      browsMaterial.color.set(browColor || '#ffffff');
-    } else {
-      browsMaterial.color.set(browColor || '#1a1412');
+    if (browsTexState !== 'loaded' || !browsMaterial.map) return;
+    try {
+      prepareBrowTexture(browsMaterial.map);
+      onDirty();
+    } catch (error) {
+      // Keep the loaded atlas if canvas processing is unavailable.
+      console.error('[HeadModel] Failed to prepare brow tint:', error);
     }
+  }, [browsMaterial, browsTexState, onDirty]);
+
+  useEffect(() => {
+    lashesMaterial.color.set(lashesColor);
+    lashesMaterial.opacity = lashesOpacity;
+    onDirty();
+  }, [lashesMaterial, lashesColor, lashesOpacity, onDirty]);
+
+  useEffect(() => {
+    browsMaterial.color.set(browColor || '#1a1412');
     browsMaterial.opacity = browOpacity;
-    browsMaterial.transparent = browOpacity < 0.999;
     const totalGloss = Math.min(1, browGloss * 0.7 + browGlossy * 0.3);
     browsMaterial.roughness = Math.max(0.08, 0.95 - totalGloss * 0.75);
     browsMaterial.needsUpdate = true;
@@ -1156,25 +1190,68 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     onAssetsReady?.(settled);
   }, [settled, onAssetsReady]);
 
-  // ── pose the skeleton whenever sliders or the gizmo change ──────
-  useEffect(() => {
-    const defs = SLIDER_DEFS;
-    /* Every region owns its own bone since `lips` stopped sharing `'Jaw'`, so
-       one pass is complete. The extra pass for `activeRegion` existed only to
-       let the active tab win the lips/jaw collision, and it had the side
-       effect that merely switching tabs re-displaced the mouth. */
-    for (const rid of Object.keys(REGIONS_BY_ID) as Array<keyof typeof REGIONS_BY_ID>) {
-      const values = anatomyMode === 'advanced' ? anatomySliderBank(rid, anatomy, sliders[rid]) : sliders[rid];
+  /* ── pose the facial rig + weight coupling ─────────────────────────
+     The facial bones are a function of (sliders, gizmo poses, advanced
+     anatomy), weight and the link toggle. Subscribing to those in the render
+     body re-rendered the whole character tree on every pointer move; instead
+     the write path is an imperative store subscription that coalesces any
+     number of writes into exactly one pose application per animation frame.
+     The body skeleton itself is *not* re-posed here: that is the pose effect
+     above and `AnimationDirector`'s mixer.
+
+     `applyRigPose` is the full pass, not just the active region: every region
+     and the weight coupling are rewritten from scratch, so an undo, a head
+     swap (new rig) or a preset apply restores all of them rather than leaving
+     whatever the previous rig held. */
+  const applyRigPose = useCallback(() => {
+    const s = useCharacter.getState();
+    for (const rid of Object.keys(REGIONS_BY_ID) as RegionId[]) {
+      const values = s.anatomyMode === 'advanced'
+        ? anatomySliderBank(rid, s.anatomy, s.sliders[rid])
+        : s.sliders[rid];
       for (const key of rig.regionBoneKeys[rid]) {
-        poseRegionBone(rig, key, rid, defs, values, poses[rid]);
+        poseRegionBone(rig, key, rid, SLIDER_DEFS, values, s.poses[rid]);
       }
     }
-
-    applyCreationEngineWeight(rig, weight, linkFaceToWeight);
+    applyCreationEngineWeight(rig, s.weight, s.linkFaceToWeight);
     rig.root.updateMatrixWorld(true);
     onDirty();
+  }, [rig, onDirty]);
 
-  }, [rig, sliders, poses, anatomy, anatomyMode, weight, linkFaceToWeight, onDirty]);
+  useEffect(() => {
+    applyRigPose();
+    let pending = false;
+    let frame = 0;
+    const schedule = () => {
+      if (pending) return;
+      pending = true;
+      frame = requestAnimationFrame(() => {
+        pending = false;
+        frame = 0;
+        applyRigPose();
+      });
+    };
+    /* One subscription, one coalesced frame per burst of writes. The rig
+       identity is in this effect's key, so a head swap tears the listener
+       down and applies the full banks to the new rig immediately. */
+    const unsubscribe = useCharacter.subscribe((state, prev) => {
+      if (
+        state.sliders !== prev.sliders
+        || state.poses !== prev.poses
+        || state.anatomy !== prev.anatomy
+        || state.anatomyMode !== prev.anatomyMode
+        || state.weight !== prev.weight
+        || state.linkFaceToWeight !== prev.linkFaceToWeight
+      ) schedule();
+    });
+    return () => {
+      unsubscribe();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [applyRigPose]);
+
+  /* A remounted rig (new head mesh) has fresh bones at their bind pivots; the
+     effect above runs for it because `applyRigPose` is keyed on `rig`. */
 
   /* A part with geometry is never withheld: pack mode draws its own material
      once its atlas is on the GPU, and the flat grey stand-in until then (or
@@ -1218,8 +1295,8 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         {lashesGeo && (
           <mesh name="Lashes" geometry={lashesGeo} material={partMaterial(lashesTexState, lashesMaterial)} renderOrder={3} />
         )}
-        {browsGeo && (
-          <mesh name="Brows" geometry={browsGeo} material={partMaterial(browsTexState, browsMaterial)} renderOrder={4} />
+        {browsMesh && (
+          <primitive object={browsMesh} material={partMaterial(browsTexState, browsMaterial)} dispose={null} />
         )}
       </primitive>
       {bodyGeo && bodyMesh ? (

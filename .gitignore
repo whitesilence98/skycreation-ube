@@ -49,3 +49,6 @@ production/session-logs/
 Thumbs.db
 .vscode/
 .idea/
+
+# local asset archive (819 MB, rebuilt from the external pack)
+/public/*.zip

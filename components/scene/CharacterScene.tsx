@@ -412,7 +412,8 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
           linear and the trailing <ToneMapping> is the only conversion. The
           Canvas's own `toneMapping` option is therefore inert while this is
           mounted — do not "fix" exposure by touching it. */}
-      <EffectComposer multisampling={4}>
+      {/* SMAA replaces MSAA when enabled; hair alpha-to-coverage needs MSAA. */}
+      <EffectComposer multisampling={fx.smaa ? 0 : 4}>
         {/* World units, not normalised depth. `focusDistance`/`focusRange` are
             overwritten every frame by PipelineRig; these are only the values
             used on the first frame. Unmounting is safe: PipelineRig guards on
@@ -459,9 +460,9 @@ function createCustomRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
   try {
     const renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: true,
+      antialias: false,
       alpha: false,
-      powerPreference: 'default',
+      powerPreference: 'high-performance',
       failIfMajorPerformanceCaveat: false,
     });
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -492,7 +493,7 @@ function createCustomRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
 export function CharacterScene({ manifest, onAssetsReady, onIssue }: CharacterSceneProps) {
   return (
     <Canvas
-      dpr={[1, 2]}
+      dpr={[1, 1.5]}
       /* One shadow-casting key light (see the light block above). This is the
          stand-in for the SSAO pass that cannot run here: without it the nose,
          lip line and eye sockets receive no contact darkening at all, which is

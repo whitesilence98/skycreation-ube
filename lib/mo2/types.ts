@@ -138,10 +138,6 @@ export const TEXTURE_KINDS = [
 
 export type TextureKind = (typeof TEXTURE_KINDS)[number];
 
-export function isTextureKind(kind: string): kind is TextureKind {
-  return (TEXTURE_KINDS as readonly string[]).includes(kind);
-}
-
 /** The picker shows these; `other` is reachable but not a default row. */
 export const PICKER_KINDS = [
   'headMesh',
@@ -166,7 +162,6 @@ export const PICKER_KINDS = [
   'preset',
   'makeup',
   'tattoo',
-  'wrinkle',
 ] as const;
 
 export type PickerKind = (typeof PICKER_KINDS)[number];
@@ -194,7 +189,6 @@ export const KIND_LABEL: Record<string, string> = {
   preset: 'PRESET',
   makeup: 'MAKEUP',
   tattoo: 'TATTOO',
-  wrinkle: 'WRINKLE',
   other: 'OTHER',
 };
 
@@ -222,29 +216,7 @@ export const KIND_TO_CATALOGUE: Record<string, string> = {
   preset: 'preset',
   makeup: 'makeup',
   tattoo: 'tattoo',
-  wrinkle: 'wrinkle',
   other: 'other',
 };
 
 export const CONVERT_MODES = ['albedo', 'normal', 'alpha', 'thumb', 'disc', 'mesh', 'atlas'] as const;export type ConvertMode = (typeof CONVERT_MODES)[number];
-
-/**
- * The overlay categories composite onto the skin in atlas space; `skin`,
- * `eyes`, `hair` and `headMesh` are single-select and drive the 3D render.
- */
-export const OVERLAY_KINDS = ['makeup', 'tattoo', 'wrinkle', 'brows'] as const;
-
-export function isOverlayKind(kind: string): boolean {
-  return (OVERLAY_KINDS as readonly string[]).includes(kind);
-}
-
-/** How a kind reaches the viewport. */
-export function defaultModeFor(kind: string, mapRole?: string): ConvertMode {
-  if (isMeshKind(kind)) return 'mesh';
-  if (kind === 'eyes') return 'disc';
-  if (mapRole === 'normal') return 'normal';
-  if (mapRole === 'albedo' || !mapRole) {
-    return isTextureKind(kind) && kind !== 'eyes' ? 'albedo' : 'alpha';
-  }
-  return 'albedo';
-}

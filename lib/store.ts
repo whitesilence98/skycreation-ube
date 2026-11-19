@@ -362,6 +362,12 @@ export interface CharacterState extends AnatomySnapshot {
   /** Eyebrow glossiness sharpness [0..1]. Default 0.15 (15%). */
   browGlossy: number;
   setBrowGlossy: (v: number) => void;
+  /** Eyelash tint `#rrggbb`. Default '#1a1412' matching the lash material. */
+  lashesColor: string;
+  setLashesColor: (c: string) => void;
+  /** Eyelash opacity [0..1]. Default 1.0 (100%). */
+  lashesOpacity: number;
+  setLashesOpacity: (v: number) => void;
   /** Favorited brow IDs. */
   favoriteBrows: string[];
   toggleFavoriteBrow: (id: string) => void;
@@ -403,7 +409,7 @@ export interface CharacterState extends AnatomySnapshot {
   setAssetCatalogue: (kind: AssetKind, entries: CatalogueEntry[]) => void;
   /** Which category the asset panel lists. Set by the HUD's sub-tabs. */
   activeCategory: ActiveCategory;
-  /** Makeup / tattoo / wrinkle / brow layers, in draw order. */
+  /** Makeup / tattoo layers, in draw order. */
   overlayLayers: OverlayLayer[];
   /**
    * `kind:id` of the overlay the makeup panel is editing, or null. UI-only —
@@ -506,9 +512,35 @@ export interface CharacterState extends AnatomySnapshot {
 function anatomySnapshot(s: AnatomySnapshot): AnatomySnapshot {
   return { anatomy: { ...s.anatomy }, anatomyAsymmetry: { ...s.anatomyAsymmetry }, anatomyColors: { ...s.anatomyColors } };
 }
+
+/** Same number under the old serialized compare: `NaN` serialized as `null`,
+ *  so two NaNs read as equal there and still do. Everything else is `===`
+ *  (`-0 === 0` stays true, as the JSON form had it). */
+const sameNumber = (a: number | undefined, b: number | undefined) =>
+  a === b || (a !== a && b !== b);
+
+/* The three anatomy banks are closed vocabularies (`ANATOMY_PARAMS`,
+   `ANATOMY_COLOR_DEFS`), so comparing the fixed key sets is both exact and
+   allocation-free — unlike a `JSON.stringify` of two whole snapshots, which
+   this used to do on every slider event. An absent asymmetry key still
+   compares unequal to an explicit `0`, matching the old serialized form. */
+function anatomyDiffers(current: AnatomySnapshot, next: Partial<AnatomySnapshot>): boolean {
+  if (next.anatomy) {
+    for (const p of ANATOMY_PARAMS) if (!sameNumber(current.anatomy[p.id], next.anatomy[p.id])) return true;
+  }
+  if (next.anatomyAsymmetry) {
+    for (const p of ANATOMY_PARAMS) {
+      if (p.bilateral && !sameNumber(current.anatomyAsymmetry[p.id], next.anatomyAsymmetry[p.id])) return true;
+    }
+  }
+  if (next.anatomyColors) {
+    for (const p of ANATOMY_COLOR_DEFS) if (current.anatomyColors[p.id] !== next.anatomyColors[p.id]) return true;
+  }
+  return false;
+}
+
 function anatomyPatch(s: CharacterState, patch: Partial<AnatomySnapshot>): Partial<CharacterState> {
-  const next = { ...anatomySnapshot(s), ...patch };
-  if (JSON.stringify(next) === JSON.stringify(anatomySnapshot(s))) return {};
+  if (!anatomyDiffers(s, patch)) return {};
   return { ...patch, anatomyFuture: [],
     anatomyPast: s.anatomyEditStart ? s.anatomyPast : [...s.anatomyPast, anatomySnapshot(s)].slice(-30) };
 }
@@ -542,6 +574,80 @@ function faceSnapshot(s: CharacterState): FaceSnapshot {
   };
 }
 
+/* Structural compares against the fixed banks — no clones, no `JSON.stringify`.
+   Used both by `faceHistory` (is this patch a no-op?) and by `commitEdit`
+   (did the closed transaction change the face at all?). */
+function sliderBankDiffers(
+  current: Record<RegionId, SliderValues>,
+  previous: Record<RegionId, SliderValues>,
+): boolean {
+  for (const region of REGIONS) {
+    const a = current[region.id];
+    const b = previous[region.id];
+    if (a === b) continue;
+    for (const id in SLIDERS_BY_ID) {
+      if (!sameNumber(a[id as SliderId], b[id as SliderId])) return true;
+    }
+  }
+  return false;
+}
+
+function poseDiffers(a: GizmoPose, b: GizmoPose): boolean {
+  for (let i = 0; i < 3; i++) {
+    if (!sameNumber(a.offset[i], b.offset[i])) return true;
+    if (!sameNumber(a.rotation[i], b.rotation[i])) return true;
+    if (!sameNumber(a.scale[i], b.scale[i])) return true;
+  }
+  return false;
+}
+
+function poseBankDiffers(
+  current: Record<RegionId, GizmoPose>,
+  previous: Record<RegionId, GizmoPose>,
+): boolean {
+  for (const region of REGIONS) {
+    const a = current[region.id];
+    const b = previous[region.id];
+    if (a !== b && poseDiffers(a, b)) return true;
+  }
+  return false;
+}
+
+function faceSnapshotDiffers(s: CharacterState, previous: FaceSnapshot): boolean {
+  return s.anatomyMode !== previous.anatomyMode
+    || anatomyDiffers(s, previous)
+    || sliderBankDiffers(s.sliders, previous.sliders)
+    || poseBankDiffers(s.poses, previous.poses);
+}
+
+/** Whether applying `patch` would move any face field. Only the banks the
+ *  patch actually carries are inspected, so a slider move never walks — let
+ *  alone serializes — the other regions' banks or the anatomy dictionaries. */
+function facePatchDiffers(s: CharacterState, patch: Partial<CharacterState>): boolean {
+  if (patch.anatomyMode !== undefined && patch.anatomyMode !== s.anatomyMode) return true;
+  if (patch.sliders) {
+    for (const region of REGIONS) {
+      const next = patch.sliders[region.id];
+      /* A patch that omits a region leaves it alone. */
+      if (!next) continue;
+      const current = s.sliders[region.id];
+      if (next === current) continue;
+      for (const id in SLIDERS_BY_ID) {
+        if (!sameNumber(next[id as SliderId], current[id as SliderId])) return true;
+      }
+    }
+  }
+  if (patch.poses) {
+    for (const region of REGIONS) {
+      const next = patch.poses[region.id];
+      if (!next) continue;
+      const current = s.poses[region.id];
+      if (next !== current && poseDiffers(next, current)) return true;
+    }
+  }
+  return anatomyDiffers(s, patch);
+}
+
 /** The live-store partial that puts a stored face back on screen. */
 function faceRestore(snap: FaceSnapshot): Partial<CharacterState> {
   return {
@@ -563,9 +669,9 @@ function faceRestore(snap: FaceSnapshot): Partial<CharacterState> {
  */
 function faceHistory(s: CharacterState, patch: Partial<CharacterState>): Partial<CharacterState> {
   if (s.faceCompareStart) return {};
-  const current = faceSnapshot(s);
-  const next = faceSnapshot({ ...s, ...patch } as CharacterState);
-  if (JSON.stringify(next) === JSON.stringify(current)) return {};
+  /* Decide on the patch's own fields. Cloning the two full face snapshots only
+     to throw them away on a no-op was most of a pointer move's allocation. */
+  if (!facePatchDiffers(s, patch)) return {};
   /* Any open transaction — including one the advanced panel opened on its own
      via `beginAnatomyEdit` — takes one entry for the whole drag. */
   const inTransaction = Boolean(s.faceEditStart || s.anatomyEditStart);
@@ -573,10 +679,11 @@ function faceHistory(s: CharacterState, patch: Partial<CharacterState>): Partial
     ...patch,
     /* The first edit anchors the compare baseline to the face as it was
        before that edit; otherwise hold-compare would always show the value
-       the user is already looking at. */
-    ...(s.faceBaseline ? {} : { faceBaseline: current }),
+       the user is already looking at. Inside a transaction `s` is still the
+       pre-drag face, so this is the same snapshot the open entry holds. */
+    ...(s.faceBaseline ? {} : { faceBaseline: faceSnapshot(s) }),
     faceFuture: [],
-    facePast: inTransaction ? s.facePast : [...s.facePast, current].slice(-FACE_HISTORY_LIMIT),
+    facePast: inTransaction ? s.facePast : [...s.facePast, faceSnapshot(s)].slice(-FACE_HISTORY_LIMIT),
   };
 }
 
@@ -599,10 +706,8 @@ function commitEdit(s: CharacterState): Partial<CharacterState> {
   const faceStart = s.faceEditStart;
   const anatomyStart = s.anatomyEditStart;
   if (!faceStart && !anatomyStart) return {};
-  const anatomyChanged = anatomyStart
-    ? JSON.stringify(anatomySnapshot(s)) !== JSON.stringify(anatomyStart) : false;
-  const faceChanged = faceStart
-    ? JSON.stringify(faceSnapshot(s)) !== JSON.stringify(faceStart) : anatomyChanged;
+  const anatomyChanged = anatomyStart ? anatomyDiffers(s, anatomyStart) : false;
+  const faceChanged = faceStart ? faceSnapshotDiffers(s, faceStart) : anatomyChanged;
   return {
     faceEditStart: null,
     anatomyEditStart: null,
@@ -622,7 +727,7 @@ function commitEdit(s: CharacterState): Partial<CharacterState> {
  * not touch anatomy (a slider drag) leaves the advanced stack alone.
  */
 function anatomyStep(s: CharacterState, snap: FaceSnapshot, direction: 'undo' | 'redo'): Partial<CharacterState> {
-  if (JSON.stringify(anatomySnapshot(snap)) === JSON.stringify(anatomySnapshot(s))) return {};
+  if (!anatomyDiffers(s, snap)) return {};
   return direction === 'undo'
     ? { anatomyPast: s.anatomyPast.slice(0, -1),
         anatomyFuture: [...s.anatomyFuture, anatomySnapshot(s)].slice(-30) }
@@ -919,6 +1024,13 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   setBrowGloss: (browGloss) => set({ browGloss: Math.min(1, Math.max(0, browGloss)) }),
   browGlossy: PRESETS[0].browGlossy ?? 0.15,
   setBrowGlossy: (browGlossy) => set({ browGlossy: Math.min(1, Math.max(0, browGlossy)) }),
+  lashesColor: '#1a1412',
+  /* An invalid or non-string value is ignored rather than stored, so a bad
+     colour from an imported preset cannot put an unparseable tint on screen. */
+  setLashesColor: (lashesColor) =>
+    set(lashesColor && /^#[0-9a-f]{6}$/i.test(lashesColor) ? { lashesColor } : {}),
+  lashesOpacity: 1,
+  setLashesOpacity: (v) => { if (Number.isFinite(v)) set({ lashesOpacity: Math.min(1, Math.max(0, v)) }); },
   favoriteBrows: [],
   toggleFavoriteBrow: (id) =>
     set((s) => ({
@@ -1121,6 +1233,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         assetSelection,
         equipment: def?.equipment ? ({ ...def.equipment } as Record<EquipSlot, string>) : s.equipment,
         hair: def?.hair ? coerceHair({ ...s.hair, ...def.hair }) : s.hair,
+        lashesColor: def?.lashesColor ?? s.lashesColor,
+        lashesOpacity: def?.lashesOpacity ?? s.lashesOpacity,
         browColor: def?.browColor ?? s.browColor,
         browOpacity: def?.browOpacity ?? s.browOpacity,
         browGloss: def?.browGloss ?? s.browGloss,
@@ -1254,6 +1368,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         weight: BODY_WEIGHT_ENABLED ? (payload.weight ?? s.weight) : 0,
         linkFaceToWeight: (payload as { linkFaceToWeight?: boolean }).linkFaceToWeight ?? s.linkFaceToWeight,
         linkBrowToHair: (payload as { linkBrowToHair?: boolean }).linkBrowToHair ?? s.linkBrowToHair,
+        lashesColor: payload.lashesColor ?? s.lashesColor,
+        lashesOpacity: payload.lashesOpacity ?? s.lashesOpacity,
         browColor: (payload as { browColor?: string }).browColor
           ?? (((payload as { linkBrowToHair?: boolean }).linkBrowToHair ?? s.linkBrowToHair) && payload.hair?.tone && payload.hair.tone.toLowerCase() !== '#ffffff'
             ? payload.hair.tone
@@ -1292,6 +1408,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
       browGloss: s.browGloss,
       browGlossy: s.browGlossy,
       linkBrowToHair: s.linkBrowToHair,
+      lashesColor: s.lashesColor,
+      lashesOpacity: s.lashesOpacity,
       overlays: s.overlayLayers,
       anatomyMode: s.anatomyMode,
       ...anatomySnapshot(s),

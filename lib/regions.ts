@@ -298,14 +298,16 @@ export interface PresetDef {
   browGloss?: number;
   browGlossy?: number;
   linkBrowToHair?: boolean;
-  /** Overlay layers (makeup, tattoo, wrinkle). */
+  lashesColor?: string;
+  lashesOpacity?: number;
+  /** Overlay layers (makeup, tattoo). */
   overlays?: Array<{
-    kind: 'makeup' | 'tattoo' | 'wrinkle';
+    kind: 'makeup' | 'tattoo';
     id: string;
     color: string;
     opacity: number;
     coverage?: number;
-    blend?: 'normal' | 'multiply' | 'overlay' | 'soft-light';
+    blend?: 'normal' | 'multiply' | 'screen' | 'overlay';
   }>;
 }
 
@@ -326,8 +328,8 @@ export const PRESETS: PresetDef[] = [
     headMeshId: 'preset-279bbfa8f35ce962-face',
     weight: 0.0,
     assets: {
-      hairMesh: 'hairMesh-75da4390fbefdf93',
-      hair: 'hair-422aa956d2c63dfa',
+      hairMesh: 'hairMesh-81fd9665619193d4',
+      hair: 'hair-91a00facdc8ba472',
       skin: 'skin-zhizhen-ube',
       headMesh: 'preset-279bbfa8f35ce962-face',
       preset: 'preset-279bbfa8f35ce962',

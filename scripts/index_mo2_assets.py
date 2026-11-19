@@ -6,7 +6,7 @@ The sync script (`sync_mo2_assets.py`) curates ~37 files by hand: they are the
 ones the manifest ships as defaults, and each has been measured. This script is
 the opposite trade — it walks the whole archive and records *what exists*, so
 the asset panel can offer categories the curated manifest has never covered
-(makeup, tattoo, wrinkle) and the long tail of skins, eyes and hair.
+(makeup, tattoo) and the long tail of skins, eyes and hair.
 
 Nothing here opens an image. A DDS decode costs 0.05-0.15 s and there are
 26,558 files; the walk itself is ~1 s. So the catalogue stores only facts the
@@ -83,7 +83,6 @@ KINDS = [
     "preset",
     "makeup",
     "tattoo",
-    "wrinkle",
     "other",
 ]
 
@@ -120,7 +119,6 @@ DIR_RULES: list[tuple[str, tuple[str, ...]]] = [
     # `\brows_` is separate from `\brows\`: COR ships its second brow set in
     # `!COR\Brows_ILV\`, and a trailing separator never matches that folder.
     ("brows", ("\\brows\\", "\\brows_")),
-    ("wrinkle", ("\\wrinkle",)),
     ("makeup", (
         "\\overlays\\", "\\makeup", "lipstick", "eyeshadow", "eyeliner", "blush",
         "\\lips\\", "lips", "\\warpaint", "\\tintmask", "\\cotr overlays\\",
@@ -133,7 +131,6 @@ DIR_RULES: list[tuple[str, tuple[str, ...]]] = [
 FILE_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("eyes", ("eye", "eyes")),
     ("brows", ("brow", "brows")),
-    ("wrinkle", ("wrinkle", "wrinkles", "frown", "frownlines")),
     ("makeup", (
         "makeup", "eyeliner", "eyeshadow", "eyeshadows", "lipstick", "lipgloss",
         "lips", "lip", "blush", "contour",
@@ -238,8 +235,6 @@ def refine_family(kind: str, name_lower: str) -> str:
         if tokens & {"dirt", "scar", "scars", "tattoo", "tattoos", "warpaint",
                      "freckle", "freckles", "mole", "moles"}:
             return "tattoo"
-        if tokens & {"wrinkle", "wrinkles", "frown", "frownlines"}:
-            return "wrinkle"
         # Structural tint — Bethesda base eye-socket shading, nose reddening, base race tint.
         # Sent to `other` rather than `skin` so the skin picker only offers head diffuses.
         if (stem.startswith("female") and any(k in stem for k in ("socket", "nose", "forehead", "chin", "neck"))) or any(

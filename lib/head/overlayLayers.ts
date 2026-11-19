@@ -1,7 +1,7 @@
 import type { OverlayBlend, OverlayLayer } from '@/lib/store';
 
 /**
- * Composites makeup / tattoo / wrinkle tintmasks onto a head atlas.
+ * Composites makeup / tattoo tintmasks onto a head atlas.
  *
  * Why atlas space and not face space: Skyrim's tintmasks are painted in the
  * *same* UV layout as `femaleHead_d.dds`. Compositing them onto the decoded

@@ -8,6 +8,7 @@ const THREE = require('three');
 
 const root = path.resolve(__dirname, '..');
 const cache = new Map();
+let fetchImpl;
 
 function load(name) {
   const file = path.join(root, name + '.ts');
@@ -26,6 +27,9 @@ function load(name) {
       URLSearchParams,
       THREE,
       Float32Array,
+      setTimeout,
+      clearTimeout,
+      fetch: (...args) => fetchImpl(...args),
       require: (id) => {
         if (id === 'three') return THREE;
         if (id.startsWith('@/')) return load(id.slice(2));
@@ -107,6 +111,27 @@ async function run() {
   assert.ok(height >= 0.16 && height <= 0.19, `Cranium height ~17.5cm (${(height * 100).toFixed(1)}cm)`);
   assert.ok(depth >= 0.14 && depth <= 0.16, `Cranium depth ~15cm (${(depth * 100).toFixed(1)}cm)`);
   console.log('✓ Mannequin head proportions verified: realistic human head scale fits inside hair volume');
+
+  console.log('--- 5. Testing Bounded Parallel Multipart Fetches ---');
+  const releases = [];
+  let active = 0, peak = 0, started = 0;
+  fetchImpl = () => {
+    started++;
+    peak = Math.max(peak, ++active);
+    return new Promise(resolve => releases.push(() => {
+      active--;
+      resolve({ ok: true, json: async () => ({ positions: [0, 0, 0] }) });
+    }));
+  };
+  const pending = requestHairThumbnail('parallel', ['/one', '/two', '/three']);
+  assert.equal(started, 2, 'first two parts start together');
+  assert.equal(requestHairThumbnail('parallel', ['/ignored']), pending, 'duplicate request shares work');
+  releases.shift()();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(started, 3, 'next part starts when a slot opens');
+  releases.splice(0).forEach(release => release());
+  assert.equal(await pending, null, 'headless renderer fails gracefully');
+  assert.equal(peak, 2, 'global two-request limit is preserved');
 
   console.log('\nAll hair thumbnail test assertions passed successfully!');
 }

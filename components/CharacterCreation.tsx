@@ -145,7 +145,10 @@ export function CharacterCreation() {
       const id = info?.sourceId ?? info?.source ?? null;
       setAssetSource(id === null ? null : `${id}:${info?.sourceKey ?? ''}`);
     };
-    fetch('/api/mo2/manifest', { cache: 'no-store' })
+    /* `no-cache` (not `no-store`): the browser may keep the body but must
+       revalidate it against the route's private ETag, so a switched pack is
+       picked up on reload while an unchanged one costs a bodyless 304. */
+    fetch('/api/mo2/manifest', { cache: 'no-cache' })
       .then(async (r) => {
         const body = await r.json().catch(() => null);
         if (cancelled) return;

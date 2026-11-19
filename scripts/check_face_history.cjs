@@ -212,6 +212,63 @@ assert.equal(get().anatomy['nose.width'], anatomyBefore, 'the legacy anatomy und
   assert.equal(get().faceBaseline, null);
 }
 
+/* ── 10. no-op detection is structural, not serialized ─────────────────────
+   The compare on every pointer move used to clone both faces and run two
+   `JSON.stringify`s. It must now decide from the patch alone, keep the same
+   no-op rules, and still notice a one-ulp change. */
+{
+  const snapshot = () => get().facePast.length;
+  // Every slider field, one at a time: only the changed one makes an entry.
+  let before = snapshot();
+  for (const id of Object.keys(regions.SLIDERS_BY_ID)) {
+    get().beginFaceEdit();
+    get().setSlider(id, get().sliders[get().activeRegion][id]);
+    get().endFaceEdit();
+    assert.equal(snapshot(), before, `same-value write to "${id}" adds no history`);
+  }
+  // A no-op pose written as a fresh array must still be recognised as equal.
+  before = snapshot();
+  get().beginFaceEdit();
+  const pose = get().poses[get().activeRegion];
+  get().setPose({ offset: [...pose.offset], rotation: [...pose.rotation], scale: [...pose.scale] });
+  get().endFaceEdit();
+  assert.equal(snapshot(), before, 'a structurally identical gizmo pose is a no-op');
+  // A real one-ulp move is not.
+  get().setPose({ offset: [pose.offset[0] + Number.EPSILON, pose.offset[1], pose.offset[2]] });
+  assert.equal(snapshot(), before + 1, 'a sub-millimetre gizmo move is recorded');
+  get().undoFace();
+  assert.equal(snapshot(), before, 'and undone in one step');
+
+  // Anatomy: writing the value already stored is a no-op in both stacks.
+  get().setAnatomyMode('advanced');
+  const anatomyBefore = get().anatomy['nose.width'];
+  const faceBefore = get().facePast.length;
+  const anatomyPastBefore = get().anatomyPast.length;
+  get().beginAnatomyEdit();
+  get().setAnatomy('nose.width', anatomyBefore);
+  get().endAnatomyEdit();
+  assert.equal(get().facePast.length, faceBefore, 'same-value anatomy write adds no face entry');
+  assert.equal(get().anatomyPast.length, anatomyPastBefore, 'same-value anatomy write adds no anatomy entry');
+}
+
+/* ── 11. an open transaction never re-anchors the hold-compare baseline ────
+   `beginFaceEdit` snapshots the pre-drag face; the first in-drag write used to
+   clone and compare the whole face again. It must take no snapshot and must
+   not move a baseline the user already has. */
+{
+  get().applyFaceBaseline();
+  const baseline = plain(get().faceBaseline);
+  get().beginFaceEdit();
+  get().setSlider('width', slider().width + 1);
+  get().setSlider('width', slider().width + 1);
+  get().endFaceEdit();
+  assert.deepEqual(plain(get().faceBaseline), baseline, 'a drag keeps the compare baseline');
+  assert.equal(get().facePast.at(-1).sliders.nose.width, baseline.sliders.nose.width,
+    'the single entry holds the pre-drag face');
+  get().undoFace();
+  assert.deepEqual(plain(get().faceBaseline), baseline);
+}
+
 console.log('PASS: face history transactions, no-ops, legacy/anatomy undo, reset, hold-compare, '
-  + 'baseline re-anchor, head rebase, live-face persistence');
+  + 'baseline re-anchor, head rebase, live-face persistence, structural no-op parity');
 console.log('NOT ASSESSED: on-screen HUD wiring, visual compare framing; see check:anatomy for the advanced bank');

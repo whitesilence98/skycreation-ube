@@ -250,7 +250,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(parsedNew.overlays)), [
 const parsedOld = io.parsePreset(exportFile([baseLayer]));
 assert.deepEqual(JSON.parse(JSON.stringify(parsedOld.overlays)), [baseLayer]);
 const parsedBad = io.parsePreset(exportFile([{ ...baseLayer, blend: 'bogus' }]));
-assert.equal(parsedBad.overlays, undefined, 'an invalid stack is dropped, not half-applied');
+assert.equal(JSON.stringify(parsedBad.overlays), '[]', 'invalid rows are removed, even when none survive');
 console.log('overlay validation (optional blend/coverage): ok');
 
 // ── 2. store: setters clamp, validate, and stay UI-only ───────────────────

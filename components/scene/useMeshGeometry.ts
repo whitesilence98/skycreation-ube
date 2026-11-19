@@ -90,6 +90,13 @@ export interface LoadedMesh {
 const isNumbers = (v: unknown): v is ArrayLike<number> =>
   Array.isArray(v) || v instanceof Float32Array;
 
+function allNumbers(values: ArrayLike<number>, valid: (value: number) => boolean): boolean {
+  for (let i = 0; i < values.length; i++) {
+    if (!valid(values[i])) return false;
+  }
+  return true;
+}
+
 
 /** The producer emits local, catalogue-resolved URLs only. Anything else in a
  *  mesh payload is either a corrupt file or an attempt to widen the renderer's
@@ -169,9 +176,9 @@ export function meshDataToGeometry(data: MeshData): LoadedMesh {
     data.normals.length !== data.positions.length ||
     data.uvs.length !== (data.positions.length / 3) * 2 ||
     data.indices.length === 0 || data.indices.length % 3 !== 0 ||
-    !Array.from(data.positions).every(Number.isFinite) ||
-    !Array.from(data.normals).every(Number.isFinite) ||
-    !Array.from(data.uvs).every(Number.isFinite) ||
+    !allNumbers(data.positions, Number.isFinite) ||
+    !allNumbers(data.normals, Number.isFinite) ||
+    !allNumbers(data.uvs, Number.isFinite) ||
     !data.indices.every((i) => Number.isInteger(i) && i >= 0 && i < data.positions.length / 3) ||
     (data.groups !== undefined && !validGroups(data)) ||
     (data.bones !== undefined && !validBones(data.bones))
@@ -180,9 +187,9 @@ export function meshDataToGeometry(data: MeshData): LoadedMesh {
   }
   const positions = new Float32Array(data.positions);
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(data.normals), 3));
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(data.uvs), 2));
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(data.normals), 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(data.uvs), 2));
   geometry.setIndex(data.indices);
   if (data.groups) {
     for (const g of data.groups) geometry.addGroup(g.start, g.count, g.materialIndex);
@@ -197,7 +204,7 @@ export function meshDataToGeometry(data: MeshData): LoadedMesh {
     if (
       data.skinIndex.length === vertexCount * 4 &&
       data.skinWeight.length === vertexCount * 4 &&
-      Array.from(data.skinIndex).every(
+      allNumbers(data.skinIndex,
         (i) => Number.isInteger(i) && i >= 0 && i < data.bones!.length,
       )
     ) {
@@ -241,31 +248,44 @@ export function lerpPositions(
 }
 
 const MESH_DATA_CACHE = new Map<string, MeshData>();
-const TEXTURE_PRELOAD_CACHE = new Set<string>();
+const MESH_REQUESTS = new Map<string, Promise<MeshData>>();
+const TEXTURE_PRELOAD_CACHE = new Map<string, Promise<void>>();
+
+/** Share concurrent requests without sharing mutable/disposable geometry. */
+function fetchMeshData(url: string): Promise<MeshData> {
+  const pending = MESH_REQUESTS.get(url);
+  if (pending) return pending;
+  const request = fetch(url)
+    .then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json() as Promise<MeshData>;
+    })
+    .finally(() => MESH_REQUESTS.delete(url));
+  MESH_REQUESTS.set(url, request);
+  return request;
+}
 
 /** Preload an image URL into browser cache so TextureLoader resolves seamlessly. */
 export function preloadTexture(url: string | undefined): void {
-  if (!url || TEXTURE_PRELOAD_CACHE.has(url)) return;
-  TEXTURE_PRELOAD_CACHE.add(url);
-  if (typeof Image !== 'undefined') {
-    const img = new Image();
-    img.src = url;
-  }
+  void preloadTextureAsync(url);
 }
 
-/** Preload an image asynchronously and wait for decode/cache. */
+/** Concurrent consumers wait for the same image, not just a started request. */
 export function preloadTextureAsync(url: string | undefined): Promise<void> {
-  if (!url) return Promise.resolve();
-  if (TEXTURE_PRELOAD_CACHE.has(url)) return Promise.resolve();
-  TEXTURE_PRELOAD_CACHE.add(url);
-  if (typeof Image === 'undefined') return Promise.resolve();
-  return new Promise((resolve) => {
+  if (!url || typeof Image === 'undefined') return Promise.resolve();
+  const cached = TEXTURE_PRELOAD_CACHE.get(url);
+  if (cached) return cached;
+  const pending = new Promise<void>((resolve) => {
     const img = new Image();
     img.onload = () => resolve();
-    img.onerror = () => resolve();
+    img.onerror = () => {
+      TEXTURE_PRELOAD_CACHE.delete(url);
+      resolve();
+    };
     img.src = url;
-    if (img.complete) resolve();
   });
+  TEXTURE_PRELOAD_CACHE.set(url, pending);
+  return pending;
 }
 
 /**
@@ -315,7 +335,7 @@ export function useMeshResource(url: string | undefined, label: string): MeshRes
     setStatus((prev) => ({ ...prev, settled: false }));
 
     const handleSuccess = async (data: MeshData) => {
-      MESH_DATA_CACHE.set(url, data);
+      if (cancelled) return;
 
       // Pre-warm primary textures before swapping the active mesh so the character
       // never flashes as bald or flat grey while waiting for images to download.
@@ -332,6 +352,7 @@ export function useMeshResource(url: string | undefined, label: string): MeshRes
       if (cancelled) return;
 
       const newMesh = meshDataToGeometry(data);
+      MESH_DATA_CACHE.set(url, data);
       // Dispose old mesh now that the new one is built and ready
       if (activeMeshRef.current && activeMeshRef.current !== newMesh) {
         disposeMesh(activeMeshRef.current);
@@ -341,59 +362,24 @@ export function useMeshResource(url: string | undefined, label: string): MeshRes
       setStatus({ error: null, settled: true });
     };
 
-    // Check memory cache or dynamic sculpt cache for instant 0ms swap
-    const cached = MESH_DATA_CACHE.get(url) ?? getDynamicMesh(url);
-    if (cached) {
-      try {
-        void handleSuccess(cached);
-        return;
-      } catch {
-        // Fall back to network fetch if cached object was corrupted
+    const load = async () => {
+      const cached = MESH_DATA_CACHE.get(url) ?? getDynamicMesh(url);
+      if (cached) return handleSuccess(cached);
+      if (url.startsWith('dynamic://')) {
+        const data = await retrieveDynamicMesh(url);
+        if (cancelled) return;
+        if (!data) throw new Error(`dynamic mesh not found: ${url}`);
+        registerDynamicMesh(url, data);
+        return handleSuccess(data);
       }
-    }
-
-    if (url.startsWith('dynamic://')) {
-      retrieveDynamicMesh(url)
-        .then((dbData) => {
-          if (cancelled) return;
-          if (dbData) {
-            registerDynamicMesh(url, dbData);
-            void handleSuccess(dbData);
-          } else {
-            const message = `${label}: dynamic mesh not found: ${url}`;
-            console.error(`[HeadModel] ${message}`);
-            setStatus({ error: message, settled: true });
-          }
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          setStatus({
-            error: `${label}: ${err instanceof Error ? err.message : 'failed to load dynamic mesh'}`,
-            settled: true,
-          });
-        });
-      return;
-    }
-
-    fetch(url)
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then((data: MeshData) => {
-        if (cancelled) return;
-        try {
-          void handleSuccess(data);
-        } catch (err) {
-          setStatus({
-            error: `${label}: ${err instanceof Error ? err.message : 'malformed mesh data'}`,
-            settled: true,
-          });
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const message = `${label}: ${err instanceof Error ? err.message : 'failed to load mesh'}`;
-        console.error(`[HeadModel] ${message}`);
-        setStatus({ error: message, settled: true });
-      });
+      return handleSuccess(await fetchMeshData(url));
+    };
+    void load().catch((err) => {
+      if (cancelled) return;
+      const message = `${label}: ${err instanceof Error ? err.message : 'failed to load mesh'}`;
+      console.error(`[HeadModel] ${message}`);
+      setStatus({ error: message, settled: true });
+    });
 
     return () => {
       cancelled = true;

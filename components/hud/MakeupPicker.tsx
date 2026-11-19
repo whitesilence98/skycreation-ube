@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCharacter, type OverlayLayer, type OverlayBlend } from '@/lib/store';
-import { convertUrl, fetchCatalogue, matchesQuery } from '@/lib/mo2/client';
+import { fetchCatalogue, matchesQuery } from '@/lib/mo2/client';
 import type { CatalogueEntry } from '@/lib/mo2/types';
 import { cn } from '@/lib/cn';
 import { StudioCard } from '@/components/hud/common/StudioCard';
-import { IconEye, IconSparkle } from '@/components/hud/Icons';
+import { OverlaySwatch } from '@/components/hud/common/OverlaySwatch';
+import { IconEye } from '@/components/hud/Icons';
 
 const CATEGORIES = ['ALL', 'LIPS', 'BLUSH', 'EYELINER', 'EYESHADOW', 'OVERLAYS'] as const;
 export type MakeupCategory = (typeof CATEGORIES)[number];
@@ -63,44 +64,6 @@ function defaultColor(subtype: MakeupCategory): string {
 }
 
 const focus = 'focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#eac87f]';
-
-function MakeupSwatch({ entry, color }: { entry: CatalogueEntry; color: string }) {
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const src = convertUrl({ kind: 'makeup', id: entry.id, mode: 'alpha' });
-  return (
-    <span className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-full border border-[#d4b483]/20 bg-[radial-gradient(ellipse_at_center,#4a3f32_0%,#221d17_62%,#0f0d0b_100%)] p-[3px] transition-transform duration-200 group-hover:scale-105">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt=""
-        loading="lazy"
-        className="absolute inset-0 h-full w-full opacity-0"
-        onLoad={() => setStatus('ready')}
-        onError={() => setStatus('error')}
-      />
-      {status === 'ready' ? (
-        <span
-          className="absolute inset-[3px] rounded-full transition-transform duration-200 group-hover:scale-105"
-          style={{
-            backgroundColor: color,
-            maskImage: `url("${src}")`,
-            maskSize: 'contain',
-            maskPosition: 'center',
-            maskRepeat: 'no-repeat',
-            WebkitMaskImage: `url("${src}")`,
-            WebkitMaskSize: 'contain',
-            WebkitMaskPosition: 'center',
-            WebkitMaskRepeat: 'no-repeat',
-          }}
-        />
-      ) : (
-        <span className="text-[9px] tracking-[0.06em] text-[#dacbad]/50">
-          {status === 'error' ? 'NO MASK' : '…'}
-        </span>
-      )}
-    </span>
-  );
-}
 
 export function MakeupPicker({ onDirty }: { onDirty?: () => void }) {
   const catalogues = useCharacter((s) => s.assetCatalogues);
@@ -501,7 +464,7 @@ export function MakeupPicker({ onDirty }: { onDirty?: () => void }) {
                             : 'border-[#d4b483]/25 bg-[#0b0a08]/80 group-hover:border-[#d4b483]/60 group-hover:bg-[#16120e]',
                         )}
                       >
-                        <MakeupSwatch entry={entry} color={layer?.color ?? defaultColor(subtype)} />
+                        <OverlaySwatch kind="makeup" id={entry.id} color={layer?.color ?? defaultColor(subtype)} />
 
                         <span className="pointer-events-none absolute bottom-[1px] right-[2px] text-[8.5px] font-mono tracking-tight text-[#eadcc0]/75">
                           {String(i + 1).padStart(2, '0')}
