@@ -10,21 +10,25 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
   const primaryTab = useCharacter(s => s.primaryTab);
   const isOutfit = primaryTab === 'EQUIPMENT';
   const isHair = primaryTab === 'HAIR';
+  const isMakeup = primaryTab === 'FACE';
+  const studioPage = useCharacter(s => s.studioPage);
   const setPreviewMode = useCharacter(s => s.setPreviewMode);
   const showToast = useCharacter(s => s.showToast);
 
-  // If in Hairstyle mode, render Wuxia Customization Top Navigation Bar
-  if (isHair) {
+  // If in Hairstyle or Makeup/Customization mode, render Wuxia Customization Top Navigation Bar
+  if (isHair || isMakeup) {
     return (
       <WuxiaTopNavBar
         tabs={[
           { id: 'customization', label: 'Customization' },
           { id: 'smart_customization', label: 'Smart Customization' },
         ]}
-        activeTab="customization"
+        activeTab={studioPage === 'smart' ? 'smart_customization' : 'customization'}
+        onTabChange={tabId =>
+          useCharacter.getState().setStudioPage(tabId === 'smart_customization' ? 'smart' : 'default')}
         isCollapsed={preview}
         onToggleCollapse={() => setPreviewMode(!preview)}
-        onSearch={() => showToast('Search hairstyles (Q)')}
+        onSearch={() => showToast(isMakeup ? 'Search makeup styles (Q)' : 'Search hairstyles (Q)')}
       />
     );
   }

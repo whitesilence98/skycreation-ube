@@ -436,6 +436,10 @@ export function resolveManifest(
     headMesh: head ? {
       file: head.file, version: head.version, bytes: head.bytes, nodes: head.nodes,
       shapes: head.shapes, isGltf: false, meshUrl: head.meshUrl, isRealMesh: head.isRealMesh,
+      /* The renderer reads `origin` to decide whether UBE-specific work (the
+         neck seam delta, the facial overlay/gizmo) applies to this head. An
+         imported mesh has neither the topology nor the rig those assume. */
+      ...(head.origin ? { origin: head.origin } : {}),
       eyeMeshUrl: companionEyeMesh,
       lashesMeshUrl: companionLashesMesh,
       browsMeshUrl: companionBrowsMesh,

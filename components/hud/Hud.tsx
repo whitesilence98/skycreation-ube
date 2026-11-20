@@ -19,6 +19,7 @@ import { AssetPanel } from '@/components/hud/AssetPanel';
 import { WardrobeDrawer } from '@/components/hud/WardrobeDrawer';
 import { OutfitSideActions } from '@/components/hud/outfit/OutfitSideActions';
 import { ImportCustomizationDrawer } from '@/components/hud/common/ImportCustomizationDrawer';
+import { SmartCustomization } from '@/components/hud/smart/SmartCustomization';
 import { GizmoTooltip } from '@/components/hud/GizmoTooltip';
 import { editorCategory, CATEGORY_LABELS, type EditorCategory, type FaceSectionId } from '@/lib/faceControls';
 import { useCharacter } from '@/lib/store';
@@ -32,6 +33,11 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
   const compare = useCharacter(s => s.faceCompareStart !== null);
   const toast = useCharacter(s => s.toast);
   const category = editorCategory(primary);
+  /* Smart Customization replaces the hair/makeup editor body rather than
+     nesting inside it: it is a full studio screen, and two column layouts over
+     one canvas would fight for the same space. */
+  const studioPage = useCharacter(s => s.studioPage);
+  const smart = (category === 'hair' || category === 'styling') && studioPage === 'smart';
   const [section, setSection] = useState<FaceSectionId>(() => useCharacter.getState().activeRegion);
   const [editorOpen, setEditorOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -87,8 +93,10 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
         }
         release(); state().setPreviewMode(false); closeTool();
       }
-      const target = event.target as HTMLElement;
-      if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      /* `event.target` is the element that has focus, which is `document`
+         itself when nothing is focused — and `document` has no `closest`. */
+      const target = event.target;
+      if (target instanceof Element && target.closest('input, textarea, select, [contenteditable="true"]')) return;
       if (category === 'face' && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault();
         if (event.shiftKey) state().redoFace(); else state().undoFace();
@@ -103,26 +111,30 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
   }, [category, toolOpen]);
   useEffect(() => { if (category === 'face') state().applyFaceBaseline(); }, [category]);
 
-  const isWuxiaFloating = category === 'outfit' || category === 'hair';
+  const isWuxiaFloating = category === 'outfit' || category === 'hair' || category === 'styling';
 
-  return <div className="creator-shell pointer-events-none absolute inset-0 z-10" data-outfit={category === 'outfit' ? 'true' : undefined} data-hair={category === 'hair' ? 'true' : undefined}>
+  return <div className="creator-shell pointer-events-none absolute inset-0 z-10" data-outfit={category === 'outfit' ? 'true' : undefined} data-hair={category === 'hair' ? 'true' : undefined} data-makeup={category === 'styling' ? 'true' : undefined} data-smart={smart ? 'true' : undefined}>
     <TopBar manifest={manifest} />
     {!preview && <>
       {!isWuxiaFloating && <CategoryRail selected={category} onSelect={selectCategory} />}
       {!isWuxiaFloating && <button type="button" className="creator-editor-toggle" aria-controls="creator-editor"
         aria-expanded={editorOpen && (!isMobile || !toolOpen)} hidden={isMobile && toolOpen}
         onClick={() => setEditorOpen(v => !v)}>{editorOpen ? 'Hide panel' : 'Show panel'}</button>}
-      <aside id="creator-editor" className={`creator-editor ${category === 'face' ? 'creator-editor-face' : category === 'outfit' ? 'creator-editor-outfit' : ''}`}
-        aria-label={`${CATEGORY_LABELS[category]} editor`} hidden={editorHidden} inert={compare}>
-        {category === 'face' ? <>
-          <RegionStrip selected={section} onSelect={setSection} />
-          <ControlsDisclosure><ControlColumn section={section} /></ControlsDisclosure>
-        </> : <LeftPanel manifest={manifest} category={category} />}
-      </aside>
-      {category === 'outfit' && <OutfitSideActions />}
-      {category === 'hair' && <ImportCustomizationDrawer isOpen={importDrawerOpen} onClose={() => setImportDrawerOpen(false)} />}
-      {!isWuxiaFloating && <ToolStrip />}
-      {toolOpen && <aside ref={tools} className="creator-tool-drawer" aria-label="Studio properties" tabIndex={-1}>
+      {smart ? (
+        <SmartCustomization manifest={manifest} />
+      ) : (
+        <aside id="creator-editor" className={`creator-editor ${category === 'face' ? 'creator-editor-face' : category === 'outfit' ? 'creator-editor-outfit' : ''}`}
+          aria-label={`${CATEGORY_LABELS[category]} editor`} hidden={editorHidden} inert={compare}>
+          {category === 'face' ? <>
+            <RegionStrip selected={section} onSelect={setSection} />
+            <ControlsDisclosure><ControlColumn section={section} /></ControlsDisclosure>
+          </> : <LeftPanel manifest={manifest} category={category} />}
+        </aside>
+      )}
+      {!smart && (category === 'outfit' || category === 'styling') && <OutfitSideActions />}
+      {!smart && (category === 'hair' || category === 'styling') && <ImportCustomizationDrawer isOpen={importDrawerOpen} onClose={() => setImportDrawerOpen(false)} />}
+      {!smart && (category === 'styling' || !isWuxiaFloating) && <ToolStrip />}
+      {!smart && toolOpen && <aside ref={tools} className="creator-tool-drawer" aria-label="Studio properties" tabIndex={-1}>
         {workspace === 'camera' && <CameraPanel onClose={closeTool} />}
         {workspace === 'hdr' && <HdrPanel onClose={closeTool} />}
         {workspace === 'graphics' && <GraphicsPanel onClose={closeTool} />}

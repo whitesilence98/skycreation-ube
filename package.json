@@ -44,7 +44,8 @@
     "check:editor:screens": "node scripts/check_editor_browser.cjs",
     "check:deform": "node scripts/check_anatomy_deformation.cjs",
     "check:anatomy": "node scripts/check_anatomy_params.cjs",
-    "check:brows": "node scripts/verify_brows_panel.cjs && node scripts/check_brow_rendering.cjs"
+    "check:brows": "node scripts/verify_brows_panel.cjs && node scripts/check_brow_rendering.cjs",
+    "check:smart": "node scripts/check_smart_import.cjs"
   },
   "dependencies": {
     "@react-three/drei": "10.7.9",

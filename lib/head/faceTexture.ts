@@ -168,7 +168,7 @@ export interface Mo2MeshOption extends Mo2AssetOption {
    * change the face instead of only nudging a handful of sliders.
    */
   sculptSource?: string;
-  origin?: 'racemenu-export' | 'sculpt-replay';
+  origin?: 'racemenu-export' | 'sculpt-replay' | 'mesh-import';
   headTextureMissing?: boolean;
   eyeMeshUrl?: string;
   lashesMeshUrl?: string;

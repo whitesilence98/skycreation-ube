@@ -47,7 +47,10 @@ production/session-logs/
 # OS / editor
 .DS_Store
 Thumbs.db
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
 .idea/
 
 # local asset archive (819 MB, rebuilt from the external pack)
@@ -55,3 +58,4 @@ Thumbs.db
 
 # local screenshot/verification harness (dev only, never shipped)
 .shots/
+.tmp-*.png

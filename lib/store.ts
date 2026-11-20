@@ -37,7 +37,8 @@ import {
 import type { AssetSelection, AssetKind, AssetCatalogues, UiCategory } from '@/lib/manifestSelect';
 import type { EquipSelection, EquipSlot } from '@/lib/equipment';
 import { DEFAULT_HAIR, coerceHair, applyHairStyle as hairStyle, type HairSettings, type HairTab } from '@/lib/hair/settings';
-import type { CatalogueEntry } from '@/lib/mo2/types';
+/** The two screens the Hair and Makeup workspaces can show. */
+export type StudioPage = 'default' | 'smart';import type { CatalogueEntry } from '@/lib/mo2/types';
 import { type EnvMode } from '@/lib/envModes';
 import { type BackgroundMode } from '@/lib/backgrounds';
 import { type CameraFraming, type CameraPoseRequest, CAMERA_FOV_DEFAULT, CAMERA_FOV_MIN, CAMERA_FOV_MAX, CAMERA_ROTATE_SPEED_DEFAULT, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPEED_MAX } from '@/lib/camera';
@@ -225,6 +226,11 @@ export interface CharacterState extends AnatomySnapshot {
   redoAnatomy: () => void;
   hair: HairSettings;
   hairTab: HairTab;
+  /** Which screen the Hair/Makeup workspace shows. `smart` is the Smart
+   *  Customization studio screen, deliberately not persisted — restoring into
+   *  it would surprise someone who left the app on a hairstyle list. */
+  studioPage: StudioPage;
+  setStudioPage: (page: StudioPage) => void;
   setHair: (patch: Partial<HairSettings>) => void;
   applyHairStyle: (id: string) => void;
   setHairTab: (tab: HairTab) => void;
@@ -865,6 +871,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   hair: PRESETS[0].hair ? coerceHair({ ...DEFAULT_HAIR, ...PRESETS[0].hair }) : { ...DEFAULT_HAIR },
   hairTab: 'STYLE',
   setHairTab: (hairTab) => set({ hairTab }),
+  studioPage: 'default',
+  setStudioPage: (studioPage) => set({ studioPage }),
   setHair: (patch) => set((s) => {
     const shapeKeys = ['lengthCm', 'bangs', 'side', 'back', 'volume', 'curl', 'wave', 'wispiness', 'asymmetry'];
     const nextHair = coerceHair({ ...s.hair, ...patch,

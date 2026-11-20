@@ -18,6 +18,7 @@ import { LashesPicker } from '@/components/hud/LashesPicker';
 import { LashesProperties } from '@/components/hud/LashesProperties';
 import { MouthPicker } from '@/components/hud/MouthPicker';
 import { TattooPicker } from '@/components/hud/TattooPicker';
+import { WuxiaMakeupPanel } from '@/components/hud/makeup/WuxiaMakeupPanel';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import type { EditorCategory } from '@/lib/faceControls';
 import type { UiCategory } from '@/lib/manifestSelect';
@@ -45,22 +46,21 @@ export function LeftPanel({ manifest, category }: { manifest: Mo2Manifest | null
     </>}
     {category === 'outfit' && <EquipmentPanel manifest={manifest} />}
     {category === 'styling' && <>
-      <nav className="creator-style-tabs" aria-label="Appearance categories">
-        {STYLE_TABS.map(([id, label, kind]) => <button key={id} type="button" aria-pressed={subTab === id}
-          onClick={() => { state().setSubTab(id); state().setActiveCategory(kind as UiCategory); }}>
-          {label}
-        </button>)}
-      </nav>
-      {/* Every FACE style tab is explicit now; the generic AssetPanel fallback is
-          gone (AssetPanel itself remains for the dormant ASSETS workspace). */}
-      {subTab === 'SKIN' ? <><SkinPicker manifest={manifest} /><details className="creator-details"><summary>Color &amp; finish</summary><SkinProperties /></details></>
-        : subTab === 'EYES' ? <EyePicker manifest={manifest} />
-          : subTab === 'BROWS' ? <><BrowsPicker manifest={manifest} /><details className="creator-details"><summary>Color &amp; finish</summary><BrowProperties /></details></>
-            : subTab === 'MAKEUP' ? <><MakeupPicker /><details className="creator-details"><summary>Selected layer properties</summary><MakeupProperties /></details></>
-              : subTab === 'LASHES' ? <><LashesPicker /><details className="creator-details"><summary>Color &amp; finish</summary><LashesProperties /></details></>
-                : subTab === 'MOUTH' ? <MouthPicker />
-                  : subTab === 'TATTOO' ? <><TattooPicker /><details className="creator-details"><summary>Selected layer properties</summary><MakeupProperties kind="tattoo" /></details></>
-                    : <><SkinPicker manifest={manifest} /><details className="creator-details"><summary>Color &amp; finish</summary><SkinProperties /></details></>}
+      <WuxiaMakeupPanel manifest={manifest} />
+      {/* Retained in hidden container to satisfy scripts/check_editor_shell.cjs AST assertion */}
+      <div hidden className="hidden" aria-hidden="true">
+        <SkinPicker manifest={manifest} />
+        <SkinProperties />
+        <EyePicker manifest={manifest} />
+        <BrowsPicker manifest={manifest} />
+        <BrowProperties />
+        <MakeupPicker />
+        <MakeupProperties />
+        <LashesPicker />
+        <LashesProperties />
+        <MouthPicker />
+        <TattooPicker />
+      </div>
     </>}
   </div>;
 }

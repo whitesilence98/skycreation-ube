@@ -88,6 +88,11 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
      that pass consumes. */
 
   const headMeshUrl = manifest?.headMesh?.meshUrl;
+  /* A head imported through Smart Customization was authored elsewhere: it has
+     neither the 11,498-vertex UBE topology the neck seam deltas are indexed
+     against, nor the UBE rig the overlay/gizmo draw on. Both are switched off
+     for it rather than writing collar deltas onto arbitrary vertices. */
+  const importedHead = (manifest?.headMesh as { origin?: string })?.origin === 'mesh-import';
   const headWeightVariants = (manifest?.headMesh as { weightVariants?: { w0: string; w1: string } })?.weightVariants;
   const headResource = useWeightedMeshResource(
     headWeightVariants,
@@ -392,7 +397,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         weight,
         relTransform,
         headBuild.baseNormals,
-        true,
+        !importedHead,
         headBuild.baseWeight ?? 1.0,
         bodyMesh && followHead && skeletonRegistry.byName.size > 0
           ? {
@@ -405,7 +410,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
       );
       onDirty();
     },
-    [headBuild, weight, bodyMesh, skeletonRegistry, onDirty],
+    [headBuild, weight, bodyMesh, skeletonRegistry, onDirty, importedHead],
   );
 
   /* Last head+spine world matrices the follow was computed from. Paused and
@@ -1314,11 +1319,16 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         onAfterFrame={followAnimatedFrame}
       />
       <BodyPhysics registry={skeletonRegistry} />
+      {/* Facial companions are authored against the UBE head's exact vertex
+          layout: the eyes sit in sockets that exist only on that face, and the
+          lashes/brows/mouth follow its contours. On an imported head they would
+          float at the old coordinates, so they are withheld rather than shown
+          in the wrong place — the imported mesh is whole on its own. */}
       <primitive object={rig.root}>
-        {mouthGeo && (
+        {!importedHead && mouthGeo && (
           <mesh name="Mouth" geometry={mouthGeo} material={partMaterial(mouthTexState, mouthMaterial)} renderOrder={1} />
         )}
-        {eyeGeo && (
+        {!importedHead && eyeGeo && (
           <mesh
             name="Eyes"
             geometry={eyeGeo}
@@ -1326,10 +1336,10 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
             renderOrder={2}
           />
         )}
-        {lashesGeo && (
+        {!importedHead && lashesGeo && (
           <mesh name="Lashes" geometry={lashesGeo} material={partMaterial(lashesTexState, lashesMaterial)} renderOrder={3} />
         )}
-        {browsMesh && (
+        {!importedHead && browsMesh && (
           <primitive object={browsMesh} material={partMaterial(browsTexState, browsMaterial)} dispose={null} />
         )}
       </primitive>
@@ -1487,8 +1497,8 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           renderOrder={6 + index}
         />
       ))}
-      <MeshOverlay rig={rig} headBuild={headBuild} />
-      <FaceGizmo rig={rig} />
+      {!importedHead && <MeshOverlay rig={rig} headBuild={headBuild} />}
+      {!importedHead && <FaceGizmo rig={rig} />}
     </group>
   );
 }
