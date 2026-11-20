@@ -34,7 +34,10 @@ export function LeftPanel({ manifest, category }: { manifest: Mo2Manifest | null
     {category === 'preset' && <PresetPanel manifest={manifest} />}
     {category === 'hair' && <>
       <HairStyles manifest={manifest} />
-      <details className="creator-details"><summary>Fit, color &amp; finish</summary><HairProperties /></details>
+      {/* Hair properties (fit, color & finish) hidden per UX requirements */}
+      <div hidden className="hidden" aria-hidden="true">
+        <HairProperties />
+      </div>
     </>}
     {category === 'body' && <>
       <BodyPanel manifest={manifest} />

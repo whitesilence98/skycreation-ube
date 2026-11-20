@@ -5,20 +5,25 @@ import { useCharacter } from '@/lib/store';
 import { assetOptions, isRenderableMeshRow } from '@/lib/manifestSelect';
 import { convertUrl, fetchCatalogue } from '@/lib/mo2/client';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
-import { cn } from '@/lib/cn';
 import { buildHairGroups, findHairGroupForPartId } from '@/lib/hair';
-import { SearchInput } from '@/components/hud/common/SearchInput';
 import { HairThumbnail } from '@/components/hud/HairThumbnail';
+import { ItemTile } from '@/components/hud/common/ItemTile';
+import {
+  IconSubFace,
+  IconSubMakeup,
+  IconSubHair,
+} from '@/components/hud/outfit/WuxiaSlotIcons';
+import { navigateCategory } from '@/lib/editorNav';
 
 /** Below this, the shipped head hides the mesh — see `visibility`. */
 const VISIBLE_MIN = 0.55;
 
 export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
-  const catalogues = useCharacter((s) => s.assetCatalogues);
-  const selection = useCharacter((s) => s.assetSelection);
-  const setAssets = useCharacter((s) => s.setAssets);
-  const setCatalogue = useCharacter((s) => s.setAssetCatalogue);
-  const hair = useCharacter((s) => s.hair);
+  const catalogues = useCharacter(s => s.assetCatalogues);
+  const selection = useCharacter(s => s.assetSelection);
+  const setAssets = useCharacter(s => s.setAssets);
+  const setCatalogue = useCharacter(s => s.setAssetCatalogue);
+  const hair = useCharacter(s => s.hair);
 
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -44,13 +49,13 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
 
   const rawOptions = useMemo(() => {
     return [
-      ...curated.map((m) => ({
+      ...curated.map(m => ({
         ...m,
         pairedTextureId:
-          m.pairedTextureId ?? archive.find((e) => e.rel === m.rel)?.pairedTextureId,
+          m.pairedTextureId ?? archive.find(e => e.rel === m.rel)?.pairedTextureId,
       })),
       ...archive.filter(
-        (m) => isRenderableMeshRow(m) && visible(m) && !curated.some((c) => c.rel === m.rel),
+        m => isRenderableMeshRow(m) && visible(m) && !curated.some(c => c.rel === m.rel)
       ),
     ];
   }, [curated, archive]);
@@ -65,11 +70,11 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
     if (!query.trim()) return hairGroups;
     const q = query.toLowerCase().trim();
     return hairGroups.filter(
-      (g) =>
+      g =>
         g.label.toLowerCase().includes(q) ||
         g.groupKey.toLowerCase().includes(q) ||
         (g.mod && g.mod.toLowerCase().includes(q)) ||
-        g.parts.some((p) => p.label.toLowerCase().includes(q)),
+        g.parts.some(p => p.label.toLowerCase().includes(q))
     );
   }, [hairGroups, query]);
 
@@ -80,70 +85,119 @@ export function HairStyles({ manifest }: { manifest: Mo2Manifest | null }) {
   const selectedGroupId = activeGroup?.id;
 
   return (
-    <div className="flex flex-col gap-2.5">
-      {/* ── Header: Section title & count (blends natively into panel) ── */}
-      <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
-          HAIRSTYLES
-        </span>
-        <span className="font-mono text-[10px] text-[#a49a88]">
-          {loading ? 'LOADING…' : `${hairGroups.length} STYLES`}
-        </span>
-      </div>
+    <div className="flex items-start gap-4 select-none">
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          LEFT SUB-CATEGORY RAIL (Customization, Makeup, Hairstyle)
+          ───────────────────────────────────────────────────────────────────────────── */}
+      <nav
+        className="flex w-[72px] shrink-0 flex-col items-center gap-5 pt-1"
+        aria-label="Character Customization Sub-categories"
+      >
+        {/* Customization (Face Sculpt) */}
+        <button
+          type="button"
+          onClick={() => navigateCategory('face')}
+          className="group flex flex-col items-center gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#eac87f]"
+          aria-label="Customization — Face Sculpting"
+          title="Face Customization"
+        >
+          <span className="flex h-11 w-11 items-center justify-center rounded-[2px] border border-white/10 bg-[#202126]/80 text-[#9f9da6] backdrop-blur-md transition-all group-hover:border-white/30 group-hover:text-white">
+            <IconSubFace className="h-6 w-6" />
+          </span>
+          <span className="text-[10px] tracking-tight whitespace-nowrap text-[#9f9da6] transition-colors group-hover:text-white">
+            Customization
+          </span>
+        </button>
 
-      {/* ── Search Input ── */}
-      <SearchInput
-        value={query}
-        onChange={setQuery}
-        placeholder="Search hairstyles…"
-      />
+        {/* Makeup */}
+        <button
+          type="button"
+          onClick={() => navigateCategory('styling')}
+          className="group flex flex-col items-center gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#eac87f]"
+          aria-label="Makeup & Styling"
+          title="Makeup & Styling"
+        >
+          <span className="flex h-11 w-11 items-center justify-center rounded-[2px] border border-white/10 bg-[#202126]/80 text-[#9f9da6] backdrop-blur-md transition-all group-hover:border-white/30 group-hover:text-white">
+            <IconSubMakeup className="h-6 w-6" />
+          </span>
+          <span className="text-[10px] tracking-tight whitespace-nowrap text-[#9f9da6] transition-colors group-hover:text-white">
+            Makeup
+          </span>
+        </button>
 
-      {/* ── 4 items per line Grid (square thumbnails only) ── */}
-      <div className="thin-scroll grid max-h-[480px] grid-cols-4 gap-1.5 overflow-y-auto pr-0.5">
-        {filtered.map((g) => {
-          const isSelected = selectedGroupId === g.id;
+        {/* Hairstyle (Active) */}
+        <div className="flex flex-col items-center gap-1" aria-current="page">
+          <div className="flex h-11 w-11 items-center justify-center rounded-[2px] bg-white text-black shadow-lg">
+            <IconSubHair className="h-6 w-6" />
+          </div>
+          <span className="text-[10px] font-medium tracking-tight whitespace-nowrap text-white">
+            Hairstyle
+          </span>
+        </div>
+      </nav>
 
-          return (
-            <button
-              key={g.id}
-              type="button"
-              aria-label={`${g.label} — ${g.brand}${g.partCount > 1 ? ` (${g.partCount} Parts)` : ''}`}
-              aria-pressed={isSelected}
-              title={`${g.label}\nBrand: ${g.brand}\nParts: ${g.partCount} (${g.parts.map((p) => p.label).join(', ')})\nMod: ${g.mod || 'preset-pack'}`}
-              onClick={() =>
-                setAssets({
-                  hairMesh: g.id,
-                  ...(g.pairedTextureId ? { hair: g.pairedTextureId } : {}),
-                })
-              }
-              className={cn(
-                'group relative flex aspect-square w-full min-w-0 items-center justify-center overflow-hidden rounded-[2px] border transition-all duration-150',
-                isSelected
-                  ? 'border-[#eac87f] bg-[#eac87f]/20 shadow-[0_0_8px_rgba(234,200,127,0.35)] ring-1 ring-[#eac87f]'
-                  : 'border-[#d4b483]/20 bg-black/45 hover:border-[#d4b483]/60 hover:bg-[#16130e]',
-              )}
-            >
-              <HairThumbnail
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          HAIRSTYLE SELECTION AREA (Header + 3-Column ItemTile Grid)
+          ───────────────────────────────────────────────────────────────────────────── */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Section Header */}
+        <div className="mb-2.5 flex items-center justify-between">
+          <h2 className="text-[13px] font-medium tracking-wide text-[#e6e1d8]">Hairstyle</h2>
+          <span className="font-mono text-[10px] text-[#8a8793]">
+            {loading ? 'LOADING…' : `${hairGroups.length} STYLES`}
+          </span>
+        </div>
+
+        {/* Optional Search input if filtering */}
+        {hairGroups.length > 15 && (
+          <div className="mb-2">
+            <input
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search hairstyle…"
+              aria-label="Search hairstyle"
+              className="h-7 w-full rounded-[2px] border border-white/10 bg-[#1e1e23]/90 px-2 font-mono text-[11px] text-[#e6e1d8] placeholder-[#7a7882] backdrop-blur-md transition-colors focus:border-[#eac87f] focus:outline-none"
+            />
+          </div>
+        )}
+
+        {/* 3-Column ItemTile Grid matching Image 2 */}
+        <div className="grid max-h-[460px] grid-cols-3 gap-2 overflow-y-auto">
+          {filtered.map(g => {
+            const isSelected = selectedGroupId === g.id;
+
+            return (
+              <ItemTile
+                key={g.id}
                 id={g.id}
-                label={g.label}
-                hairTone={hair.tone}
-                meshUrls={g.parts.map(
-                  (part) =>
-                    (part.raw as { meshUrl?: string }).meshUrl ??
-                    convertUrl({ kind: 'hairMesh', id: part.id, mode: 'mesh' }),
-                )}
-                className="h-full w-full object-cover p-0.5"
+                title={g.label}
+                subtitle={`${g.brand}${g.partCount > 1 ? ` (${g.partCount} Parts)` : ''}`}
+                isSelected={isSelected}
+                showCheckmark={true}
+                onClick={() =>
+                  setAssets({
+                    hairMesh: g.id,
+                    ...(g.pairedTextureId ? { hair: g.pairedTextureId } : {}),
+                  })
+                }
+                thumbnail={
+                  <HairThumbnail
+                    id={g.id}
+                    label={g.label}
+                    hairTone={hair.tone}
+                    meshUrls={g.parts.map(
+                      part =>
+                        (part.raw as { meshUrl?: string }).meshUrl ??
+                        convertUrl({ kind: 'hairMesh', id: part.id, mode: 'mesh' })
+                    )}
+                    className="h-full w-full object-cover"
+                  />
+                }
               />
-              {/* Active selection dot */}
-              {isSelected && (
-                <span
-                  aria-hidden="true"
-                  className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-[#eac87f] shadow-[0_0_4px_#eac87f]"
-                />
-              )}
-            </button>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

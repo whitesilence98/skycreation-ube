@@ -18,6 +18,7 @@ import { BodyProperties } from '@/components/hud/BodyProperties';
 import { AssetPanel } from '@/components/hud/AssetPanel';
 import { WardrobeDrawer } from '@/components/hud/WardrobeDrawer';
 import { OutfitSideActions } from '@/components/hud/outfit/OutfitSideActions';
+import { ImportCustomizationDrawer } from '@/components/hud/common/ImportCustomizationDrawer';
 import { GizmoTooltip } from '@/components/hud/GizmoTooltip';
 import { editorCategory, CATEGORY_LABELS, type EditorCategory, type FaceSectionId } from '@/lib/faceControls';
 import { useCharacter } from '@/lib/store';
@@ -34,6 +35,7 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
   const [section, setSection] = useState<FaceSectionId>(() => useCharacter.getState().activeRegion);
   const [editorOpen, setEditorOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [importDrawerOpen, setImportDrawerOpen] = useState(false);
   const tools = useRef<HTMLDivElement>(null);
   const toolTrigger = useRef<HTMLElement | null>(null);
   const previousTool = useRef(false);
@@ -101,11 +103,13 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
   }, [category, toolOpen]);
   useEffect(() => { if (category === 'face') state().applyFaceBaseline(); }, [category]);
 
-  return <div className="creator-shell pointer-events-none absolute inset-0 z-10" data-outfit={category === 'outfit' ? 'true' : undefined}>
+  const isWuxiaFloating = category === 'outfit' || category === 'hair';
+
+  return <div className="creator-shell pointer-events-none absolute inset-0 z-10" data-outfit={category === 'outfit' ? 'true' : undefined} data-hair={category === 'hair' ? 'true' : undefined}>
     <TopBar manifest={manifest} />
     {!preview && <>
-      {category !== 'outfit' && <CategoryRail selected={category} onSelect={selectCategory} />}
-      {category !== 'outfit' && <button type="button" className="creator-editor-toggle" aria-controls="creator-editor"
+      {!isWuxiaFloating && <CategoryRail selected={category} onSelect={selectCategory} />}
+      {!isWuxiaFloating && <button type="button" className="creator-editor-toggle" aria-controls="creator-editor"
         aria-expanded={editorOpen && (!isMobile || !toolOpen)} hidden={isMobile && toolOpen}
         onClick={() => setEditorOpen(v => !v)}>{editorOpen ? 'Hide panel' : 'Show panel'}</button>}
       <aside id="creator-editor" className={`creator-editor ${category === 'face' ? 'creator-editor-face' : category === 'outfit' ? 'creator-editor-outfit' : ''}`}
@@ -116,7 +120,8 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
         </> : <LeftPanel manifest={manifest} category={category} />}
       </aside>
       {category === 'outfit' && <OutfitSideActions />}
-      {category !== 'outfit' && <ToolStrip />}
+      {category === 'hair' && <ImportCustomizationDrawer isOpen={importDrawerOpen} onClose={() => setImportDrawerOpen(false)} />}
+      {!isWuxiaFloating && <ToolStrip />}
       {toolOpen && <aside ref={tools} className="creator-tool-drawer" aria-label="Studio properties" tabIndex={-1}>
         {workspace === 'camera' && <CameraPanel onClose={closeTool} />}
         {workspace === 'hdr' && <HdrPanel onClose={closeTool} />}
@@ -127,7 +132,7 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
         {workspace === 'assets' && <AssetPanel manifest={manifest} active onClose={closeTool} />}
         {workspace === 'wardrobe' && <WardrobeDrawer manifest={manifest} onClose={closeTool} />}
       </aside>}
-      <Footer manifest={manifest} />
+      <Footer manifest={manifest} onToggleCustomizationDrawer={() => setImportDrawerOpen(v => !v)} />
       <GizmoTooltip />
     </>}
     {toast && <div role="status" aria-live="polite" className="creator-toast">{toast}</div>}

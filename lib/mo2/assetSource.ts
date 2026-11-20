@@ -15,7 +15,14 @@ if (config.publicBase !== (config.layout === 'pack' ? '/assets/preset-pack' : '/
   throw new Error('Pack and legacy assets must use separate output namespaces');
 }
 
-const root = config.layout === 'mo2' ? process.env.MO2_MODS_ROOT ?? config.root : config.root;
+// One env var per layout, so each machine points the tracked `asset-source.json`
+// placeholder at its own root; the hash below changes with it, which is what
+// rejects generated JSON from another machine.
+const override = process.env[config.layout === 'mo2' ? 'MO2_MODS_ROOT' : 'ASSET_PACK_ROOT'];
+if (override !== undefined && !path.isAbsolute(override)) {
+  throw new Error('Asset root override must be absolute');
+}
+const root = override ?? config.root;
 
 export const ASSET_SOURCE = {
   layout: config.layout as 'pack' | 'mo2',

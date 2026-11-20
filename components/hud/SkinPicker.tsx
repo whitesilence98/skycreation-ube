@@ -468,8 +468,10 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
               <span className="pointer-events-none absolute inset-0 rounded-xs border border-white/20" />
             </button>
 
-            {/* 3×8 Palette Grid */}
-            <div className="grid grid-cols-8 gap-[2.5px]">
+            {/* 8×3 palette. Targets are 24×24 with the colour painted on an
+                18px chip inside, so the hit area clears the 24px minimum
+                while the grid keeps its compact footprint. */}
+            <div className="grid grid-cols-8">
               {SKIN_PALETTE.map((swatch) => {
                 const isSelected =
                   (skinColor || '#B8997A').toLowerCase() === swatch.hex.toLowerCase();
@@ -478,15 +480,19 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
                     key={swatch.hex}
                     type="button"
                     onClick={() => quickPickColor(swatch.hex)}
+                    aria-pressed={isSelected}
+                    aria-label={`${swatch.name} ${swatch.hex}`}
                     title={`${swatch.name} (${swatch.hex})`}
                     className={cn(
-                      'h-[14px] w-[14px] rounded-[1px] border transition-all duration-100',
-                      isSelected
-                        ? 'scale-110 border-[#eac87f] ring-1 ring-[#eac87f] shadow-[0_0_6px_rgba(234,200,127,0.6)]'
-                        : 'border-black/50 hover:scale-110 hover:border-white/60',
+                      'flex h-6 w-6 items-center justify-center rounded-[2px] transition-colors duration-100',
+                      isSelected ? 'ring-1 ring-[#eac87f]' : 'hover:ring-1 hover:ring-white/45',
                     )}
-                    style={{ backgroundColor: swatch.hex }}
-                  />
+                  >
+                    <span
+                      className="block h-[18px] w-[18px] rounded-[1px] border border-black/50"
+                      style={{ backgroundColor: swatch.hex }}
+                    />
+                  </button>
                 );
               })}
             </div>

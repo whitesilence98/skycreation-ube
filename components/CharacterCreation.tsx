@@ -63,9 +63,14 @@ function SceneLoader({ visible }: { visible: boolean }) {
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-[14px]">
         <span className="relative block h-[26px] w-[26px]">
           <span className="absolute inset-0 rounded-full border border-[#d4b483]/18" />
-          <span className="absolute inset-0 animate-spin rounded-full border border-transparent border-t-[#d4b483]/85 shadow-[0_0_10px_rgba(212,180,131,0.22)]" />
+          <span className="absolute inset-0 animate-spin rounded-full border border-transparent border-t-[#d4b483]/85 shadow-[0_0_10px_rgba(212,180,131,0.22)] motion-reduce:animate-none" />
         </span>
-        <span className="text-[6.5px] tracking-[0.13em] text-[#9b9284]/72">LOADING ASSETS</span>
+        {/* The stage behind this is a bright pool (#d2d3d8), so muted type on
+            bare glass measured ~1.65:1. The label needs its own dark plate to
+            be readable at all, and 10px is the floor PRODUCT.md sets. */}
+        <span role="status" className="rounded-[2px] bg-[#121216]/75 px-2 py-1 text-[10px] tracking-[0.13em] text-[#f2f3f5]/90">
+          LOADING ASSETS
+        </span>
       </div>
     </div>
   );
@@ -285,14 +290,14 @@ export function CharacterCreation() {
           an early mount would issue legacy asset requests that pack mode must
           never make. */}
       {sceneReady ? (
-        <div className={`absolute inset-y-0 right-0 transition-[left] duration-200 motion-reduce:transition-none ${previewMode ? 'left-0' : outfitMode ? 'creator-stage-wardrobe' : 'left-0 min-[1100px]:left-[150px] min-[1500px]:left-[220px]'}`}>
-        <WebGLErrorBoundary>
-          <CharacterScene
-            manifest={resolved}
-            onAssetsReady={handleAssetsReady}
-            onIssue={handleSceneIssue}
-          />
-        </WebGLErrorBoundary>
+        <div className="absolute inset-0">
+          <WebGLErrorBoundary>
+            <CharacterScene
+              manifest={resolved}
+              onAssetsReady={handleAssetsReady}
+              onIssue={handleSceneIssue}
+            />
+          </WebGLErrorBoundary>
         </div>
       ) : (
         <ViewportBackdrop />

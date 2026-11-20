@@ -30,7 +30,10 @@ contracts without browser testing. `check:mo2` continues to check legacy output.
 
 Rollback: change `layout` to `mo2`, `root` to
 `D:\Games\Skyrim\MO2_Archive\mods`, `publicBase` to `/assets/mo2`; restart.
-`MO2_MODS_ROOT` overrides the root only in `mo2` mode. The API exposes a source
+`MO2_MODS_ROOT` overrides the root only in `mo2` mode. In `pack` mode,
+`ASSET_PACK_ROOT` does the same (e.g.
+`setx ASSET_PACK_ROOT "C:\path\to\.assets"`), so each machine keeps its own path
+without editing the tracked `asset-source.json`. The API exposes a source
 label, not the absolute source root. Older sections below describe the legacy
 MO2 setup and are not pack defaults.
 
@@ -38,6 +41,9 @@ MO2 setup and are not pack defaults.
 
 ```bash
 npm install
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt   # POSIX: .venv/bin/pip
+.venv\Scripts\activate                          # POSIX: source .venv/bin/activate
 npm run sync:assets     # read the active source; generate its manifest
 npm run sync:index      # refresh the active source catalogue
 npm run dev
@@ -46,10 +52,25 @@ npm run dev
 `npm run build && npm start` for a production build. `npm run typecheck`
 runs the strict TypeScript check on its own.
 
+**Activate the venv first.** Both halves of the pipeline shell out to `python`:
+the `sync:*` / `check:*` scripts as `python -I`, and the Next.js converter
+(`lib/mo2/server.ts`, `app/api/nif/route.ts`) as `MO2_PYTHON ?? 'python'`. With
+the venv active, both resolve to an interpreter that can import the packages.
+Without it they fall back to the system `python`, and every DDS conversion
+fails with *"Pillow is required"*.
+
 ### Prerequisites for `sync:assets`
 
 - Node 20+
-- Python 3 with `pillow` and `numpy` (`pip install pillow numpy`)
+- Python 3 with `pillow` and `numpy` — from `requirements.txt`, installed into
+  `.venv` (see above)
+
+`python -I` ignores `PYTHONPATH`, environment variables and the *user*
+site-packages, so a plain `pip install pillow numpy` is invisible to it: pip
+lands in `%APPDATA%\Python\...` and the scripts still report Pillow as missing.
+A venv works because its site-packages sits inside the interpreter's own
+prefix, which `-I` keeps. To point at an interpreter explicitly instead,
+set `MO2_PYTHON` to an absolute path.
 
 A cold run takes about a minute — two of the skins are 85 MB 4096² diffuses
 that take ~25 s each to decode. Every output is cached against its source and

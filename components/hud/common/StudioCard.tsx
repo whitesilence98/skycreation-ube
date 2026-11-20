@@ -40,7 +40,7 @@ export function StudioCard({
   return (
     <div
       className={cn(
-        'relative flex w-full flex-col select-none text-[#e6e1d8] transition-all duration-200',
+        'relative flex w-full flex-col text-[#e6e1d8] transition-all duration-200',
         className,
       )}
     >
@@ -99,7 +99,7 @@ export function StudioCard({
                   }}
                   aria-label={minimized ? 'Expand panel' : 'Minimize panel'}
                   title={minimized ? 'Expand panel' : 'Minimize panel'}
-                  className="flex h-[18px] w-[18px] items-center justify-center rounded-[2px] border border-[#d4b483]/22 text-[#a89b85] transition-all hover:border-[#d4b483]/60 hover:text-[#f0e6d4] hover:bg-[#d4b483]/10"
+                  className="flex h-[24px] w-[24px] items-center justify-center rounded-[2px] border border-[#d4b483]/22 text-[#a89b85] transition-all hover:border-[#d4b483]/60 hover:text-[#f0e6d4] hover:bg-[#d4b483]/10"
                 >
                   <span className="text-[11px] leading-none select-none font-mono">
                     {minimized ? '＋' : '−'}
@@ -112,7 +112,7 @@ export function StudioCard({
                   onClick={onClose}
                   aria-label="Close panel"
                   title="Close (Esc)"
-                  className="flex h-[18px] w-[18px] items-center justify-center rounded-[2px] border border-[#d4b483]/22 text-[#a89b85] transition-all hover:border-[#d4b483]/60 hover:text-[#f0e6d4] hover:bg-[#d4b483]/10"
+                  className="flex h-[24px] w-[24px] items-center justify-center rounded-[2px] border border-[#d4b483]/22 text-[#a89b85] transition-all hover:border-[#d4b483]/60 hover:text-[#f0e6d4] hover:bg-[#d4b483]/10"
                 >
                   <span className="text-[10px] leading-none select-none font-mono">✕</span>
                 </button>

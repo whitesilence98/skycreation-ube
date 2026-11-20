@@ -1,0 +1,20 @@
+# Python dependencies for the asset pipeline (scripts/).
+#
+# Install into the repo's virtualenv, which is the interpreter the npm scripts
+# and the Next.js converter must both use:
+#
+#   python -m venv .venv
+#   .venv\Scripts\pip install -r requirements.txt      (Windows)
+#   .venv/bin/pip install -r requirements.txt          (POSIX)
+#
+# The scripts run under `python -I`, which ignores PYTHONPATH, environment
+# variables and the *user* site-packages. A venv's site-packages still loads
+# because it lives inside the interpreter's own prefix, so the venv is the
+# only place these packages are visible to an isolated run.
+
+pillow==13.0.0
+numpy==2.5.5
+
+# Optional. Only scripts/convert_skyrim_poses.py imports it; nothing in the
+# sync/index/convert pipeline needs it.
+# pyffi

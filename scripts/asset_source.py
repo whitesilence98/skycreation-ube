@@ -78,12 +78,14 @@ def load(path: Path = CONFIG) -> dict:
     if public_base != expected_base:
         raise SystemExit(f"{path.name}: pack and legacy assets need separate namespaces")
 
-    # The server lets MO2_MODS_ROOT override the config root for the legacy
-    # layout only; mirror that so producer and server hash the same root.
-    if layout == "mo2":
-        override = os.environ.get("MO2_MODS_ROOT")
-        if override is not None:
-            root = override
+    # The server lets one env var per layout override the config root; mirror
+    # that so producer and server hash the same root. The tracked
+    # `asset-source.json` stays a placeholder that each machine overrides.
+    override = os.environ.get("MO2_MODS_ROOT" if layout == "mo2" else "ASSET_PACK_ROOT")
+    if override is not None:
+        if not Path(override).is_absolute():
+            raise SystemExit(f"{layout}: root override must be an absolute path")
+        root = override
     root_path = Path(root)
     out = ROOT / "public" / public_base.lstrip("/")
     return {

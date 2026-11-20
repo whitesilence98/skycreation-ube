@@ -17,6 +17,9 @@
   --creator-accent-bright: #eac87f;
 }
 .creator-shell button, .creator-shell input, .creator-shell select, .creator-shell summary, .creator-shell a { pointer-events: auto; }
+/* The element is a 24px-tall hit target so it clears WCAG 2.2's 24px minimum;
+   the visible track stays a hairline via the pseudo-element below. */
+.creator-shell .hud-range { min-height: 24px; }
 .creator-shell button:focus-visible, .creator-shell summary:focus-visible, .creator-shell input:focus-visible, .creator-shell select:focus-visible, .creator-shell a:focus-visible, .creator-shell [role="slider"]:focus-visible { outline: 2px solid var(--hud-gold-bright, #eac87f); outline-offset: 3px; }
 .creator-shell button:disabled { opacity: .45; cursor: not-allowed; }
 .creator-header { position: absolute; inset: 0 0 auto; min-height: 72px; padding: 18px 30px; display: flex; align-items: center; justify-content: space-between; gap: 16px; background: none; color: var(--creator-text); pointer-events: auto; text-shadow: 0 1px 3px rgba(0,0,0,.35); }
@@ -38,7 +41,7 @@
 .creator-category-label { font-size: 11px; letter-spacing: .01em; color: var(--creator-muted); }
 .creator-category[aria-pressed="true"] .creator-category-label { color: #fff; }
 .creator-editor-toggle { position: absolute; left: 146px; top: 80px; font-size: 11px; padding: 4px 0; color: var(--creator-muted); pointer-events: auto; }
-.creator-editor { position: absolute; top: 130px; bottom: 118px; left: 146px; width: 296px; max-width: calc(100vw - 210px); padding: 12px; overflow-y: auto; overflow-x: hidden; pointer-events: auto; color: var(--creator-text); background: linear-gradient(to right, rgba(24,26,30,.60), rgba(24,26,30,.26)); border: 1px solid var(--creator-line-soft); border-left: 0; border-radius: 0 3px 3px 0; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.30) transparent; }
+.creator-editor { position: absolute; top: 130px; bottom: 118px; left: 146px; width: 296px; max-width: calc(100vw - 210px); padding: 12px; overflow-y: auto; overflow-x: hidden; pointer-events: auto; color: var(--creator-text); background: linear-gradient(to right, rgba(24,26,30,.60), rgba(24,26,30,.26)); border: 1px solid var(--creator-line-soft); border-left: 0; border-radius: 0 3px 3px 0; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); scrollbar-width: none; -ms-overflow-style: none; }
 /* One panel geometry for every category. The face used to add a second
    navigation column, which made the most slider-heavy category the narrowest
    track on screen (240px of controls inside a 378px panel) and taught two
@@ -67,7 +70,7 @@
 .creator-sublist button[aria-pressed="true"] { color: #fff; background: rgba(255, 255, 255, .26); border-color: rgba(255,255,255,.44); }
 .creator-sublist h2, .creator-controls h2 { font-family: var(--font-ui); font-size: 14px; font-weight: 500; color: var(--creator-text); margin: 0 0 16px; letter-spacing: .01em; }
 .creator-editor > *, .creator-controls > *, .creator-library > * { min-width: 0; max-width: 100%; }
-.creator-controls { min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 0 8px 20px 0; scrollbar-width: thin; }
+.creator-controls { min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 0 8px 20px 0; scrollbar-width: none; -ms-overflow-style: none; }
 .creator-hint { font-size: 11px; line-height: 1.6; color: var(--creator-muted); margin-bottom: 14px; }
 .creator-details { padding: 14px 0; border-top: 1px solid var(--creator-line-soft); }
 .creator-details summary { cursor: pointer; font-size: 12px; color: var(--creator-text); padding: 4px 0; }
@@ -97,7 +100,7 @@
 .creator-tools button { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; color: rgba(255,255,255,.92); background: transparent; border: 1px solid rgba(255,255,255,.55); transition: background 150ms ease, border-color 150ms ease; }
 .creator-tools button:hover { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.80); }
 .creator-tools button[aria-pressed="true"] { background: rgba(255,255,255,.22); border-color: #fff; }
-.creator-tool-drawer { position: absolute; top: 95px; bottom: 105px; right: 96px; width: 288px; max-width: calc(100vw - 116px); padding: 0; overflow-y: auto; pointer-events: auto; scrollbar-width: thin; z-index: 50; background: transparent; border: 0; }
+.creator-tool-drawer { position: absolute; top: 95px; bottom: 105px; right: 96px; width: 288px; max-width: calc(100vw - 116px); padding: 0; overflow-y: auto; pointer-events: auto; scrollbar-width: none; -ms-overflow-style: none; z-index: 50; background: transparent; border: 0; }
 .creator-footer { position: absolute; inset: auto 0 0; min-height: 84px; padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: linear-gradient(to top, rgba(8,9,12,.90), rgba(8,9,12,.42) 58%, transparent); pointer-events: auto; color: var(--creator-text); font-size: 12px; }
 .creator-footer-context, .creator-footer-actions { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
 .creator-footer button { display: inline-flex; align-items: center; gap: 9px; min-height: 34px; padding: 4px 0; font-size: 13px; color: var(--creator-text); background: none; border: 0; }
@@ -167,9 +170,27 @@
 .creator-shell[data-outfit="true"] .creator-editor-toggle,
 .creator-shell[data-outfit="true"] .creator-tools { display: none; }
 .creator-shell[data-outfit="true"] .creator-editor-outfit {
-  left: 0; top: 72px; bottom: 94px; width: clamp(340px, 32vw, 460px); max-width: 100vw;
-  padding: 16px 24px; border: 0; border-right: 1px solid var(--creator-line-soft); border-radius: 0;
-  background: linear-gradient(to right, rgba(20,22,26,.84), rgba(20,22,26,.48)); backdrop-filter: blur(10px);
+  left: 36px; top: 68px; bottom: 80px; width: 280px; max-width: 100vw;
+  padding: 0; border: 0; border-radius: 0;
+  background: transparent; backdrop-filter: none;
+  overflow: visible;
+}
+.creator-shell[data-hair="true"] .creator-editor {
+  left: 36px; top: 68px; bottom: 80px; width: 360px; max-width: 100vw;
+  padding: 0; border: 0; border-radius: 0;
+  background: transparent; backdrop-filter: none;
+  overflow: visible;
+}
+.creator-shell[data-hair="true"] .creator-categories,
+.creator-shell[data-hair="true"] .creator-editor-toggle,
+.creator-shell[data-hair="true"] .creator-tools { display: none; }
+@media (max-width: 768px) {
+  .creator-shell[data-outfit="true"] .creator-editor-outfit {
+    left: 12px; top: 56px; bottom: 70px; width: calc(100vw - 24px); max-width: 300px;
+  }
+  .creator-shell[data-hair="true"] .creator-editor {
+    left: 8px; top: 56px; bottom: 70px; width: calc(100vw - 16px); max-width: 360px;
+  }
 }
 .creator-editor-outfit .creator-library { padding-right: 0; }
 .creator-wardrobe-panel { min-width: 0; color: var(--creator-text); }
@@ -177,8 +198,13 @@
 .creator-wardrobe-heading h2 { font-size: 22px; font-weight: 400; letter-spacing: .16em; }
 .creator-wardrobe-heading span { font-size: 11px; color: var(--creator-muted); }
 .creator-wardrobe-heading button { padding: 8px; font-size: 12px; color: var(--creator-text); }
-.creator-wardrobe-tabs { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 22px; min-height: 44px; margin: -16px -24px 8px; padding: 0 24px; border-bottom: 1px solid var(--creator-line); background: rgba(20,22,26,.94); overflow-x: auto; }
-.creator-wardrobe-tabs button { flex-shrink: 0; padding: 12px 2px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--creator-muted); font-family: var(--font-ui); font-size: 13px; letter-spacing: .09em; text-transform: uppercase; }
+/* The tabs fit on one line at every panel width, so they no longer scroll or
+   clip. `overflow-x: auto` used to hide the last tab with no affordance to
+   reveal it, so the row read as broken text ("PR", "HA" cut off); wrapping is
+   kept only as a last resort, and the tighter metrics mean it never triggers.
+   22px gaps and 13px caps overflowed the 409px panel by 100px. */
+.creator-wardrobe-tabs { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; column-gap: 16px; row-gap: 0; min-height: 44px; margin: -16px -24px 8px; padding: 0 24px; border-bottom: 1px solid var(--creator-line); background: rgba(20,22,26,.94); }
+.creator-wardrobe-tabs button { flex-shrink: 0; padding: 12px 2px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--creator-muted); font-family: var(--font-ui); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
 .creator-wardrobe-tabs button:hover, .creator-wardrobe-tabs button[aria-pressed="true"] { color: var(--creator-accent-bright); border-bottom-color: var(--creator-accent); background: transparent; }
 .creator-wardrobe-sets { min-width: 0; max-width: 100%; padding: 12px 0; }
 .creator-wardrobe-sets h3 { font-size: 12px; letter-spacing: .16em; }
@@ -213,13 +239,13 @@
   .creator-stage-wardrobe { left: clamp(320px, 34vw, 400px); }
   .creator-shell[data-outfit="true"] { --creator-canvas-offset: clamp(320px, 34vw, 400px); }
   .creator-shell[data-outfit="true"] .creator-editor-outfit { width: clamp(320px, 34vw, 400px); padding: 14px 18px; }
-  .creator-wardrobe-tabs { gap: 20px; margin: -14px -18px 8px; padding: 0 18px; }
+  .creator-wardrobe-tabs { column-gap: 14px; row-gap: 0; margin: -14px -18px 8px; padding: 0 18px; }
 }
 @media (max-width: 900px) {
   .creator-stage-wardrobe { left: 0; }
   .creator-shell[data-outfit="true"] { --creator-canvas-offset: 0px; }
   .creator-shell[data-outfit="true"] .creator-editor-outfit { left: 0; right: 0; width: auto; max-width: none; top: 70px; bottom: 144px; padding: 14px 20px; }
-  .creator-wardrobe-tabs { gap: 14px; margin: -14px -20px 8px; padding: 0 20px; }
+  .creator-wardrobe-tabs { column-gap: 12px; row-gap: 0; margin: -14px -20px 8px; padding: 0 20px; }
   .creator-wardrobe-tabs button { font-size: 11px; }
   .creator-wardrobe-slots { max-width: 480px; }
   .creator-outfit-actions { display: none; }
@@ -233,7 +259,7 @@
   .creator-shell[data-outfit="true"] .creator-editor-outfit { padding: 12px 14px; }
   .creator-wardrobe-heading { margin-bottom: 12px; }
   .creator-wardrobe-heading h2 { font-size: 18px; }
-  .creator-wardrobe-tabs { margin: -12px -14px 8px; padding: 0 14px; gap: 12px; }
+  .creator-wardrobe-tabs { margin: -12px -14px 8px; padding: 0 14px; column-gap: 10px; row-gap: 0; }
   .creator-wardrobe-slot > button:first-child { padding: 6px; }
   .creator-wardrobe-slot > button:first-child > span:nth-child(2) { height: 58px; }
   .creator-outfit-more > summary { font-size: 11px; }
@@ -348,7 +374,7 @@ body {
   cursor: pointer;
 }
 .hud-range::-webkit-slider-runnable-track {
-  height: 1px;
+  height: 2px;
   background: linear-gradient(
     to right,
     rgba(212, 180, 131, 0.75) 0%,
@@ -360,9 +386,9 @@ body {
 .hud-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 7px;
-  height: 7px;
-  margin-top: -3px;
+  width: 11px;
+  height: 11px;
+  margin-top: -4.5px;
   border-radius: 999px;
   background: #e2cba0;
   box-shadow:
@@ -370,16 +396,16 @@ body {
     0 0 8px rgba(234, 200, 127, 0.55);
 }
 .hud-range::-moz-range-track {
-  height: 1px;
+  height: 2px;
   background: rgba(212, 180, 131, 0.22);
 }
 .hud-range::-moz-range-progress {
-  height: 1px;
+  height: 2px;
   background: rgba(212, 180, 131, 0.75);
 }
 .hud-range::-moz-range-thumb {
-  width: 7px;
-  height: 7px;
+  width: 11px;
+  height: 11px;
   border: none;
   border-radius: 999px;
   background: #e2cba0;
@@ -448,7 +474,7 @@ body {
     0 0 9px rgba(234, 200, 127, 0.65);
 }
 .hud-range-v:focus-visible {
-  outline: 1px solid rgba(234, 200, 127, 0.7);
+  outline: 2px solid rgba(234, 200, 127, 0.9);
   outline-offset: 2px;
 }
 .hud-range-v::-moz-range-track {
@@ -550,13 +576,60 @@ input[type='color']::-webkit-color-swatch {
   outline-offset: -3px;
 }
 
-/* scrollbar for panels */
-.thin-scroll::-webkit-scrollbar {
-  width: 4px;
+/* ==========================================================================
+   Completely remove visible scrollbars across every panel in the app
+   while preserving smooth mouse wheel / touch scrolling
+   ========================================================================== */
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
-.thin-scroll::-webkit-scrollbar-thumb {
-  background: rgba(212, 180, 131, 0.3);
-  border-radius: 4px;
+
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+*::-webkit-scrollbar-thumb {
+  display: none !important;
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-track {
+  display: none !important;
+  background: transparent !important;
+}
+
+.thin-scroll,
+.custom-scrollbar,
+.creator-editor,
+.creator-controls,
+.creator-tool-drawer,
+.creator-wardrobe-panel,
+.creator-wardrobe-slots,
+[class*="overflow-y"] {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.thin-scroll::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar,
+.creator-editor::-webkit-scrollbar,
+.creator-controls::-webkit-scrollbar,
+.creator-tool-drawer::-webkit-scrollbar,
+.creator-wardrobe-panel::-webkit-scrollbar,
+[class*="overflow-y"]::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
