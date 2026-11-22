@@ -1,0 +1,413 @@
+<SliderCategories>
+                <Category name="  -= Outfit Zip =-  " defaultHidden="false">	
+		<Slider name="Hide Thign for Stocking" displayname="Hide Thign for Stocking" />
+	</Category>
+	<Category name="1. Necoco Boob" defaultHidden="false">		
+		<Slider name="Necoco_Boob_Base" displayname="Necoco Boob Base" />
+		<Slider name="Necoco_Boob_Addon_MafaVam" displayname="Necoco Boob Addon MafaVam" />
+		<Slider name="Necoco_Boob_Addon_Bom39" displayname="Necoco Boob Addon Bom39" />
+	</Category>
+	<Category name="convert outfits with my preset [UBE Burger_Necoco.xml] for less clipping" defaultHidden="false">	
+	</Category>
+	<Category name="3. Necoco Body (Use this for Customizing)" defaultHidden="false">	
+		<Slider name="Necoco_Body_w|o_Boob" displayname="Necoco Body without Boob" />	
+		<Slider name="Necoco_Body_w_Boob" displayname="Necoco Body with Boob" />
+		<Slider name="Necoco_Boob_Base_For_Body_with_Boob" displayname="Necoco_Boob_Base_For_Body_with_Boob" />
+	</Category>
+	<Category name="4. Necoco Body Addons (Use with Necoco Body)" defaultHidden="false">
+		<Slider name="Necoco_Body_Addon_Lewd_Zone" displayname="Necoco Body Addon - Lewd Zone" />		
+		<Slider name="Necoco_Body_Addon_Leg" displayname="Necoco Body Addon - Leg" />
+		<Slider name="Necoco_Body_Addon_Butt" displayname="Necoco Body Addon - Butt" />
+		<Slider name="Necoco_Body_Addon_Belly" displayname="Necoco Body Addon - Belly" />
+		<Slider name="Necoco_Body_Addon_Upper_Body_Smooth" displayname="Necoco Body Addon - Upper Body Smooth" />
+	</Category>
+	<Category name="2. Necoco Sliders Overall" defaultHidden="false">		
+		<Slider name="Necoco_Overall_Boob" displayname="Necoco Overall Boob" />
+		<Slider name="Necoco_Overall_Nipple" displayname="Necoco Overall Nipple" />
+	</Category>
+	<Category name="Necoco Sliders Other" defaultHidden="false">		
+		<Slider name="Necoco_Boob_Distance" displayname="boob distance" />
+		<Slider name="breast lewd bigger" displayname="breast lewd bigger" />
+		<Slider name="Abs_creases" displayname="UBE 3.0 pre - Abs creases" />
+		<Slider name="Anus_creases" displayname="UBE 3.0 pre - Anus creases" />
+		<Slider name="Anus_creases_1" displayname="UBE 3.0 pre - Anus creases 1" />
+		<Slider name="Shy_Pussy" displayname="UBE 3.0 pre - Shy Pussy" />
+		<Slider name="Breasts-shoulders_creases" displayname="UBE 3.0 pre - Breasts-shoulders creases" />
+		<Slider name="Breasts-chest_creases" displayname="UBE 3.0 pre - Breasts-chest creases" />
+		<Slider name="Smol" displayname="UBE 3.0 pre - Smol" />
+		<Slider name="Amazon_abs" displayname="UBE 3.0 pre - Amazon abs" />
+		<Slider name="SquarePeg3d_abs" displayname="UBE 3.0 pre - SquarePeg3d abs" />
+		<Slider name="Upper_Outer_Thighs_Width" displayname="UBE 3.0 pre - Upper Outer Thighs Width" />
+		<Slider name="Calves_Flex" displayname="UBE 3.0 pre - Calves Flex" />
+		<Slider name="Belly_button_shape" displayname="UBE 3.0 pre - Belly button shape" />
+		<Slider name="Hentai_silicone_breasts" displayname="UBE 3.0 pre - Hentai slicone breasts" />
+		<Slider name="MuscularBoobs" displayname="UBE 3.0 pre - Muscular Boobs" />
+		<Slider name="BiggerAnus_2" displayname="UBE 3.0 pre - Bigger Anus 2" />
+		<Slider name="Soft_abs" displayname="UBE 3.0 pre - Soft abs" />
+		<Slider name="Penis_Depth n|p" displayname="UBE 3.0 pre - Penis Depth" />
+		<Slider name="FFXIV-like" displayname="UBE 3.0 pre - FFXIV-like" />
+	</Category>
+	<Category name="Xtrem Sliders" defaultHidden="false">		
+		<Slider name="AnusGap" displayname="Anus Gap" />
+		<Slider name="AnusHeight" displayname="Anus Height" />
+		<Slider name="AnusPotrude" displayname="Anus Potrude" />
+		<Slider name="AnusPuffy" displayname="Anus Puffy" />
+		<Slider name="AnusPuffy v2" displayname="Anus Puffy v2" />
+		<Slider name="AnusSwollen" displayname="Anus Swollen" />
+		<Slider name="AnusSwollen v2" displayname="Anus Swollen v2" />
+		<Slider name="AnusSwollen v3" displayname="Anus Swollen v3" />
+		<Slider name="ClitSwollen" displayname="Clit Swollen" />
+		<Slider name="InflationAnal" displayname="Inflation Anal" />
+		<Slider name="InflationVaginal" displayname="Inflation Vaginal" />
+		<Slider name="LabiaSpread" displayname="Labia Spread" />
+		<Slider name="NavelDepht" displayname="Navel Depht" />
+		<Slider name="NavelOut" displayname="Navel Out" />
+		<Slider name="VaginaBack" displayname="Vagina Back" />
+	</Category>
+	<Category name="Presets and Important stuff" defaultHidden="false">		
+		<Slider name="Amazon" displayname="Amazon" />
+		<Slider name="Donaught" displayname="Donaught" />
+		<Slider name="FitnessDetails_2.0" displayname="Fitness Details" />
+		<Slider name="Juicy_body" displayname="Juicy Preset" />
+		<Slider name="Peachy" displayname="Peachy Preset" />
+		<Slider name="Skinny2.0" displayname="Skinny" />
+		<Slider name="SquarePeg3d" displayname="SquarePeg3D" />
+		<Slider name="TBD  2.0" displayname="TBD-like" />
+		<Slider name="Venus" displayname="Venus" />
+		<Slider name="ToeNails_Length" displayname="Toe Nails Length" />
+		<Slider name="Claw_ToeNails" displayname="Claw Toe Nails" />
+	</Category>
+	<Category name="Upper Torso" defaultHidden="false">
+		<Slider name="Upper_TorsoSize n|p" displayname="Size n|p" />
+		<Slider name="ChestUpperSize n|p" displayname="Chest Size n|p" />
+		<Slider name="Clavicles_Width n|p" displayname="Clavicles Width n|p" />
+		<Slider name="ClaviclesFront" displayname="Clavicles Front" />
+		<Slider name="ClaviclesAngle" displayname="Clavicles Angle" />
+		<Slider name="Clavicle_Center_upper" displayname="Clavicles Mid Up" />
+		<Slider name="Clavicles_Center_height" displayname="Clavicles Mid Bone Down" />
+		<Slider name="SternumDepth n|p" displayname="Front Chest Depth n|p" />
+		<Slider name="RibcageSize n|p" displayname="Ribcage Size n|p" />
+	</Category>						
+	<Category name="Upper Torso Muscles" defaultHidden="false">		
+		<Slider name="LowerNeckMuscles" displayname="Lower Neck" />
+		<Slider name="PectoralisMuscles" displayname="Pectoralis" />
+		<Slider name="PectoralCreases" displayname="Pectoralis Creases" />
+	</Category>
+	<Category name="Hands" defaultHidden="false">	
+		<Slider name="BiggerHands_CBBE-like" displayname="Bigger CBBE-like Hands" />	
+		<Slider name="Longer_fingers" displayname="Longer Fingers" />
+		<Slider name="Nails_Length n|p" displayname="Nails Length n|p" />
+		<Slider name="Claw_Nails" displayname="Claw Nails" />
+		<Slider name="HandsRedone" displayname="Hands Redone"/>
+		<Slider name="Claw_Nails_2" displayname="Claw Nails Alt"/>
+		<Slider name="art_ShortThumb" displayname="Short Thumb"/>
+		<Slider name="art_LongFingers" displayname="Long Fingers"/>
+		<Slider name="art_Smooth" displayname="Smoothen"/>
+		<Slider name="art_Weight" displayname="Weight"/>
+		<Slider name="art_Gaunt" displayname="Gaunt"/>
+		<Slider name="art_Type1" displayname="Masculine"/>
+		<Slider name="art_Type2" displayname="Feminine"/>
+		<Slider name="art_Width" displayname="Width"/>
+		<Slider name="art_Curve" displayname="Curve"/>
+		<Slider name="art_FingernailsWidth" displayname="Fingernails Width"/>
+		<Slider name="art_FingernailsHeight" displayname="Fingernails Height"/>
+		<Slider name="art_ThumbnailWidth" displayname="Thumbnail Width"/>
+		<Slider name="art_ThumbnailHeight" displayname="Thumbnail Height"/>
+		<Slider name="art_NailsSquare" displayname="Nail Corners"/>
+		<Slider name="art_LongNails" displayname="Long Nails"/>
+		<Slider name="art_Claws" displayname="Claws"/>
+	</Category>
+	<Category name="Boobs" defaultHidden="false">
+		<Slider name="Big_SaggyBreasts" displayname="Preset 1 Big Saggy" />
+		<Slider name="Juicy_breasts" displayname="Preset 2" />
+		<Slider name="BreastsTBD" displayname="Preset 3 TBD" />
+		<Slider name="BreastsBigger" displayname="Bigger" />
+		<Slider name="BreastsSmaller" displayname="Smaller" />
+		<Slider name="BreastsZero" displayname="Zero Size" />
+		<Slider name="BreastArmpitsWidth n|p" displayname="Breasts-Armpits Width n|p" />
+		<Slider name="BreastCenterGapLowerHeight n|p" displayname="Br. Gap Height n|p" />
+		<Slider name="BreastCenterGapWidth n|p" displayname="Gap Width n|p" />
+		<Slider name="BreastsNarrowness n|p" displayname="Narrowness n|p" />
+		<Slider name="BreastsPositionWidth n|p" displayname="Apart/Together n|p" />
+		<Slider name="Breasts_Perky" displayname="Perky" />
+		<Slider name="BreastFlat" displayname="Flat" />
+		<Slider name="Breast Diameter_small" displayname="Small Diameter" />
+		<Slider name="Breast Diameter_big" displayname="Big Diameter" />
+		<Slider name="BreastsRotate_Y" displayname="Rotate Y" />
+		<Slider name="BreastsCupSag n|p" displayname="Cup Height n|p" />
+		<Slider name="BreastUpperCurve n|p" displayname="Upper Curve n|p" />
+		<Slider name="BreastUnderCurve" displayname="Under Curve" />
+		<Slider name="SaggingBreastsZone" displayname="Underboob Height Up" />
+		<Slider name="Manly_chest" displayname="Fykes Manly chest" />
+		<Slider name="Trap_chest" displayname="Fykes Tarp chest" />
+	</Category>
+	<Category name="Nipples" defaultHidden="false">
+		<Slider name="NipplesShowUp" displayname="Nipples Show Up" />
+		<Slider name="Nipples_Fantasy" displayname="Preset Fantasy " />
+		<Slider name="NEW_Nipples_Fantasy_UV_fix" displayname="Preset Fantasy UV fix" />
+		<Slider name="Nippleinverted" displayname="Preset Inverted" />
+		<Slider name="NippleInverted_PuffyAreola" displayname="Preset Inverted+Puffy" />
+		<Slider name="NippleInverted_PuffyAreola_UV_fix" displayname="Preset Inverted+Puffy UV fix" />
+		<Slider name="NippleDiameter n|p" displayname="Size n|p" />
+		<Slider name="NEW_NippleDiameter_neg_value_Uv_fix" displayname="Size n values UV fix" />
+		<Slider name="NippleHeight n|p" displayname="Height n|p" />
+		<Slider name="NippleDispertionSides n|p" displayname="Inbetween Width n|p" />
+		<Slider name="NippleLength" displayname="Length" />
+		<Slider name="NipplesPerkiness" displayname="Perkiness" />
+		<Slider name="NippleFolds" displayname="Folds" />
+		<Slider name="NippleCircularCrease" displayname="Circular Crease" />
+		<Slider name="NEW_NippleCircularCrease_Uv_fix" displayname="Circular Crease UV fix" />
+		<Slider name="NippleHorizontal n|p" displayname="Nipple Horizontal n|p" />
+		<Slider name="AreolaeSizeBig" displayname="Areolae Size Big" />
+		<Slider name="AreolaeSizeBig_UV_fix" displayname="Areolae Size Big UV fix" />
+		<Slider name="AreolaeSizeSmall" displayname="Areolae Size Small" />
+		<Slider name="AreolaeSizeSmall_UV_fix" displayname="Areolae Size Small UV fix" />
+		<Slider name="AreolaVertical" displayname="Areolae Shape Vertical" />
+		<Slider name="AreolaHorizontal" displayname="Areolae Shape Horizontal" />
+		<Slider name="AreolaErection" displayname="Areolae Erection" />
+		<Slider name="NippleFlatten" displayname="Flatten" />
+		<Slider name="NippleCreaseHorizontal" displayname="Tip Crease Horizontal" />
+		<Slider name="NippleCreaseVertical" displayname="Tip Crease Vertical" />
+		<Slider name="NippleCreaseCentral" displayname="Tip Crease Central" />
+	</Category>
+	<Category name="Shoulders and Arms   " defaultHidden="false">
+		<Slider name="ShoulderWidthBig" displayname="Shoulder Width Big" />
+		<Slider name="ShoulderWidthSmall" displayname="Shoulder Width Small" />
+		<Slider name="ShoulderOuterSize n|p" displayname="Shoulder Outer Size n|p" />
+		<Slider name="Arms_width" displayname="Arms width" />
+		<Slider name="UpperArmSize n|p" displayname="Upper Arm Size n|p" />
+		<Slider name="ForearmSize" displayname="Forearm Size n|p" />
+		<Slider name="WristSize n|p" displayname="Wrist Size" />
+	</Category>
+	<Category name="Arms+Shoulders Muscles" defaultHidden="false">
+		<Slider name="MusclyArms" displayname="Muscly Arms" />
+		<Slider name="Deltoidmuscles" displayname="Deltoid muscles" />
+		<Slider name="Biceps" displayname="Biceps" />
+		<Slider name="Triceps" displayname="Triceps" />
+		<Slider name="Thicc_forearms" displayname="Thicc forearms" />
+	</Category>
+	<Category name="Back   " defaultHidden="false">
+		<Slider name="BackDepth n|p" displayname="Depth n|p" />
+		<Slider name="Trapezius_smaller" displayname="Trapezius smaller" />
+		<Slider name="BackValley" displayname="Valley Prominence" />
+		<Slider name="ScapulaDepth" displayname="Scapula Depth" />
+		<Slider name="SpineDiscs_Prominence" displayname="Spine Discs Prominence" />
+		<Slider name="BackFatFolds" displayname="Fat Folds" />
+		<Slider name="BackUnderArmpitsFatFolds" displayname="Under Armpits Fat Folds" />
+	</Category>
+	<Category name="Back Muscles" defaultHidden="false">
+		<Slider name="LatsSize" displayname="Lats Size" />
+		<Slider name="Trapezius_upper" displayname="Trapezius upper" />
+		<Slider name="Trapezius_lower" displayname="Trapezius lower" />
+		<Slider name="SpineMuscles" displayname="Spine Muscles" />
+	</Category>
+	<Category name="Lower Torso" defaultHidden="false">
+		<Slider name="WaistLine n|p" displayname="Waist Line n|p" />
+		<Slider name="WaistThickness n|p" displayname="Waist Thickness n|p" />
+		<Slider name="CostalAnglePointed" displayname="Costal Prominence" />
+		<Slider name="FrontRibsProminence" displayname="Front Ribs Prominence" />
+		<Slider name="BellyCenterDepth n|p" displayname="Belly Center Depth n|p" />
+		<Slider name="BellyLowerDepth n|p" displayname="Belly Lower Depth n|p" />
+		<Slider name="BellyHeight n|p" displayname="Belly Height n|p" />
+		<Slider name="BellyWidth n|p" displayname="Belly Width n|p" />
+		<Slider name="Belly_Prominence" displayname="Belly Prominence" />
+		<Slider name="RectusOuterDepth" displayname="Rectus Outer Depth" />
+		<Slider name="LessProminentAbs" displayname="Less Prominent Abs" />
+		<Slider name="SoftBelly" displayname="Soft Belly" />
+		<Slider name="BellyFatty" displayname="Belly Fatty" />
+		<Slider name="BellyHorizontalCrease" displayname="Belly Horizontal Crease" />
+		<Slider name="BellyVerticalCrease" displayname="Belly Vertical Crease" />
+		<Slider name="Belly_lower_crease" displayname="Belly Lower Fat Fold" />
+		<Slider name="Navel Width n|p" displayname="Navel Width n|p" />
+		<Slider name="PregnancyBelly" displayname="Pregnancy Belly" />
+	</Category>
+	<Category name="Lower Torso Muscles" defaultHidden="false">
+		<Slider name="ExternalObliqueStraighten" displayname="External Oblique Straighten" />
+		<Slider name="AbsAsymmetry n|p" displayname="Abs Asymmetry n|p" />
+		<Slider name="HigherAbs" displayname="Higher Abs" />
+		<Slider name="HigherAbs_crease" displayname="Higher Abs Crease" />
+		<Slider name="CentralAbs" displayname="Central Abs" />
+		<Slider name="LowerAbs" displayname="Lower Abs" />
+		<Slider name="BellyVerticalCrease_Lower" displayname="Vertical Crease Lower" />
+		<Slider name="LowerAbsHorizontalCrease" displayname="Lower Abs Hor. Crease" />
+		<Slider name="AponeurosisExternalOblique" displayname="Aponeurosis" />
+	</Category>
+	<Category name="Hips" defaultHidden="false">
+		<Slider name="SacralDimples" displayname="Sacral Dimples" />
+		<Slider name="HipSize p|n" displayname="Size n|p" />
+		<Slider name="HipHeight p|n" displayname="Height n|p" />
+		<Slider name="HipWideSideway p|n" displayname="Width Sideway n|p" />
+		<Slider name="Hipbone p|n" displayname="Bone Size n|p" />
+		<Slider name="HipPointyBones" displayname="Pointy Bones" />
+		<Slider name="SmoothHips" displayname="Smooth Hips" />
+		<Slider name="Hip_Upper_Width n|p" displayname="Upper Width n|p" />
+		<Slider name="Hip_Wide" displayname="Lower Width Big" />
+		<Slider name="Hip_narrow" displayname="Lower Width Small" />
+		<Slider name="HipsOuterBonesFatty" displayname="Outer Hips Fatty" />
+		<Slider name="HipsAndLegsDistanceApart p|n" displayname="And Legs Dist. Apart n|p"  />
+		<Slider name="GreaterTrochanterBone" displayname="Greater Trochanter Bone" />
+		<Slider name="HipsSideMuscles" displayname="Side Muscles" />
+	</Category>
+	<Category name="Glutes" defaultHidden="false">
+		<Slider name="GluteSize p|n" displayname="Size n|p" />
+		<Slider name="GluteHeight p|n" displayname="Height n|p" />
+		<Slider name="GluteSpread p|n" displayname="Spread n|p" />
+		<Slider name="GluteStretch p|n" displayname="Stretch n|p" />
+		<Slider name="GluteTwistX p|n" displayname="TwistX n|p" />
+		<Slider name="GluteOuterHeight p|n" displayname="Outer Height n|p" />
+		<Slider name="GluteSeparateWidth p|n" displayname="Separate Width n|p" />
+		<Slider name="GlutesUpperDepth p|n" displayname="Upper Depth n|p" />
+		<Slider name="GluteUpperWidth p|n" displayname="Upper Width n|p" />		
+		<Slider name="GluteLower" displayname="Lower Part Size" />
+		<Slider name="GluteLowerHeight p|n" displayname="Lower Height n|p" />
+		<Slider name="GluteLowerWidth p|n" displayname="Lower Width n|p" />
+		<Slider name="GluteInnerHeight p|n" displayname="Inner Height n|p" />
+		<Slider name="Glutes_tighter" displayname="Tighter" />
+		<Slider name="GluteFolds" displayname="Folds" />
+		<Slider name="GluteusDefinition" displayname="Muscle Definition" />	
+	</Category>		
+	<Category name="Lewd Zone" defaultHidden="false">
+		<Slider name="PubicAreaSize p|n" displayname="Pubic Area Size n|p" />
+		<Slider name="PubicAreaHilly" displayname="Pubic Area Hilly" />
+		<Slider name="Vagina_shape" displayname="Vagina Shape" />
+		<Slider name="Vagina_shape_wider" displayname="Vagina Shape Wider" />
+		<Slider name="Vagina_Fantasy" displayname="Vagina Fantasy" />
+		<Slider name="PussyCute" displayname="Pussy Cute" />
+		<Slider name="ClitorisErection" displayname="Clitoris Erection" />
+		<Slider name="AnusSize" displayname="Anus Size" />
+		<Slider name="BiggerAnus" displayname="Anus Bigger" />
+		<Slider name="AnusTriangular" displayname="Anus Triangular" />
+		<Slider name="Anus_creases" displayname="Anus creases" />		
+		<Slider name="Anus_creases_1" displayname="Anus creases 1" />		
+		<Slider name="AnusSpread" displayname="Anus Spread" />		
+		<Slider name="Vagina_spread" displayname="Vagina Spread" />	
+	</Category>
+	<Category name="UBE Cock" defaultHidden="false">	
+		<Slider name="Penis_Length" displayname="Penis Length" />
+        <Slider name="Penis_Depth n|p" displayname="Penis Depth" />        
+        <Slider name="Penis_Height n|p" displayname="Penis Height n|p" />   
+		<Slider name="Shaft_Vertical_Girth_n|p" displayname="Shaft Vertical Girth n|p" />
+		<Slider name="Shaft_Horizontal_Girth_n|p" displayname="Shaft Horizontal Girth n|p" />
+        <Slider name="Human_Dragon_Sculpt_Slider" displayname="Human Dragon Sculpt Slider" />
+        <Slider name="Horse_Sculpt_Slider" displayname="Horse Sculpt Slider" />
+        <Slider name="Skin_Pulled" displayname="Skin Pulled" />
+        <Slider name="Foreskin_Forward_1_St" displayname="Foreskin Forward 1" />
+        <Slider name="Foreskin_Forward_2_St" displayname="Foreskin Forward 2" />
+        <Slider name="Foreskin_Forward_3_St" displayname="Foreskin Forward 3" />
+        <Slider name="Foreskin_Forward_4_St" displayname="Foreskin Forward 4" />
+        <Slider name="Flaccid_Human" displayname="Flaccid Human" />
+        <Slider name="Flaccid_Horse" displayname="Flaccid Horse" />
+        <Slider name="Semi-Flaccid_Horse" displayname="Semi-Flaccid Horse" />
+        <Slider name="Flaccid_Dragon" displayname="Flaccid Dragon" />
+        <Slider name="Horse_Glans_Base_1" displayname="Horse Glans 1" />
+        <Slider name="Horse_Glans_Base_2" displayname="Horse Glans 2" /> 
+        <Slider name="Horse_Glans_Base_3" displayname="Horse Glans 3" />  
+        <Slider name="Horse_Glans_Base_3_Glans_Spikes" displayname="Horse Glans Spikes" />      
+        <Slider name="Horse_Glans_Base_3_Penis_Spikes" displayname="Horse Penis Spikes" />         
+        <Slider name="Horse_Glans_Base_4" displayname="Horse Glans 4" />      
+        <Slider name="Horse_Glans_Base_5_Foreskin_Folds" displayname="Horse Glans 5 Foreskin Folds" />     
+        <Slider name="Horse_Glans_Base_5" displayname="Horse Glans 5" />       
+        <Slider name="Horse_Glans_Base_6" displayname="Horse Glans 6" />
+        <Slider name="Shaft-Corona_Crease_Remove" displayname="Remove Shaft-Corona Crease" />       
+        <Slider name="Dragon_Glans" displayname="Dragon Glans" />         
+        <Slider name="Dragon_Cock" displayname="Dragon Cock" />         
+        <Slider name="Orifice_Size_n|p" displayname="Orifice Size n|p" />       
+        <Slider name="Orifice_Horse_Cock" displayname="Orifice Horse Cock" />       
+        <Slider name="Orifice_Closed" displayname="Orifice Closed" />         
+        <Slider name="Oriphis_Penetration" displayname="Oriphis Penetration" />         
+        <Slider name="Oriphis_Penetration_bigger" displayname="Oriphis Penetration Bigger" />        
+        <Slider name="Urethra_Sex_Toy" displayname="Urethra Sex Toy" />       
+        <Slider name="Glans_Size_n|p" displayname="Glans Size n|p" />        
+        <Slider name="Glans_Width n|p" displayname="Glans Width n|p" />         
+        <Slider name="Glans_Front_Bigger" displayname="Glans Front Bigger" />       
+        <Slider name="Glans_Length_Long" displayname="Glans Length Long" />        
+        <Slider name="Glans_Length_Short" displayname="Glans Length Short" />       
+        <Slider name="Glans_Angle" displayname="Glans Angle" />         
+        <Slider name="Glans_Lower_Size_n|p" displayname="Glans Lower Size n|p" />        
+        <Slider name="Glans_Lower_Crease_More" displayname="Glans Lower Crease More" />          
+        <Slider name="Glans_Lower_Crease_Less" displayname="Glans Lower Crease Less" />  
+        <Slider name="Glans_Upper_crease" displayname="Glans Upper Crease" />  		
+        <Slider name="Frenulum_Shorter" displayname="Frenulum Shorter" />       
+        <Slider name="Corona_Size" displayname="Corona Size" />        
+        <Slider name="Corona_Prominence" displayname="Corona Prominence" />         
+        <Slider name="Smooth_Foreskin" displayname="Smooth Foreskin" />      
+        <Slider name="Front_Shaft_Size_n|p" displayname="Front Shaft Size n|p" />        
+        <Slider name="Central_Shaft_Size_n|p" displayname="Central Shaft Size n|p" />          
+        <Slider name="Back_Shaft_Size_n|p" displayname="Back Shaft Size n|p" />          
+        <Slider name="Root_Size_Big" displayname="Root Size Big" />         
+        <Slider name="Shaft_Muscles_Prominence" displayname="Shaft Muscles Prominence" />          
+        <Slider name="Urethra_Curve" displayname="Urethra Curve" />        
+        <Slider name="Urethra_Prominence" displayname="Urethra Prominence" />         
+        <Slider name="Front_Urethra_Size" displayname="Front Urethra Size" />        
+        <Slider name="Central_Urethra_Size" displayname="Central Urethra Size" />          
+        <Slider name="Back_Urethra_Size" displayname="Back Urethra Size" />        
+        <Slider name="Urethra_Width" displayname="Urethra Width" />         
+        <Slider name="Horse_Cock_Shaft_Ring" displayname="Horse Cock Shaft Ring" />           
+        <Slider name="Horse_Cock_Root_Crease" displayname="Horse Cock Root Crease" />      
+        <Slider name="Vagina_Crease" displayname="Vagina Crease" />        
+        <Slider name="Perineum" displayname="Perineum" /> 
+        <Slider name="PerineumWidth" displayname="Perineum Width" />              		
+        <Slider name="Nyl2_Root" displayname="Nyl2 Root" />   		
+        <Slider name="Veins1" displayname="Veins 1" />              		
+        <Slider name="Veins2" displayname="Veins 2" />   	
+        <Slider name="Veins3" displayname="Veins 3" />              		
+        <Slider name="Veins4" displayname="Veins 4" />   	
+        <Slider name="Veins4" displayname="Veins 4" />   
+        <Slider name="Pulsating_glans" displayname="Pulsating Glans" />   
+	</Category>
+	<Category name="UBE Balls" defaultHidden="false">		
+        <Slider name="Root-Balls_Creases" displayname="Root Balls Creases" />            
+        <Slider name="Nyl2_Balls" displayname="Nyl2 Balls" />          
+        <Slider name="Nyl2_Balls_horse_cock_crease_fix" displayname="Nyl2 Balls Horse Cock Crease Fix" />           
+        <Slider name="Balls_Size_Big" displayname="Balls Size Big" />           
+        <Slider name="Balls_Size_Vertical" displayname="Balls Size Vertical" />         
+        <Slider name="Balls_Hidden" displayname="Balls Hidden" />          
+		<Slider name="Balls_Sag" displayname="Balls Sag" />       
+        <Slider name="Balls_Assymetry" displayname="Balls Assymetry" />        
+        <Slider name="Balls_Flex" displayname="Balls Flex" />           
+        <Slider name="Balls_Crease_More" displayname="Balls Crease More" />          
+        <Slider name="Balls_Crease_Mess" displayname="Balls Crease Mess" />        
+        <Slider name="Balls_Lower_Fold" displayname="Balls Lower Fold" /> 
+		<Slider name="Balls_forward" displayname="Balls Forward" />		
+		<Slider name="Balls_rotate" displayname="Balls rotate" />		
+		<Slider name="Big_Saggy_Balls" displayname="Big Saggy Balls" />		
+		<Slider name="Balls_Round" displayname="Balls Round" />		
+		<Slider name="Rampage_balls" displayname="Rampage balls" />		
+		<Slider name="Rampage_balls_size_corr" displayname="Rampage balls size corr" />		
+	</Category>
+	<Category name="Legs and Feet" defaultHidden="false">				
+		<Slider name="UpperThighsSizeBig" displayname="Upper Thighs Size Big" />
+		<Slider name="LowerThighsSizeBig" displayname="Lower Thighs Size Big" />
+		<Slider name="UpperThighsSizeSmall" displayname="Upper Thighs Size Small" />
+		<Slider name="LowerThighsSizeSmall" displayname="Lower Thighs Size Small" />
+		<Slider name="UpperThighsChubby" displayname="Upper Thighs Chubby" />
+		<Slider name="UpperThighsDepth" displayname="Upper Thighs Depth" />
+		<Slider name="ThighFrontDepth" displayname="Thighs Front Depth" />
+		<Slider name="ThighBackDepth" displayname="Thighs Back Depth" />
+		<Slider name="UpperInnerThighSize p|n" displayname="Upper Inner Thighs Size n|p" />
+		<Slider name="LowerInnerThighSize p|n" displayname="Lower Inner Thighs Size n|p" />
+		<Slider name="LowerOuterThighSize Bigger" displayname="Lower Outer Thighs Size Bigger" />
+		<Slider name="ThighsOuter big" displayname="Thighs Outer Size big" />
+		<Slider name="ThighsOuter small" displayname="Thighs Outer Size small" />
+		<Slider name="Thighs_Inner_Size_n|p" displayname="Thighs Inner Size n|p" />
+		<Slider name="ThighApart" displayname="ThighApart" />
+		<Slider name="KneeBoneSize p|n" displayname="Knee Bone Size n|p" />
+		<Slider name="KneeDefinition" displayname="Knee Definition" />
+		<Slider name="KneeOuter p|n" displayname="Knee Outer n|p" />
+		<Slider name="ShinSize p|n" displayname="Shin Size n|p" />
+		<Slider name="Shin_Forward" displayname="Shin Forward" />
+		<Slider name="AnkleThickness p|n" displayname="Ankle Thickness n|p" />
+		<Slider name="Bowed_Calves" displayname="Bowed Calves" />
+		<Slider name="FeetSize n|p" displayname="Feet Size n|p" />
+	</Category>			
+	<Category name="Legs and Feet Muscles" defaultHidden="false">	
+		<Slider name="RectusFemoris" displayname="Rectus Femoris" />
+		<Slider name="VastusLateralis" displayname="Vastus Lateralis" />
+		<Slider name="VastusMedialis" displayname="Vastus Medialis" />
+		<Slider name="IllotibialTract" displayname="Illotibial Tract" />
+		<Slider name="Adductors" displayname="Adductors" />
+		<Slider name="Hamstrings" displayname="Hamstrings" />
+		<Slider name="CalfUpperSize p|n" displayname="Calf Upper Size n|p" />
+		<Slider name="Thicc_calves" displayname="Thicc Calves" />
+	</Category>
+</SliderCategories>

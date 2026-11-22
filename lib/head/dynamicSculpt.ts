@@ -1,5 +1,8 @@
 import type { Mo2Manifest, Mo2MeshOption } from '@/lib/head/faceTexture';
 import type { MeshData } from '@/components/scene/useMeshGeometry';
+import { CANONICAL_HEAD_URL, CANONICAL_HEAD_VERTICES, CANONICAL_HEAD_TOPOLOGY,
+  validateSculptPayload, type SculptPayload } from '@/lib/head/sculptPayload';
+import { NECK_SEAM_HEAD_INDICES } from '@/lib/head/neckDeltas';
 import {
   loadPersistedHeadOptions,
   savePersistedHeadOptions,
@@ -17,6 +20,7 @@ export interface SculptBlock {
 const DYNAMIC_HEAD_OPTIONS: Mo2MeshOption[] = loadPersistedHeadOptions();
 const DYNAMIC_MESH_CACHE = new Map<string, MeshData>();
 const BASE_MESH_CACHE = new Map<string, MeshData>();
+const TRANSIENT_HEAD_IDS = new Set<string>();
 
 export function getDynamicSculptHeads(): Mo2MeshOption[] {
   return DYNAMIC_HEAD_OPTIONS;
@@ -29,7 +33,7 @@ export function addDynamicHeadOption(option: Mo2MeshOption): void {
     DYNAMIC_HEAD_OPTIONS.splice(idx, 1);
   }
   DYNAMIC_HEAD_OPTIONS.unshift(option);
-  savePersistedHeadOptions(DYNAMIC_HEAD_OPTIONS);
+  savePersistedHeadOptions(DYNAMIC_HEAD_OPTIONS.filter(head => !TRANSIENT_HEAD_IDS.has(head.id)));
 }
 
 export function registerDynamicMesh(url: string, data: MeshData): void {
@@ -57,6 +61,7 @@ export function registerBaseMesh(url: string, data: MeshData): void {
 
 export function clearDynamicSculptCache(): void {
   DYNAMIC_HEAD_OPTIONS.length = 0;
+  TRANSIENT_HEAD_IDS.clear();
   DYNAMIC_MESH_CACHE.clear();
   savePersistedHeadOptions([]);
 }
@@ -154,6 +159,70 @@ async function fetchBaseMesh(url: string): Promise<MeshData | null> {
     }
   }
   return null;
+}
+
+/** Session-only generated sculpt; never route this through permissive RaceMenu fallbacks. */
+export async function replaySculptPayload(payload: SculptPayload, fileName: string): Promise<Mo2MeshOption> {
+  const checked = validateSculptPayload(payload);
+  if (!checked.ok) throw new Error(checked.reason);
+  const base = await fetchBaseMesh(CANONICAL_HEAD_URL);
+  if (!base || base.positions.length !== CANONICAL_HEAD_VERTICES * 3 ||
+      base.indices.length !== 22044 * 3 || base.uvs.length !== CANONICAL_HEAD_VERTICES * 2 ||
+      !Array.from(base.positions).every(Number.isFinite) || !Array.from(base.uvs).every(Number.isFinite) ||
+      !base.indices.every(index => Number.isInteger(index) && index >= 0 && index < CANONICAL_HEAD_VERTICES)) {
+    throw new Error('Canonical UBE base is missing or invalid; regenerate the preset pack');
+  }
+  const topology = new DataView(new ArrayBuffer(base.indices.length * 4));
+  base.indices.forEach((index, i) => topology.setUint32(i * 4, index, true));
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', topology.buffer);
+  const fingerprint = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+  if (fingerprint !== CANONICAL_HEAD_TOPOLOGY) throw new Error('Canonical UBE topology does not match the converter');
+  const sculpted = applySculptDeltas(base, checked.payload.morphs.sculpt[0], 10000);
+  const protectedIndices = new Set<number>(NECK_SEAM_HEAD_INDICES);
+  for (let i = 0; i < CANONICAL_HEAD_VERTICES; i++) {
+    if (base.positions[i * 3 + 1] <= -0.105 || base.positions[i * 3 + 2] <= -0.06) protectedIndices.add(i);
+  }
+  for (const index of protectedIndices) {
+    for (let axis = 0; axis < 3; axis++) {
+      // Compare as Float32: replay stores positions at the renderer's precision.
+      if (Math.fround(base.positions[index * 3 + axis]) !== Math.fround(sculpted.positions[index * 3 + axis])) {
+        throw new Error('Sculpt moved a protected neck vertex');
+      }
+    }
+  }
+  const normal = (positions: ArrayLike<number>, a: number, b: number, c: number) => {
+    const ax = positions[b] - positions[a], ay = positions[b + 1] - positions[a + 1], az = positions[b + 2] - positions[a + 2];
+    const bx = positions[c] - positions[a], by = positions[c + 1] - positions[a + 1], bz = positions[c + 2] - positions[a + 2];
+    return [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];
+  };
+  for (let i = 0; i < base.indices.length; i += 3) {
+    const [a, b, c] = base.indices.slice(i, i + 3).map(index => index * 3);
+    const before = normal(base.positions, a, b, c), after = normal(sculpted.positions, a, b, c);
+    if (Math.hypot(...before) > 1e-12 && before.reduce((sum, value, axis) => sum + value * after[axis], 0) <= 0) {
+      throw new Error('Sculpt replay contains folded or collapsed triangles');
+    }
+  }
+  const id = `smart-sculpt-${globalThis.crypto.randomUUID()}`;
+  const meshUrl = `dynamic://meshes/${id}.json`;
+  const option: Mo2MeshOption = {
+    id, meshUrl, mod: 'Smart Customization', rel: `Smart/${id}.jslot`, file: fileName,
+    label: `${checked.payload.name} (Approximate UBE Sculpt)`, isRealMesh: true,
+    origin: 'sculpt-replay', sculptSource: fileName, bytes: 0, version: '1.0', nodes: [],
+    shapes: { vertexCount: CANONICAL_HEAD_VERTICES, triangleCount: 22044 },
+  };
+  // ponytail: core flow is session-only; persist original sculpt payload in Phase 4, not this cache.
+  TRANSIENT_HEAD_IDS.add(id);
+  DYNAMIC_MESH_CACHE.set(meshUrl, sculpted);
+  DYNAMIC_HEAD_OPTIONS.unshift(option);
+  return option;
+}
+
+export function removeDynamicHeadOption(id: string): void {
+  if (!TRANSIENT_HEAD_IDS.delete(id)) return;
+  const index = DYNAMIC_HEAD_OPTIONS.findIndex(head => head.id === id);
+  if (index < 0) return;
+  const [option] = DYNAMIC_HEAD_OPTIONS.splice(index, 1);
+  if (option.meshUrl) DYNAMIC_MESH_CACHE.delete(option.meshUrl);
 }
 
 /**

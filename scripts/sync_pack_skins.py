@@ -101,6 +101,16 @@ SKIN_MOD_SPECS = [
         "body_n": r"textures\!UBE\Body\femalebody_1_n.dds",
     },
     {
+        "id": "skin-freckled-delight",
+        "slug": "freckled_delight",
+        "label": "Freckled Delight Skin (UBE)",
+        "mod": "Freckled Delight Skin (UBE)",
+        "head_d": r"textures\!UBE\Head\femaleHead_d.dds",
+        "head_n": r"textures\!UBE\Head\femalehead_n.dds",
+        "body_d": r"textures\!UBE\Body\femalebody_1_d.dds",
+        "body_n": r"textures\!UBE\Body\femalebody_1_n.dds",
+    },
+    {
         "id": "skin-ube-base",
         "slug": "ube_base",
         "label": "UBE 2.0 Standard",
@@ -284,6 +294,39 @@ def main():
         manifest["assets"]["body"] = body_list
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         print("[+] Updated manifest.json assets.skin and assets.body")
+
+    # 2. Mirror into public/assets/styling/skin/<slug>/
+    import shutil
+    styling_skin_dir = ROOT / "public" / "assets" / "styling" / "skin"
+    styling_skin_dir.mkdir(parents=True, exist_ok=True)
+    skin_src_dir = PUBLIC / "textures" / "skin"
+    body_src_dir = PUBLIC / "textures" / "body"
+
+    for r in results:
+        slug = next((s["slug"] for s in SKIN_MOD_SPECS if s["id"] == r["id"]), None)
+        if not slug:
+            continue
+        dst = styling_skin_dir / slug
+        dst.mkdir(parents=True, exist_ok=True)
+        # copy head maps
+        for f in [f"{slug}_head.webp", f"{slug}_head_n.png", f"{slug}_head_rough.webp"]:
+            sf = skin_src_dir / f
+            if sf.is_file():
+                shutil.copy2(sf, dst / f.replace(f"{slug}_", ""))
+        # copy body maps
+        for f in [f"{slug}_body.webp", f"{slug}_body_n.png", f"{slug}_body_rough.webp"]:
+            sf = body_src_dir / f
+            if sf.is_file():
+                shutil.copy2(sf, dst / f.replace(f"{slug}_", ""))
+    print("[+] Mirrored skin maps into public/assets/styling/skin/")
+
+    # 3. Refresh taxonomy manifest
+    try:
+        from index_assets_taxonomy import main as index_taxonomy
+        index_taxonomy()
+        print("[+] Refreshed public/assets/taxonomy-manifest.json")
+    except Exception as e:
+        print(f"[-] Note: taxonomy index update skipped: {e}")
 
 
 if __name__ == "__main__":

@@ -5,30 +5,62 @@ import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { WuxiaTopNavBar } from '@/components/hud/common/WuxiaTopNavBar';
 
 export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }) {
-  const name = useCharacter(s => s.name);
-  const preview = useCharacter(s => s.previewMode);
-  const primaryTab = useCharacter(s => s.primaryTab);
+  const name = useCharacter((s) => s.name);
+  const preview = useCharacter((s) => s.previewMode);
+  const primaryTab = useCharacter((s) => s.primaryTab);
   const isOutfit = primaryTab === 'EQUIPMENT';
   const isHair = primaryTab === 'HAIR';
   const isMakeup = primaryTab === 'FACE';
-  const studioPage = useCharacter(s => s.studioPage);
-  const setPreviewMode = useCharacter(s => s.setPreviewMode);
-  const showToast = useCharacter(s => s.showToast);
+  const isFace = primaryTab === 'FACE SHAPE';
+  const isBody = primaryTab === 'BODY';
+  const isPreset = primaryTab === 'PRESET';
+  const studioPage = useCharacter((s) => s.studioPage);
+  const setPreviewMode = useCharacter((s) => s.setPreviewMode);
+  const showToast = useCharacter((s) => s.showToast);
 
-  // If in Hairstyle or Makeup/Customization mode, render Wuxia Customization Top Navigation Bar
-  if (isHair || isMakeup) {
+  // If in Hairstyle, Makeup, Features, Physique, or Preset mode:
+  if (isHair || isMakeup || isFace || isBody || isPreset) {
+    const hasSmart = isHair || isMakeup;
     return (
       <WuxiaTopNavBar
-        tabs={[
-          { id: 'customization', label: 'Customization' },
-          { id: 'smart_customization', label: 'Smart Customization' },
-        ]}
-        activeTab={studioPage === 'smart' ? 'smart_customization' : 'customization'}
-        onTabChange={tabId =>
-          useCharacter.getState().setStudioPage(tabId === 'smart_customization' ? 'smart' : 'default')}
+        tabs={
+          hasSmart
+            ? [
+                { id: 'customization', label: 'Customization' },
+                { id: 'smart_customization', label: 'Smart Customization' },
+              ]
+            : [{ id: 'customization', label: 'Customization' }]
+        }
+        activeTab={hasSmart && studioPage === 'smart' ? 'smart_customization' : 'customization'}
+        onTabChange={(tabId) =>
+          useCharacter
+            .getState()
+            .setStudioPage(tabId === 'smart_customization' ? 'smart' : 'default')}
         isCollapsed={preview}
         onToggleCollapse={() => setPreviewMode(!preview)}
-        onSearch={() => showToast(isMakeup ? 'Search makeup styles (Q)' : 'Search hairstyles (Q)')}
+        onSearch={() =>
+          showToast(
+            isMakeup
+              ? 'Search makeup styles (Q)'
+              : isHair
+                ? 'Search hairstyles (Q)'
+                : isFace
+                  ? 'Search facial features (Q)'
+                  : isBody
+                    ? 'Search body morphs (Q)'
+                    : 'Search presets (Q)'
+          )}
+        rightSlot={
+          <a
+            href="/rigger"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Auto-Rigger Studio (opens in a new tab)"
+            className="pointer-events-auto ml-2 px-2.5 py-0.5 rounded-[2px] text-[10px] font-mono tracking-widest text-[#d4b483] bg-[#d4b483]/10 hover:bg-[#d4b483]/20 border border-[#d4b483]/30 transition-all flex items-center gap-1.5 uppercase"
+          >
+            <span>⚡</span> Auto-Rigger
+          </a>
+        }
       />
     );
   }
@@ -40,7 +72,7 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
         isCollapsed={preview}
         onToggleCollapse={() => setPreviewMode(!preview)}
         onSearch={() => showToast('Search item or slot (Q)')}
-        onTabChange={tabId => {
+        onTabChange={(tabId) => {
           if (tabId === 'backgrounds') {
             useCharacter.getState().setWorkspace('camera');
           } else if (tabId === 'weapon') {
@@ -53,7 +85,7 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
     );
   }
 
-  // Default Header for non-wardrobe screens
+  // Default Header fallback
   return (
     <header className="creator-header">
       <div className="creator-header-title">

@@ -53,7 +53,7 @@ import type {
  * v2 intentionally starts fresh for the new rendering defaults (approved reset).
  * The v1 key is left untouched; it is not automatically restored.
  */
-export const SESSION_VERSION = 2;
+export const SESSION_VERSION = 3;
 
 export const SESSION_KEY = `lyra.character-session.v${SESSION_VERSION}`;
 
@@ -268,8 +268,8 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     animationPlaying: bool(o.animationPlaying, defaults.animationPlaying ?? true),
     animationSpeed: bounded(o.animationSpeed, defaults.animationSpeed ?? 1, 0.2, 2),
     autoRigUnskinned: bool(o.autoRigUnskinned, defaults.autoRigUnskinned ?? true),
-    /* When default weight is 0 (locked), session restores 0. Otherwise coerceWeight. */
-    weight: defaults.weight === 0 ? 0 : (coerceWeight(o.weight) ?? defaults.weight),
+    /* Body weight defaults to 0 (slim _0 mesh). Restores user saved weight if valid. */
+    weight: coerceWeight(o.weight) ?? 0,
     bodyPhysicsEnabled: bool(o.bodyPhysicsEnabled, defaults.bodyPhysicsEnabled ?? true),
     bodyPhysicsBounciness: clamp(finite(o.bodyPhysicsBounciness, defaults.bodyPhysicsBounciness ?? 0.5), 0, 1),
     bodyCollisionsEnabled: bool(o.bodyCollisionsEnabled, defaults.bodyCollisionsEnabled ?? true),
@@ -425,7 +425,33 @@ function memoryStorage(): StateStorage {
 
 function browserStorage(): StateStorage {
   try {
-    return window.localStorage;
+    return {
+      getItem: (key) => {
+        const item = window.localStorage.getItem(key);
+        if (!item && key === SESSION_KEY) {
+          const old = window.localStorage.getItem('lyra.character-session.v2');
+          if (old) {
+            try {
+              const parsed = JSON.parse(old);
+              if (parsed?.state) {
+                // Ensure default to slim _0 mesh (weight = 0)
+                parsed.state.weight = 0;
+                return JSON.stringify(parsed);
+              }
+            } catch {
+              // fallback to null
+            }
+          }
+        }
+        return item;
+      },
+      setItem: (key, value) => {
+        window.localStorage.setItem(key, value);
+      },
+      removeItem: (key) => {
+        window.localStorage.removeItem(key);
+      },
+    };
   } catch {
     return memoryStorage();
   }

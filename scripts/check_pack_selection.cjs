@@ -16,6 +16,7 @@ const fakeRequire = (id) => {
   if (id === '@/lib/equipment') return equipmentModule();
   if (id === '@/lib/hair') return hairModule();
   if (id === '@/lib/head/dynamicSculpt') return { getDynamicSculptHeads: () => [] };
+  if (id === '@/lib/hairGlbRegistry') return { findCuratedGlbHair: () => null };
   assert.equal(id, '@/lib/mo2/client');
   return { convertUrl: (options) => `/api/mo2/convert?${new URLSearchParams(options)}` };
 };

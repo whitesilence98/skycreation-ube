@@ -1,0 +1,103 @@
+<SliderCategories>
+	<Category name="Hide Thigh" defaultHidden="true">		
+		<Slider name="Hide Thigh for Stocking" displayname="Hide Thigh for Stocking" />
+	</Category>
+	<Category name="1 - Necoco Boob" defaultHidden="false">		
+		<Slider name="Necoco_Boob_Base" displayname="Necoco Boob Base" />
+		<Slider name="Necoco_Boob_Addon_MafaVam" displayname="Necoco Boob Addon MafaVam" />
+		<Slider name="Necoco_Boob_Addon_Bom39" displayname="Necoco Boob Addon Bom39" />
+	</Category>
+	<Category name="2 - Necoco Sliders Overall" defaultHidden="false">		
+		<Slider name="Necoco_Overall_Boob" displayname="Necoco Overall Boob" />
+		<Slider name="Necoco_Overall_Nipple" displayname="Necoco Overall Nipple" />
+	</Category>
+	<Category name="3 - Necoco Body (Use this for Customizing)" defaultHidden="false">	
+		<Slider name="Necoco_Body_w|o_Boob" displayname="Necoco Body without Boob" />	
+		<Slider name="Necoco_Body_w_Boob" displayname="Necoco Body with Boob" />
+		<Slider name="Necoco_Boob_Base_For_Body_with_Boob" displayname="Necoco_Boob_Base_For_Body_with_Boob" />
+	</Category>
+	<Category name="4 - Necoco Body Addons (Use with Necoco Body)" defaultHidden="false">
+		<Slider name="Necoco_Body_Addon_Lewd_Zone" displayname="Necoco Body Addon - Lewd Zone" />		
+		<Slider name="Necoco_Body_Addon_Leg" displayname="Necoco Body Addon - Leg" />
+		<Slider name="Necoco_Body_Addon_Butt" displayname="Necoco Body Addon - Butt" />
+		<Slider name="Necoco_Body_Addon_Belly" displayname="Necoco Body Addon - Belly" />
+		<Slider name="Necoco_Body_Addon_Upper_Body_Smooth" displayname="Necoco Body Addon - Upper Body Smooth" />
+	</Category>
+
+	<Category name="5 - Necoco Sliders Other" defaultHidden="false">		
+		<Slider name="Necoco_Boob_Distance" displayname="boob distance" />
+		<Slider name="breast lewd bigger" displayname="breast lewd bigger" />
+		<Slider name="Abs_creases" displayname="UBE 3.0 pre - Abs creases" />
+		<Slider name="Anus_creases" displayname="UBE 3.0 pre - Anus creases" />
+		<Slider name="Anus_creases_1" displayname="UBE 3.0 pre - Anus creases 1" />
+		<Slider name="Shy_Pussy" displayname="UBE 3.0 pre - Shy Pussy" />
+		<Slider name="Breasts-shoulders_creases" displayname="UBE 3.0 pre - Breasts-shoulders creases" />
+		<Slider name="Breasts-chest_creases" displayname="UBE 3.0 pre - Breasts-chest creases" />
+		<Slider name="Smol" displayname="UBE 3.0 pre - Smol" />
+		<Slider name="Amazon_abs" displayname="UBE 3.0 pre - Amazon abs" />
+		<Slider name="SquarePeg3d_abs" displayname="UBE 3.0 pre - SquarePeg3d abs" />
+		<Slider name="Upper_Outer_Thighs_Width" displayname="UBE 3.0 pre - Upper Outer Thighs Width" />
+		<Slider name="Calves_Flex" displayname="UBE 3.0 pre - Calves Flex" />
+		<Slider name="Belly_button_shape" displayname="UBE 3.0 pre - Belly button shape" />
+		<Slider name="Hentai_silicone_breasts" displayname="UBE 3.0 pre - Hentai slicone breasts" />
+		<Slider name="MuscularBoobs" displayname="UBE 3.0 pre - Muscular Boobs" />
+		<Slider name="BiggerAnus_2" displayname="UBE 3.0 pre - Bigger Anus 2" />
+		<Slider name="Soft_abs" displayname="UBE 3.0 pre - Soft abs" />
+		<Slider name="Penis_Depth n|p" displayname="UBE 3.0 pre - Penis Depth" />
+		<Slider name="FFXIV-like" displayname="UBE 3.0 pre - FFXIV-like" />
+	</Category>
+	<Category name="Burger Sliders" defaultHidden="false">		
+		<Slider name="nipple enhance" displayname="nipple enhance" />
+		<Slider name="nipple enhance 2" displayname="nipple enhance 2" />
+		<Slider name="nipple puffy" displayname="nipple puffy" />
+		<Slider name="anime breast" displayname="anime breast" />
+		<Slider name="body fix" displayname="body fix" />
+		<Slider name="narrow upper breast" displayname="narrow upper breast" />
+		<Slider name="anime breast saggy" displayname="anime breast saggy" />
+		<Slider name="vindictus breast" displayname="vindictus breast" />
+		<Slider name="vindictus saggy" displayname="vindictus saggy" />
+		<Slider name="breast distance" displayname="breast distance" />
+		<Slider name="breast width" displayname="breast width" />
+		<Slider name="nipple saggy" displayname="nipple saggy" />
+		<Slider name="breast height" displayname="breast height" />
+		<Slider name="breast upper height" displayname="breast upper height" />
+		<Slider name="nipple hole enhance" displayname="nipple hole enhance" />
+		<Slider name="nipple hole UV fix" displayname="nipple hole UV fix" />
+		<Slider name="anus enhance" displayname="anus enhance" />
+		<Slider name="thigh fix" displayname="thigh fix" />
+		<Slider name="smooth calves" displayname="smooth calves" />
+		<Slider name="vag enhance" displayname="vag enhance" />
+		<Slider name="vag enhance 2" displayname="vag enhance 2" />
+		<Slider name="fat butt" displayname="fat butt" />
+		<Slider name="leg enhance" displayname="leg enhance" />
+		<Slider name="vindictus butt" displayname="vindictus butt" />
+		<Slider name="vindictus saggy more" displayname="vindictus saggy more" />
+		<Slider name="vindictus saggy more 2" displayname="vindictus saggy more 2" />
+		<Slider name="less muscle" displayname="less muscle" />
+		<Slider name="vag enhance 3" displayname="vag enhance 3" />
+		<Slider name="vag enhance 4" displayname="vag enhance 4" />
+		<Slider name="nipple length" displayname="nipple length" />
+		<Slider name="butt smoothen" displayname="butt smoothen" />
+		<Slider name="anus enhance 2" displayname="anus enhance 2" />
+		<Slider name="nipple enhance fix" displayname="nipple enhance fix" />
+		<Slider name="breast UV fix" displayname="breast UV fix" />
+		<Slider name="breast lewd bigger" displayname="breast lewd bigger" />
+	</Category>
+	<Category name="Xtrem Sliders" defaultHidden="false">		
+		<Slider name="AnusGap" displayname="Anus Gap" />
+		<Slider name="AnusHeight" displayname="Anus Height" />
+		<Slider name="AnusPotrude" displayname="Anus Potrude" />
+		<Slider name="AnusPuffy" displayname="Anus Puffy" />
+		<Slider name="AnusPuffy v2" displayname="Anus Puffy v2" />
+		<Slider name="AnusSwollen" displayname="Anus Swollen" />
+		<Slider name="AnusSwollen v2" displayname="Anus Swollen v2" />
+		<Slider name="AnusSwollen v3" displayname="Anus Swollen v3" />
+		<Slider name="ClitSwollen" displayname="Clit Swollen" />
+		<Slider name="InflationAnal" displayname="Inflation Anal" />
+		<Slider name="InflationVaginal" displayname="Inflation Vaginal" />
+		<Slider name="LabiaSpread" displayname="Labia Spread" />
+		<Slider name="NavelDepht" displayname="Navel Depht" />
+		<Slider name="NavelOut" displayname="Navel Out" />
+		<Slider name="VaginaBack" displayname="Vagina Back" />
+	</Category>
+</SliderCategories>

@@ -1,0 +1,139 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<SliderSetInfo version="1">
+    <SliderSet name="UBE SE 2.0 - Necoco Hand">
+        <DataFolder>UBE SE 2.0 - Necoco Hand</DataFolder>
+        <SourceFile>UBE SE 2.0 - Necoco Hand.nif</SourceFile>
+        <OutputPath>Meshes\!UBE\Hands</OutputPath>
+        <OutputFile GenWeights="true" PreventMorphFile="false" KeepZappedShapes="false">femalehands_tangent</OutputFile>
+        <Shape target="Hands" DataFolder="UBE SE 2.0 Release Hands" SmoothSeamNormalsAngle="120">Hands</Shape>
+        <Slider name="BiggerHands_CBBE-like" invert="false" small="0" big="0">
+            <Data name="HandsBiggerHands_CBBE-like" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsBiggerHands_CBBE-like</Data>
+        </Slider>
+        <Slider name="Longer_fingers" invert="false" small="0" big="0">
+            <Data name="HandsLonger_fingers" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsLonger_fingers</Data>
+        </Slider>
+        <Slider name="Nails_Length n|p" invert="false" small="0" big="0">
+            <Data name="HandsNails_Length n|p" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsNails_Length n|p</Data>
+        </Slider>
+        <Slider name="Claw_Nails" invert="false" small="0" big="0">
+            <Data name="HandsClaw_Nails" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsClaw_Nails</Data>
+        </Slider>
+        <Slider name="Amazon" invert="false" small="0" big="0">
+            <Data name="HandsAmazon" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsAmazon</Data>
+        </Slider>
+        <Slider name="FitnessDetails_2.0" invert="false" small="0" big="0">
+            <Data name="HandsFitnessDetails_2.0" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsFitnessDetails_2.0</Data>
+        </Slider>
+        <Slider name="Skinny2.0" invert="false" small="0" big="0">
+            <Data name="HandsSkinny2.0" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsSkinny2.0</Data>
+        </Slider>
+        <Slider name="Donaught" invert="false" small="0" big="0">
+            <Data name="HandsDonaught" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsDonaught</Data>
+        </Slider>
+        <Slider name="Juicy_body" invert="false" small="0" big="0">
+            <Data name="HandsJuicy_body" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsJuicy_body</Data>
+        </Slider>
+        <Slider name="Peachy" invert="false" small="0" big="0">
+            <Data name="HandsPeachy" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsPeachy</Data>
+        </Slider>
+        <Slider name="Venus" invert="false" small="0" big="0">
+            <Data name="HandsVenus" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsVenus</Data>
+        </Slider>
+        <Slider name="MusclyArms" invert="false" small="0" big="0">
+            <Data name="HandsMusclyArms" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsMusclyArms</Data>
+        </Slider>
+        <Slider name="ShoulderWidthBig" invert="false" small="0" big="0">
+            <Data name="HandsShoulderWidthBig" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsShoulderWidthBig</Data>
+        </Slider>
+        <Slider name="ShoulderWidthSmall" invert="false" small="0" big="0">
+            <Data name="HandsShoulderWidthSmall" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsShoulderWidthSmall</Data>
+        </Slider>
+        <Slider name="Arms_width" invert="false" small="0" big="0">
+            <Data name="HandsArms_width" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsArms_width</Data>
+        </Slider>
+        <Slider name="Thicc_forearms" invert="false" small="0" big="0">
+            <Data name="HandsThicc_forearms" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsThicc_forearms</Data>
+        </Slider>
+        <Slider name="ForearmSize" invert="false" small="0" big="0">
+            <Data name="HandsForearmSize" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsForearmSize</Data>
+        </Slider>
+        <Slider name="WristSize n|p" invert="false" small="0" big="0">
+            <Data name="HandsWristSize n|p" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsWristSize n|p</Data>
+        </Slider>
+        <Slider name="Normals_recalc" invert="false" small="0" big="0" hidden="true">
+            <Data name="HandsNormals_recalc" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsNormals_recalc</Data>
+        </Slider>
+        <Slider name="HandNailsZap" invert="false" small="0" big="0" zap="true">
+            <Data name="HandsHandNailsZap" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsHandNailsZap</Data>
+        </Slider>
+        <Slider name="Claw_Nails_2" invert="false" small="0" big="0">
+            <Data name="HandsClaw_Nails_2" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsClaw_Nails_2</Data>
+        </Slider>
+        <Slider name="art_FingernailsHeight" invert="false" small="0" big="0">
+            <Data name="Handsart_FingernailsHeight" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_FingernailsHeight</Data>
+        </Slider>
+        <Slider name="HandsRedone" invert="false" small="0" big="0">
+            <Data name="HandsHandsRedone" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsHandsRedone</Data>
+        </Slider>
+        <Slider name="art_FingernailsWidth" invert="false" small="0" big="0">
+            <Data name="Handsart_FingernailsWidth" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_FingernailsWidth</Data>
+        </Slider>
+        <Slider name="art_NailsSquare" invert="false" small="0" big="0">
+            <Data name="Handsart_NailsSquare" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_NailsSquare</Data>
+        </Slider>
+        <Slider name="art_ThumbnailWidth" invert="false" small="0" big="0">
+            <Data name="Handsart_ThumbnailWidth" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_ThumbnailWidth</Data>
+        </Slider>
+        <Slider name="art_ThumbnailHeight" invert="false" small="0" big="0">
+            <Data name="Handsart_ThumbnailHeight" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_ThumbnailHeight</Data>
+        </Slider>
+        <Slider name="art_ShortThumb" invert="false" small="0" big="0">
+            <Data name="Handsart_ShortThumb" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_ShortThumb</Data>
+        </Slider>
+        <Slider name="art_LongFingers" invert="false" small="0" big="0">
+            <Data name="Handsart_LongFingers" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_LongFingers</Data>
+        </Slider>
+        <Slider name="art_Smooth" invert="false" small="0" big="0">
+            <Data name="Handsart_Smooth" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_Smooth</Data>
+        </Slider>
+        <Slider name="art_Weight" invert="false" small="0" big="0">
+            <Data name="Handsart_Weight" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_Weight</Data>
+        </Slider>
+        <Slider name="art_Gaunt" invert="false" small="0" big="0">
+            <Data name="Handsart_Gaunt" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_Gaunt</Data>
+        </Slider>
+        <Slider name="art_Type1" invert="false" small="0" big="0">
+            <Data name="Handsart_Type1" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_Type1</Data>
+        </Slider>
+        <Slider name="art_Type2" invert="false" small="0" big="0">
+            <Data name="Handsart_Type2" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_Type2</Data>
+        </Slider>
+        <Slider name="art_Width" invert="false" small="0" big="0">
+            <Data name="Handsart_Width" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_Width</Data>
+        </Slider>
+        <Slider name="art_Curve" invert="false" small="0" big="0">
+            <Data name="Handsart_Curve" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\Handsart_Curve</Data>
+        </Slider>
+        <Slider name="Necoco_Body_w|o_Boob" invert="false" small="0" big="0">
+            <Data name="HandsNecoco_Body_w|o_Boob" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsNecoco_Body_w|o_Boob</Data>
+        </Slider>
+        <Slider name="Necoco_Hand" invert="false" small="0" big="0">
+            <Data name="HandsNecoco_Hand" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsNecoco_Hand</Data>
+        </Slider>
+        <Slider name="SquarePeg3d" invert="false" small="0" big="0">
+            <Data name="HandsSquarePeg3d" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsSquarePeg3d</Data>
+        </Slider>
+        <Slider name="Smol" invert="false" small="0" big="0">
+            <Data name="HandsSmol" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsSmol</Data>
+        </Slider>
+        <Slider name="Hip_narrow" invert="false" small="0" big="0">
+            <Data name="HandsHip_narrow" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsHip_narrow</Data>
+        </Slider>
+        <Slider name="FFXIV-like" invert="false" small="0" big="0">
+            <Data name="HandsFFXIV-like" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsFFXIV-like</Data>
+        </Slider>
+        <Slider name="Necoco_Body_w_Boob" invert="false" small="0" big="0">
+            <Data name="HandsNecoco_Body_w_Boob" target="Hands" local="true">UBE SE 2.0 - Necoco Hand.osd\HandsNecoco_Body_w_Boob</Data>
+        </Slider>
+    </SliderSet>
+</SliderSetInfo>

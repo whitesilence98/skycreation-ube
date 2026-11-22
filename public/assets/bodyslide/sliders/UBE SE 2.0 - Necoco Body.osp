@@ -1,0 +1,718 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<SliderSetInfo version="1">
+    <SliderSet name="UBE SE 2.0 - Necoco Body">
+        <DataFolder>UBE SE 2.0 - Necoco Body</DataFolder>
+        <SourceFile>UBE SE 2.0 - Necoco Body.nif</SourceFile>
+        <OutputPath>Meshes\!UBE\Body</OutputPath>
+        <OutputFile GenWeights="true" PreventMorphFile="false" KeepZappedShapes="false">femalebody_tangent</OutputFile>
+        <Shape target="BaseShape" DataFolder="..\..\..\..\..\..\mods\Conversion references\CalienteTools\Bodyslide\ShapeData\UBE SE 2.0 Burger Version">BaseShape</Shape>
+        <Slider name="SkinnyMorph" invert="false" small="100" big="0" hidden="true">
+            <Data name="BaseShapeSkinnyMorph" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeSkinnyMorph</Data>
+        </Slider>
+        <Slider name="NeckSize__HEAD&gt;" invert="false" small="0" big="0" hidden="true">
+            <Data name="BaseShapeNeckSize__HEAD&gt;" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNeckSize__HEAD&gt;</Data>
+        </Slider>
+        <Slider name="UpperChestHeight_n|p__HEAD&gt;" invert="false" small="0" big="0" hidden="true">
+            <Data name="BaseShapeUpperChestHeight_n|p__HEAD&gt;" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeUpperChestHeight_n|p__HEAD&gt;</Data>
+        </Slider>
+        <Slider name="NipplesShowUp" invert="false" small="0" big="0">
+            <Data name="BaseShapeNipplesShowUp" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNipplesShowUp</Data>
+        </Slider>
+        <Slider name="BiggerHands_CBBE-like" invert="false" small="0" big="0">
+            <Data name="BaseShapeBiggerHands_CBBE-like" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBiggerHands_CBBE-like</Data>
+        </Slider>
+        <Slider name="Amazon" invert="false" small="0" big="0">
+            <Data name="BaseShapeAmazon" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAmazon</Data>
+        </Slider>
+        <Slider name="FitnessDetails_2.0" invert="false" small="0" big="0">
+            <Data name="BaseShapeFitnessDetails_2.0" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeFitnessDetails_2.0</Data>
+        </Slider>
+        <Slider name="Skinny2.0" invert="false" small="0" big="0">
+            <Data name="BaseShapeSkinny2.0" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeSkinny2.0</Data>
+        </Slider>
+        <Slider name="SquarePeg3d" invert="false" small="0" big="0">
+            <Data name="BaseShapeSquarePeg3d" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeSquarePeg3d</Data>
+        </Slider>
+        <Slider name="TBD  2.0" invert="false" small="0" big="0">
+            <Data name="BaseShapeTBD  2.0" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeTBD  2.0</Data>
+        </Slider>
+        <Slider name="Donaught" invert="false" small="0" big="0">
+            <Data name="BaseShapeDonaught" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeDonaught</Data>
+        </Slider>
+        <Slider name="Juicy_body" invert="false" small="0" big="0">
+            <Data name="BaseShapeJuicy_body" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeJuicy_body</Data>
+        </Slider>
+        <Slider name="Peachy" invert="false" small="0" big="0">
+            <Data name="BaseShapePeachy" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapePeachy</Data>
+        </Slider>
+        <Slider name="Venus" invert="false" small="0" big="0">
+            <Data name="BaseShapeVenus" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeVenus</Data>
+        </Slider>
+        <Slider name="Upper_TorsoSize n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeUpper_TorsoSize n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeUpper_TorsoSize n|p</Data>
+        </Slider>
+        <Slider name="ChestUpperSize n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeChestUpperSize n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeChestUpperSize n|p</Data>
+        </Slider>
+        <Slider name="Clavicles_Width n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeClavicles_Width n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeClavicles_Width n|p</Data>
+        </Slider>
+        <Slider name="ClaviclesFront" invert="false" small="0" big="0">
+            <Data name="BaseShapeClaviclesFront" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeClaviclesFront</Data>
+        </Slider>
+        <Slider name="ClaviclesAngle" invert="false" small="0" big="0">
+            <Data name="BaseShapeClaviclesAngle" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeClaviclesAngle</Data>
+        </Slider>
+        <Slider name="Clavicle_Center_upper" invert="false" small="0" big="0">
+            <Data name="BaseShapeClavicle_Center_upper" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeClavicle_Center_upper</Data>
+        </Slider>
+        <Slider name="Clavicles_Center_height" invert="false" small="0" big="0">
+            <Data name="BaseShapeClavicles_Center_height" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeClavicles_Center_height</Data>
+        </Slider>
+        <Slider name="LowerNeckMuscles" invert="false" small="0" big="0">
+            <Data name="BaseShapeLowerNeckMuscles" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeLowerNeckMuscles</Data>
+        </Slider>
+        <Slider name="SternumDepth n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeSternumDepth n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeSternumDepth n|p</Data>
+        </Slider>
+        <Slider name="PectoralisMuscles" invert="false" small="0" big="0">
+            <Data name="BaseShapePectoralisMuscles" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapePectoralisMuscles</Data>
+        </Slider>
+        <Slider name="PectoralCreases" invert="false" small="0" big="0">
+            <Data name="BaseShapePectoralCreases" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapePectoralCreases</Data>
+        </Slider>
+        <Slider name="RibcageSize n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeRibcageSize n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeRibcageSize n|p</Data>
+        </Slider>
+        <Slider name="Big_SaggyBreasts" invert="false" small="0" big="0">
+            <Data name="BaseShapeBig_SaggyBreasts" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBig_SaggyBreasts</Data>
+        </Slider>
+        <Slider name="Juicy_breasts" invert="false" small="0" big="0">
+            <Data name="BaseShapeJuicy_breasts" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeJuicy_breasts</Data>
+        </Slider>
+        <Slider name="BreastsTBD" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreastsTBD" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreastsTBD</Data>
+        </Slider>
+        <Slider name="BreastsBigger" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreastsBigger" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreastsBigger</Data>
+        </Slider>
+        <Slider name="BreastsSmaller" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreastsSmaller" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreastsSmaller</Data>
+        </Slider>
+        <Slider name="BreastArmpitsWidth n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreastArmpitsWidth n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreastArmpitsWidth n|p</Data>
+        </Slider>
+        <Slider name="BreastCenterGapLowerHeight n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreastCenterGapLowerHeight n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreastCenterGapLowerHeight n|p</Data>
+        </Slider>
+        <Slider name="BreastCenterGapWidth n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreastCenterGapWidth n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreastCenterGapWidth n|p</Data>
+        </Slider>
+        <Slider name="Breasts_Perky" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreasts_Perky" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreasts_Perky</Data>
+        </Slider>
+        <Slider name="BreastFlat" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreastFlat" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreastFlat</Data>
+        </Slider>
+        <Slider name="Breast Diameter_small" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreast Diameter_small" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreast Diameter_small</Data>
+        </Slider>
+        <Slider name="Breast Diameter_big" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreast Diameter_big" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreast Diameter_big</Data>
+        </Slider>
+        <Slider name="BreastsRotate_Y" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreastsRotate_Y" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreastsRotate_Y</Data>
+        </Slider>
+        <Slider name="BreastsCupSag n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreastsCupSag n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreastsCupSag n|p</Data>
+        </Slider>
+        <Slider name="BreastUpperCurve n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreastUpperCurve n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreastUpperCurve n|p</Data>
+        </Slider>
+        <Slider name="BreastUnderCurve" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreastUnderCurve" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreastUnderCurve</Data>
+        </Slider>
+        <Slider name="SaggingBreastsZone" invert="false" small="0" big="0">
+            <Data name="BaseShapeSaggingBreastsZone" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeSaggingBreastsZone</Data>
+        </Slider>
+        <Slider name="Manly_chest" invert="false" small="0" big="0">
+            <Data name="BaseShapeManly_chest" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeManly_chest</Data>
+        </Slider>
+        <Slider name="Trap_chest" invert="false" small="0" big="0">
+            <Data name="BaseShapeTrap_chest" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeTrap_chest</Data>
+        </Slider>
+        <Slider name="BreastsZero" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreastsZero" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreastsZero</Data>
+        </Slider>
+        <Slider name="BreastsPositionWidth n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreastsPositionWidth n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreastsPositionWidth n|p</Data>
+        </Slider>
+        <Slider name="NipplesPerkiness" invert="false" small="0" big="0">
+            <Data name="BaseShapeNipplesPerkiness" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNipplesPerkiness</Data>
+        </Slider>
+        <Slider name="NippleHeight n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeNippleHeight n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNippleHeight n|p</Data>
+        </Slider>
+        <Slider name="NippleCircularCrease" invert="false" small="0" big="0">
+            <Data name="BaseShapeNippleCircularCrease" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNippleCircularCrease</Data>
+        </Slider>
+        <Slider name="NEW_NippleCircularCrease_Uv_fix" invert="false" small="0" big="0" uv="true">
+            <Data name="BaseShapeNEW_NippleCircularCrease_Uv_fix" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNEW_NippleCircularCrease_Uv_fix</Data>
+        </Slider>
+        <Slider name="NippleCreaseCentral" invert="false" small="0" big="0">
+            <Data name="BaseShapeNippleCreaseCentral" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNippleCreaseCentral</Data>
+        </Slider>
+        <Slider name="NippleCreaseHorizontal" invert="false" small="0" big="0">
+            <Data name="BaseShapeNippleCreaseHorizontal" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNippleCreaseHorizontal</Data>
+        </Slider>
+        <Slider name="NippleCreaseVertical" invert="false" small="0" big="0">
+            <Data name="BaseShapeNippleCreaseVertical" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNippleCreaseVertical</Data>
+        </Slider>
+        <Slider name="NippleDiameter n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeNippleDiameter n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNippleDiameter n|p</Data>
+        </Slider>
+        <Slider name="NEW_NippleDiameter_neg_value_Uv_fix" invert="false" small="0" big="0" uv="true">
+            <Data name="BaseShapeNEW_NippleDiameter_neg_value_Uv_fix" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNEW_NippleDiameter_neg_value_Uv_fix</Data>
+        </Slider>
+        <Slider name="NippleDispertionSides n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeNippleDispertionSides n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNippleDispertionSides n|p</Data>
+        </Slider>
+        <Slider name="NippleFlatten" invert="false" small="0" big="0">
+            <Data name="BaseShapeNippleFlatten" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNippleFlatten</Data>
+        </Slider>
+        <Slider name="AreolaeSizeBig" invert="false" small="0" big="0">
+            <Data name="BaseShapeAreolaeSizeBig" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAreolaeSizeBig</Data>
+        </Slider>
+        <Slider name="AreolaeSizeBig_UV_fix" invert="false" small="0" big="0" uv="true">
+            <Data name="BaseShapeAreolaeSizeBig_UV_fix" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAreolaeSizeBig_UV_fix</Data>
+        </Slider>
+        <Slider name="AreolaeSizeSmall" invert="false" small="0" big="0">
+            <Data name="BaseShapeAreolaeSizeSmall" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAreolaeSizeSmall</Data>
+        </Slider>
+        <Slider name="AreolaHorizontal" invert="false" small="0" big="0">
+            <Data name="BaseShapeAreolaHorizontal" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAreolaHorizontal</Data>
+        </Slider>
+        <Slider name="AreolaVertical" invert="false" small="0" big="0">
+            <Data name="BaseShapeAreolaVertical" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAreolaVertical</Data>
+        </Slider>
+        <Slider name="AreolaErection" invert="false" small="0" big="0">
+            <Data name="BaseShapeAreolaErection" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAreolaErection</Data>
+        </Slider>
+        <Slider name="NippleHorizontal n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeNippleHorizontal n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNippleHorizontal n|p</Data>
+        </Slider>
+        <Slider name="NippleInverted_PuffyAreola" invert="false" small="0" big="0">
+            <Data name="BaseShapeNippleInverted_PuffyAreola" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNippleInverted_PuffyAreola</Data>
+        </Slider>
+        <Slider name="NippleInverted_PuffyAreola_UV_fix" invert="false" small="0" big="0" uv="true">
+            <Data name="BaseShapeNippleInverted_PuffyAreola_UV_fix" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNippleInverted_PuffyAreola_UV_fix</Data>
+        </Slider>
+        <Slider name="NippleLength" invert="false" small="0" big="0">
+            <Data name="BaseShapeNippleLength" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNippleLength</Data>
+        </Slider>
+        <Slider name="Nippleinverted" invert="false" small="0" big="0">
+            <Data name="BaseShapeNippleinverted" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNippleinverted</Data>
+        </Slider>
+        <Slider name="Nipples_Fantasy" invert="false" small="0" big="0">
+            <Data name="BaseShapeNipples_Fantasy" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNipples_Fantasy</Data>
+        </Slider>
+        <Slider name="NEW_Nipples_Fantasy_UV_fix" invert="false" small="0" big="0" uv="true">
+            <Data name="BaseShapeNEW_Nipples_Fantasy_UV_fix" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNEW_Nipples_Fantasy_UV_fix</Data>
+        </Slider>
+        <Slider name="ShoulderOuterSize n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeShoulderOuterSize n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeShoulderOuterSize n|p</Data>
+        </Slider>
+        <Slider name="MusclyArms" invert="false" small="0" big="0">
+            <Data name="BaseShapeMusclyArms" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeMusclyArms</Data>
+        </Slider>
+        <Slider name="ShoulderWidthBig" invert="false" small="0" big="0">
+            <Data name="BaseShapeShoulderWidthBig" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeShoulderWidthBig</Data>
+        </Slider>
+        <Slider name="ShoulderWidthSmall" invert="false" small="0" big="0">
+            <Data name="BaseShapeShoulderWidthSmall" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeShoulderWidthSmall</Data>
+        </Slider>
+        <Slider name="Deltoidmuscles" invert="false" small="0" big="0">
+            <Data name="BaseShapeDeltoidmuscles" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeDeltoidmuscles</Data>
+        </Slider>
+        <Slider name="Arms_width" invert="false" small="0" big="0">
+            <Data name="BaseShapeArms_width" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeArms_width</Data>
+        </Slider>
+        <Slider name="UpperArmSize n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeUpperArmSize n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeUpperArmSize n|p</Data>
+        </Slider>
+        <Slider name="Triceps" invert="false" small="0" big="0">
+            <Data name="BaseShapeTriceps" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeTriceps</Data>
+        </Slider>
+        <Slider name="Biceps" invert="false" small="0" big="0">
+            <Data name="BaseShapeBiceps" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBiceps</Data>
+        </Slider>
+        <Slider name="Thicc_forearms" invert="false" small="0" big="0">
+            <Data name="BaseShapeThicc_forearms" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeThicc_forearms</Data>
+        </Slider>
+        <Slider name="ForearmSize" invert="false" small="0" big="0">
+            <Data name="BaseShapeForearmSize" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeForearmSize</Data>
+        </Slider>
+        <Slider name="WristSize n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeWristSize n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeWristSize n|p</Data>
+        </Slider>
+        <Slider name="SpineMuscles" invert="false" small="0" big="0">
+            <Data name="BaseShapeSpineMuscles" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeSpineMuscles</Data>
+        </Slider>
+        <Slider name="Trapezius_upper" invert="false" small="0" big="0">
+            <Data name="BaseShapeTrapezius_upper" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeTrapezius_upper</Data>
+        </Slider>
+        <Slider name="Trapezius_lower" invert="false" small="0" big="0">
+            <Data name="BaseShapeTrapezius_lower" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeTrapezius_lower</Data>
+        </Slider>
+        <Slider name="Trapezius_smaller" invert="false" small="0" big="0">
+            <Data name="BaseShapeTrapezius_smaller" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeTrapezius_smaller</Data>
+        </Slider>
+        <Slider name="ScapulaDepth" invert="false" small="0" big="0">
+            <Data name="BaseShapeScapulaDepth" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeScapulaDepth</Data>
+        </Slider>
+        <Slider name="SpineDiscs_Prominence" invert="false" small="0" big="0">
+            <Data name="BaseShapeSpineDiscs_Prominence" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeSpineDiscs_Prominence</Data>
+        </Slider>
+        <Slider name="LatsSize" invert="false" small="0" big="0">
+            <Data name="BaseShapeLatsSize" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeLatsSize</Data>
+        </Slider>
+        <Slider name="BackDepth n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeBackDepth n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBackDepth n|p</Data>
+        </Slider>
+        <Slider name="BackValley" invert="false" small="0" big="0">
+            <Data name="BaseShapeBackValley" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBackValley</Data>
+        </Slider>
+        <Slider name="BackFatFolds" invert="false" small="0" big="0">
+            <Data name="BaseShapeBackFatFolds" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBackFatFolds</Data>
+        </Slider>
+        <Slider name="BackUnderArmpitsFatFolds" invert="false" small="0" big="0">
+            <Data name="BaseShapeBackUnderArmpitsFatFolds" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBackUnderArmpitsFatFolds</Data>
+        </Slider>
+        <Slider name="WaistLine n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeWaistLine n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeWaistLine n|p</Data>
+        </Slider>
+        <Slider name="WaistThickness n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeWaistThickness n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeWaistThickness n|p</Data>
+        </Slider>
+        <Slider name="FrontRibsProminence" invert="false" small="0" big="0">
+            <Data name="BaseShapeFrontRibsProminence" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeFrontRibsProminence</Data>
+        </Slider>
+        <Slider name="CostalAnglePointed" invert="false" small="0" big="0">
+            <Data name="BaseShapeCostalAnglePointed" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeCostalAnglePointed</Data>
+        </Slider>
+        <Slider name="BellyCenterDepth n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeBellyCenterDepth n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBellyCenterDepth n|p</Data>
+        </Slider>
+        <Slider name="BellyLowerDepth n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeBellyLowerDepth n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBellyLowerDepth n|p</Data>
+        </Slider>
+        <Slider name="BellyWidth n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeBellyWidth n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBellyWidth n|p</Data>
+        </Slider>
+        <Slider name="ExternalObliqueStraighten" invert="false" small="0" big="0">
+            <Data name="BaseShapeExternalObliqueStraighten" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeExternalObliqueStraighten</Data>
+        </Slider>
+        <Slider name="BellyHorizontalCrease" invert="false" small="0" big="0">
+            <Data name="BaseShapeBellyHorizontalCrease" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBellyHorizontalCrease</Data>
+        </Slider>
+        <Slider name="BellyVerticalCrease" invert="false" small="0" big="0">
+            <Data name="BaseShapeBellyVerticalCrease" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBellyVerticalCrease</Data>
+        </Slider>
+        <Slider name="BellyVerticalCrease_Lower" invert="false" small="0" big="0">
+            <Data name="BaseShapeBellyVerticalCrease_Lower" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBellyVerticalCrease_Lower</Data>
+        </Slider>
+        <Slider name="Belly_lower_crease" invert="false" small="0" big="0">
+            <Data name="BaseShapeBelly_lower_crease" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBelly_lower_crease</Data>
+        </Slider>
+        <Slider name="BellyFatty" invert="false" small="0" big="0">
+            <Data name="BaseShapeBellyFatty" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBellyFatty</Data>
+        </Slider>
+        <Slider name="SoftBelly" invert="false" small="0" big="0">
+            <Data name="BaseShapeSoftBelly" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeSoftBelly</Data>
+        </Slider>
+        <Slider name="Navel Width n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeNavel Width n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNavel Width n|p</Data>
+        </Slider>
+        <Slider name="LessProminentAbs" invert="false" small="0" big="0">
+            <Data name="BaseShapeLessProminentAbs" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeLessProminentAbs</Data>
+        </Slider>
+        <Slider name="Belly_Prominence" invert="false" small="0" big="0">
+            <Data name="BaseShapeBelly_Prominence" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBelly_Prominence</Data>
+        </Slider>
+        <Slider name="RectusOuterDepth" invert="false" small="0" big="0">
+            <Data name="BaseShapeRectusOuterDepth" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeRectusOuterDepth</Data>
+        </Slider>
+        <Slider name="AbsAsymmetry n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeAbsAsymmetry n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAbsAsymmetry n|p</Data>
+        </Slider>
+        <Slider name="HigherAbs" invert="false" small="0" big="0">
+            <Data name="BaseShapeHigherAbs" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHigherAbs</Data>
+        </Slider>
+        <Slider name="HigherAbs_crease" invert="false" small="0" big="0">
+            <Data name="BaseShapeHigherAbs_crease" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHigherAbs_crease</Data>
+        </Slider>
+        <Slider name="CentralAbs" invert="false" small="0" big="0">
+            <Data name="BaseShapeCentralAbs" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeCentralAbs</Data>
+        </Slider>
+        <Slider name="LowerAbs" invert="false" small="0" big="0">
+            <Data name="BaseShapeLowerAbs" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeLowerAbs</Data>
+        </Slider>
+        <Slider name="LowerAbsHorizontalCrease" invert="false" small="0" big="0">
+            <Data name="BaseShapeLowerAbsHorizontalCrease" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeLowerAbsHorizontalCrease</Data>
+        </Slider>
+        <Slider name="AponeurosisExternalOblique" invert="false" small="0" big="0">
+            <Data name="BaseShapeAponeurosisExternalOblique" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAponeurosisExternalOblique</Data>
+        </Slider>
+        <Slider name="PregnancyBelly" invert="false" small="0" big="0">
+            <Data name="BaseShapePregnancyBelly" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapePregnancyBelly</Data>
+        </Slider>
+        <Slider name="HipSize p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeHipSize p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHipSize p|n</Data>
+        </Slider>
+        <Slider name="HipsAndLegsDistanceApart p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeHipsAndLegsDistanceApart p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHipsAndLegsDistanceApart p|n</Data>
+        </Slider>
+        <Slider name="HipHeight p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeHipHeight p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHipHeight p|n</Data>
+        </Slider>
+        <Slider name="HipWideSideway p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeHipWideSideway p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHipWideSideway p|n</Data>
+        </Slider>
+        <Slider name="SmoothHips" invert="false" small="0" big="0">
+            <Data name="BaseShapeSmoothHips" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeSmoothHips</Data>
+        </Slider>
+        <Slider name="HipPointyBones" invert="false" small="0" big="0">
+            <Data name="BaseShapeHipPointyBones" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHipPointyBones</Data>
+        </Slider>
+        <Slider name="Hipbone p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeHipbone p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHipbone p|n</Data>
+        </Slider>
+        <Slider name="Hip_Upper_Width n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeHip_Upper_Width n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHip_Upper_Width n|p</Data>
+        </Slider>
+        <Slider name="Hip_Wide" invert="false" small="0" big="0">
+            <Data name="BaseShapeHip_Wide" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHip_Wide</Data>
+        </Slider>
+        <Slider name="Hip_narrow" invert="false" small="0" big="0">
+            <Data name="BaseShapeHip_narrow" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHip_narrow</Data>
+        </Slider>
+        <Slider name="HipsOuterBonesFatty" invert="false" small="0" big="0">
+            <Data name="BaseShapeHipsOuterBonesFatty" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHipsOuterBonesFatty</Data>
+        </Slider>
+        <Slider name="HipsSideMuscles" invert="false" small="0" big="0">
+            <Data name="BaseShapeHipsSideMuscles" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHipsSideMuscles</Data>
+        </Slider>
+        <Slider name="SacralDimples" invert="false" small="0" big="0">
+            <Data name="BaseShapeSacralDimples" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeSacralDimples</Data>
+        </Slider>
+        <Slider name="GreaterTrochanterBone" invert="false" small="0" big="0">
+            <Data name="BaseShapeGreaterTrochanterBone" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGreaterTrochanterBone</Data>
+        </Slider>
+        <Slider name="GluteSize p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteSize p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteSize p|n</Data>
+        </Slider>
+        <Slider name="GluteHeight p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteHeight p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteHeight p|n</Data>
+        </Slider>
+        <Slider name="GluteSpread p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteSpread p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteSpread p|n</Data>
+        </Slider>
+        <Slider name="GluteStretch p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteStretch p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteStretch p|n</Data>
+        </Slider>
+        <Slider name="GluteTwistX p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteTwistX p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteTwistX p|n</Data>
+        </Slider>
+        <Slider name="GluteOuterHeight p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteOuterHeight p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteOuterHeight p|n</Data>
+        </Slider>
+        <Slider name="GluteSeparateWidth p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteSeparateWidth p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteSeparateWidth p|n</Data>
+        </Slider>
+        <Slider name="GlutesUpperDepth p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeGlutesUpperDepth p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGlutesUpperDepth p|n</Data>
+        </Slider>
+        <Slider name="GluteUpperWidth p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteUpperWidth p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteUpperWidth p|n</Data>
+        </Slider>
+        <Slider name="GluteLower" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteLower" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteLower</Data>
+        </Slider>
+        <Slider name="GluteLowerHeight p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteLowerHeight p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteLowerHeight p|n</Data>
+        </Slider>
+        <Slider name="GluteLowerWidth p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteLowerWidth p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteLowerWidth p|n</Data>
+        </Slider>
+        <Slider name="GluteInnerHeight p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteInnerHeight p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteInnerHeight p|n</Data>
+        </Slider>
+        <Slider name="Glutes_tighter" invert="false" small="0" big="0">
+            <Data name="BaseShapeGlutes_tighter" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGlutes_tighter</Data>
+        </Slider>
+        <Slider name="GluteusDefinition" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteusDefinition" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteusDefinition</Data>
+        </Slider>
+        <Slider name="GluteFolds" invert="false" small="0" big="0">
+            <Data name="BaseShapeGluteFolds" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteFolds</Data>
+        </Slider>
+        <Slider name="PubicAreaSize p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapePubicAreaSize p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapePubicAreaSize p|n</Data>
+        </Slider>
+        <Slider name="PubicAreaHilly" invert="false" small="0" big="0">
+            <Data name="BaseShapePubicAreaHilly" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapePubicAreaHilly</Data>
+        </Slider>
+        <Slider name="PussyCute" invert="false" small="0" big="0">
+            <Data name="BaseShapePussyCute" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapePussyCute</Data>
+        </Slider>
+        <Slider name="ClitorisErection" invert="false" small="0" big="0">
+            <Data name="BaseShapeClitorisErection" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeClitorisErection</Data>
+        </Slider>
+        <Slider name="Vagina_shape" invert="false" small="0" big="0">
+            <Data name="BaseShapeVagina_shape" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeVagina_shape</Data>
+        </Slider>
+        <Slider name="Vagina_shape_wider" invert="false" small="0" big="0">
+            <Data name="BaseShapeVagina_shape_wider" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeVagina_shape_wider</Data>
+        </Slider>
+        <Slider name="Vagina_Fantasy" invert="false" small="0" big="0">
+            <Data name="BaseShapeVagina_Fantasy" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeVagina_Fantasy</Data>
+        </Slider>
+        <Slider name="Vagina_spread" invert="false" small="0" big="0" hidden="true">
+            <Data name="BaseShapeVagina_spread" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeVagina_spread</Data>
+        </Slider>
+        <Slider name="AnusSize" invert="false" small="0" big="0">
+            <Data name="BaseShapeAnusSize" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAnusSize</Data>
+        </Slider>
+        <Slider name="BiggerAnus" invert="false" small="0" big="0">
+            <Data name="BaseShapeBiggerAnus" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBiggerAnus</Data>
+        </Slider>
+        <Slider name="AnusTriangular" invert="false" small="0" big="0">
+            <Data name="BaseShapeAnusTriangular" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAnusTriangular</Data>
+        </Slider>
+        <Slider name="AnusSpread" invert="false" small="0" big="0" hidden="true">
+            <Data name="BaseShapeAnusSpread" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAnusSpread</Data>
+        </Slider>
+        <Slider name="UpperThighsSizeBig" invert="false" small="0" big="0">
+            <Data name="BaseShapeUpperThighsSizeBig" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeUpperThighsSizeBig</Data>
+        </Slider>
+        <Slider name="LowerThighsSizeBig" invert="false" small="0" big="0">
+            <Data name="BaseShapeLowerThighsSizeBig" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeLowerThighsSizeBig</Data>
+        </Slider>
+        <Slider name="UpperThighsSizeSmall" invert="false" small="0" big="0">
+            <Data name="BaseShapeUpperThighsSizeSmall" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeUpperThighsSizeSmall</Data>
+        </Slider>
+        <Slider name="LowerThighsSizeSmall" invert="false" small="0" big="0">
+            <Data name="BaseShapeLowerThighsSizeSmall" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeLowerThighsSizeSmall</Data>
+        </Slider>
+        <Slider name="UpperThighsChubby" invert="false" small="0" big="0">
+            <Data name="BaseShapeUpperThighsChubby" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeUpperThighsChubby</Data>
+        </Slider>
+        <Slider name="ThighApart" invert="false" small="0" big="0">
+            <Data name="BaseShapeThighApart" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeThighApart</Data>
+        </Slider>
+        <Slider name="ThighFrontDepth" invert="false" small="0" big="0">
+            <Data name="BaseShapeThighFrontDepth" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeThighFrontDepth</Data>
+        </Slider>
+        <Slider name="UpperThighsDepth" invert="false" small="0" big="0">
+            <Data name="BaseShapeUpperThighsDepth" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeUpperThighsDepth</Data>
+        </Slider>
+        <Slider name="ThighBackDepth" invert="false" small="0" big="0">
+            <Data name="BaseShapeThighBackDepth" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeThighBackDepth</Data>
+        </Slider>
+        <Slider name="UpperInnerThighSize p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeUpperInnerThighSize p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeUpperInnerThighSize p|n</Data>
+        </Slider>
+        <Slider name="LowerInnerThighSize p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeLowerInnerThighSize p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeLowerInnerThighSize p|n</Data>
+        </Slider>
+        <Slider name="LowerOuterThighSize Bigger" invert="false" small="0" big="0">
+            <Data name="BaseShapeLowerOuterThighSize Bigger" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeLowerOuterThighSize Bigger</Data>
+        </Slider>
+        <Slider name="ThighsOuter big" invert="false" small="0" big="0">
+            <Data name="BaseShapeThighsOuter big" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeThighsOuter big</Data>
+        </Slider>
+        <Slider name="ThighsOuter small" invert="false" small="0" big="0">
+            <Data name="BaseShapeThighsOuter small" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeThighsOuter small</Data>
+        </Slider>
+        <Slider name="Thighs_Inner_Size_n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeThighs_Inner_Size_n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeThighs_Inner_Size_n|p</Data>
+        </Slider>
+        <Slider name="RectusFemoris" invert="false" small="0" big="0">
+            <Data name="BaseShapeRectusFemoris" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeRectusFemoris</Data>
+        </Slider>
+        <Slider name="VastusLateralis" invert="false" small="0" big="0">
+            <Data name="BaseShapeVastusLateralis" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeVastusLateralis</Data>
+        </Slider>
+        <Slider name="VastusMedialis" invert="false" small="0" big="0">
+            <Data name="BaseShapeVastusMedialis" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeVastusMedialis</Data>
+        </Slider>
+        <Slider name="IllotibialTract" invert="false" small="0" big="0">
+            <Data name="BaseShapeIllotibialTract" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeIllotibialTract</Data>
+        </Slider>
+        <Slider name="Hamstrings" invert="false" small="0" big="0">
+            <Data name="BaseShapeHamstrings" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHamstrings</Data>
+        </Slider>
+        <Slider name="KneeBoneSize p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeKneeBoneSize p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeKneeBoneSize p|n</Data>
+        </Slider>
+        <Slider name="KneeDefinition" invert="false" small="0" big="0">
+            <Data name="BaseShapeKneeDefinition" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeKneeDefinition</Data>
+        </Slider>
+        <Slider name="KneeOuter p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeKneeOuter p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeKneeOuter p|n</Data>
+        </Slider>
+        <Slider name="CalfUpperSize p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeCalfUpperSize p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeCalfUpperSize p|n</Data>
+        </Slider>
+        <Slider name="ShinSize p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeShinSize p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeShinSize p|n</Data>
+        </Slider>
+        <Slider name="Shin_Forward" invert="false" small="0" big="0">
+            <Data name="BaseShapeShin_Forward" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeShin_Forward</Data>
+        </Slider>
+        <Slider name="Bowed_Calves" invert="false" small="0" big="0">
+            <Data name="BaseShapeBowed_Calves" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBowed_Calves</Data>
+        </Slider>
+        <Slider name="AnkleThickness p|n" invert="false" small="0" big="0">
+            <Data name="BaseShapeAnkleThickness p|n" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAnkleThickness p|n</Data>
+        </Slider>
+        <Slider name="Thicc_calves" invert="false" small="0" big="0">
+            <Data name="BaseShapeThicc_calves" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeThicc_calves</Data>
+        </Slider>
+        <Slider name="FeetSize n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapeFeetSize n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeFeetSize n|p</Data>
+        </Slider>
+        <Slider name="Normals_recalc" invert="false" small="0" big="0" hidden="true">
+            <Data name="BaseShapeNormals_recalc" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNormals_recalc</Data>
+        </Slider>
+        <Slider name="GluteFlex_L" invert="false" small="0" big="0" hidden="true">
+            <Data name="BaseShapeGluteFlex_L" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteFlex_L</Data>
+        </Slider>
+        <Slider name="GluteFlex_R" invert="false" small="0" big="0" hidden="true">
+            <Data name="BaseShapeGluteFlex_R" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeGluteFlex_R</Data>
+        </Slider>
+        <Slider name="ThighsFlex_L" invert="false" small="0" big="0" hidden="true">
+            <Data name="BaseShapeThighsFlex_L" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeThighsFlex_L</Data>
+        </Slider>
+        <Slider name="ThighsFlex_R" invert="false" small="0" big="0" hidden="true">
+            <Data name="BaseShapeThighsFlex_R" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeThighsFlex_R</Data>
+        </Slider>
+        <Slider name="AbsFlex" invert="false" small="0" big="0" hidden="true">
+            <Data name="BaseShapeAbsFlex" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAbsFlex</Data>
+        </Slider>
+        <Slider name="ArmBending_L" invert="false" small="0" big="0" hidden="true">
+            <Data name="BaseShapeArmBending_L" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeArmBending_L</Data>
+        </Slider>
+        <Slider name="ArmBending_R" invert="false" small="0" big="0" hidden="true">
+            <Data name="BaseShapeArmBending_R" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeArmBending_R</Data>
+        </Slider>
+        <Slider name="Nyl2_Root" invert="false" small="0" big="0" hidden="true">
+            <Data name="BaseShapeNyl2_Root" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNyl2_Root</Data>
+        </Slider>
+        <Slider name="AreolaeSizeSmall_UV_fix" invert="false" small="0" big="0" uv="true">
+            <Data name="BaseShapeAreolaeSizeSmall_UV_fix" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAreolaeSizeSmall_UV_fix</Data>
+        </Slider>
+        <Slider name="Necoco_Boob_Distance" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Boob_Distance" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Boob_Distance</Data>
+        </Slider>
+        <Slider name="Hide Thigh for Stocking" invert="false" small="0" big="0" zap="true">
+            <Data name="BaseShapeHide Thigh for Stocking" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHide Thigh for Stocking</Data>
+        </Slider>
+        <Slider name="breast lewd bigger" invert="false" small="0" big="0">
+            <Data name="BaseShapebreast lewd bigger" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapebreast lewd bigger</Data>
+        </Slider>
+        <Slider name="Abs_creases" invert="false" small="0" big="0">
+            <Data name="BaseShapeAbs_creases" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAbs_creases</Data>
+        </Slider>
+        <Slider name="Anus_creases" invert="false" small="0" big="0">
+            <Data name="BaseShapeAnus_creases" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAnus_creases</Data>
+        </Slider>
+        <Slider name="Anus_creases_1" invert="false" small="0" big="0">
+            <Data name="BaseShapeAnus_creases_1" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAnus_creases_1</Data>
+        </Slider>
+        <Slider name="Shy_Pussy" invert="false" small="0" big="0">
+            <Data name="BaseShapeShy_Pussy" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeShy_Pussy</Data>
+        </Slider>
+        <Slider name="Breasts-shoulders_creases" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreasts-shoulders_creases" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreasts-shoulders_creases</Data>
+        </Slider>
+        <Slider name="Breasts-chest_creases" invert="false" small="0" big="0">
+            <Data name="BaseShapeBreasts-chest_creases" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBreasts-chest_creases</Data>
+        </Slider>
+        <Slider name="Smol" invert="false" small="0" big="0">
+            <Data name="BaseShapeSmol" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeSmol</Data>
+        </Slider>
+        <Slider name="Amazon_abs" invert="false" small="0" big="0">
+            <Data name="BaseShapeAmazon_abs" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeAmazon_abs</Data>
+        </Slider>
+        <Slider name="SquarePeg3d_abs" invert="false" small="0" big="0">
+            <Data name="BaseShapeSquarePeg3d_abs" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeSquarePeg3d_abs</Data>
+        </Slider>
+        <Slider name="Upper_Outer_Thighs_Width" invert="false" small="0" big="0">
+            <Data name="BaseShapeUpper_Outer_Thighs_Width" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeUpper_Outer_Thighs_Width</Data>
+        </Slider>
+        <Slider name="Calves_Flex" invert="false" small="0" big="0">
+            <Data name="BaseShapeCalves_Flex" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeCalves_Flex</Data>
+        </Slider>
+        <Slider name="Belly_button_shape" invert="false" small="0" big="0">
+            <Data name="BaseShapeBelly_button_shape" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBelly_button_shape</Data>
+        </Slider>
+        <Slider name="Hentai_silicone_breasts" invert="false" small="0" big="0">
+            <Data name="BaseShapeHentai_silicone_breasts" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeHentai_silicone_breasts</Data>
+        </Slider>
+        <Slider name="MuscularBoobs" invert="false" small="0" big="0">
+            <Data name="BaseShapeMuscularBoobs" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeMuscularBoobs</Data>
+        </Slider>
+        <Slider name="BiggerAnus_2" invert="false" small="0" big="0">
+            <Data name="BaseShapeBiggerAnus_2" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeBiggerAnus_2</Data>
+        </Slider>
+        <Slider name="Soft_abs" invert="false" small="0" big="0">
+            <Data name="BaseShapeSoft_abs" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeSoft_abs</Data>
+        </Slider>
+        <Slider name="Penis_Depth n|p" invert="false" small="0" big="0">
+            <Data name="BaseShapePenis_Depth n|p" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapePenis_Depth n|p</Data>
+        </Slider>
+        <Slider name="FFXIV-like" invert="false" small="0" big="0">
+            <Data name="BaseShapeFFXIV-like" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeFFXIV-like</Data>
+        </Slider>
+        <Slider name="Necoco_Overall_Boob" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Overall_Boob" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Overall_Boob</Data>
+        </Slider>
+        <Slider name="Necoco_Overall_Nipple" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Overall_Nipple" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Overall_Nipple</Data>
+        </Slider>
+        <Slider name="Necoco_Boob_Base_For_Body_with_Boob" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Boob_Base_For_Body_with_Boob" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Boob_Base_For_Body_with_Boob</Data>
+        </Slider>
+        <Slider name="Necoco_Boob_Addon_MafaVam" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Boob_Addon_MafaVam" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Boob_Addon_MafaVam</Data>
+        </Slider>
+        <Slider name="Necoco_Boob_Addon_Bom39" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Boob_Addon_Bom39" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Boob_Addon_Bom39</Data>
+        </Slider>
+        <Slider name="Necoco_Body_Addon_Lewd_Zone" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Body_Addon_Lewd_Zone" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Body_Addon_Lewd_Zone</Data>
+        </Slider>
+        <Slider name="Necoco_Body_Addon_Upper_Body_Smooth" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Body_Addon_Upper_Body_Smooth" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Body_Addon_Upper_Body_Smooth</Data>
+        </Slider>
+        <Slider name="Necoco_Body_Addon_Leg" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Body_Addon_Leg" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Body_Addon_Leg</Data>
+        </Slider>
+        <Slider name="Necoco_Body_Addon_Butt" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Body_Addon_Butt" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Body_Addon_Butt</Data>
+        </Slider>
+        <Slider name="Necoco_Body_Addon_Belly" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Body_Addon_Belly" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Body_Addon_Belly</Data>
+        </Slider>
+        <Slider name="Necoco_Body_w_Boob" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Body_w_Boob" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Body_w_Boob</Data>
+        </Slider>
+        <Slider name="Necoco_Boob_Base" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Boob_Base" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Boob_Base</Data>
+        </Slider>
+        <Slider name="Necoco_Body_w|o_Boob" invert="false" small="0" big="0">
+            <Data name="BaseShapeNecoco_Body_w|o_Boob" target="BaseShape" local="true">UBE SE 2.0 - Necoco Body.osd\BaseShapeNecoco_Body_w|o_Boob</Data>
+        </Slider>
+    </SliderSet>
+</SliderSetInfo>

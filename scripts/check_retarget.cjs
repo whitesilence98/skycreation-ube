@@ -12,11 +12,10 @@ const basePath = path.join(root, 'public/assets/preset-pack/meshes/headMesh-9661
 assert.ok(fs.existsSync(basePath), 'Generate the UBE preset pack before check:retarget');
 const base = JSON.parse(fs.readFileSync(basePath, 'utf8'));
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ube-retarget-'));
-const python = (args) => execFileSync('python', args, {
-  cwd: root, encoding: 'utf8', timeout: 180000,
+const python = (args, timeout = 180000) => execFileSync('python', ['-I', ...args], {
+  cwd: root, encoding: 'utf8', timeout, maxBuffer: 32 * 1024 * 1024,
   env: { ...process.env, OPENBLAS_NUM_THREADS: '1', OMP_NUM_THREADS: '1', PYTHONDONTWRITEBYTECODE: '1' },
-});
-const storage = new Map();
+});const storage = new Map();
 const cache = new Map();
 function load(name) {
   const file = path.join(root, name + '.ts');
@@ -171,7 +170,26 @@ for filename in sys.argv[2:]:
   assert.equal(saved[0].id, head.id, 'Sculpt head option must survive reload');
   cache.clear();
   assert.equal(load('lib/head/dynamicSculpt').getDynamicSculptHeads()[0].id, head.id);
+  const deformedPayload = JSON.parse(fs.readFileSync(deformedOut, 'utf8'));
+  const deformedHead = await dynamic.resolveOrBuildSculptHead(
+    { sourceLayout: 'pack', assets: { headMesh: [] } }, JSON.stringify(deformedPayload), 'deformed.jslot',
+  );
+  const deformedMesh = dynamic.getDynamicMesh(deformedHead.meshUrl);
+  const deformedExpected = Float64Array.from(base.positions);
+  for (const [i, x, z, y] of deformedPayload.morphs.sculpt[0].data) {
+    deformedExpected[i * 3] += x * 0.01288 / 10000;
+    deformedExpected[i * 3 + 1] += y * 0.01288 / 10000;
+    deformedExpected[i * 3 + 2] += z * 0.01288 / 10000;
+  }
+  assert.deepEqual(Array.from(deformedMesh.indices), base.indices);
+  assert.deepEqual(Array.from(deformedMesh.uvs), base.uvs);
+  for (let i = 0; i < deformedExpected.length; i++) {
+    assert.ok(Math.abs(deformedMesh.positions[i] - deformedExpected[i]) < 1e-7, 'Deformed JS replay drift');
+  }
   console.log('Retarget encoding, replay, topology, collar, option persistence passed');
+  // The regional quality suite is deliberately NOT run here. It performs
+  // several full surface fits (~4 minutes), which would make this routine
+  // check unusable. Run it on demand: npm run check:retarget:quality
 }
 run().catch((error) => { console.error(error); process.exitCode = 1; })
   .finally(() => fs.rmSync(directory, { recursive: true, force: true }));

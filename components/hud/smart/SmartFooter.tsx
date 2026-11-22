@@ -1,9 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useCharacter } from '@/lib/store';
-import { useSmartSession } from '@/lib/smart/session';
-import { meshModeEnabled } from '@/lib/smart/smartMode';
+import {
+  applyPreview,
+  discardPreview,
+  useSmartSession,
+} from '@/lib/smart/session';
 
 /**
  * The Smart Customization hotkey bar.
@@ -12,9 +15,14 @@ import { meshModeEnabled } from '@/lib/smart/smartMode';
  * same gradient — because a second visual language for a bar with the same job
  * would read as a different product.
  *
- * `Space Apply` commits and returns to the Customization screen; `Esc Return`
- * puts the head back the way it was and leaves. Both are real: a key printed on
- * the bar that does nothing is worse than no key at all.
+ * `Space Apply` commits the fitted sculpt and returns to the Customization
+ * screen; `Esc Return` restores the previous head and leaves. Both are real: a
+ * key printed on the bar that does nothing is worse than no key at all.
+ *
+ * Request ownership and the face transaction live in `lib/smart/session.ts`;
+ * this bar only routes the two keys/buttons to it. Apply is gated in the
+ * handlers as well as on the button, so `Space` cannot commit a state the
+ * button would refuse.
  */
 
 function Key({ children }: { children: React.ReactNode }) {
@@ -29,32 +37,20 @@ function Key({ children }: { children: React.ReactNode }) {
 }
 
 export function SmartFooter() {
-  const state = useCharacter.getState;
-  const staged = useSmartSession(s => s.staged);
-  const applied = useSmartSession(s => s.applied);
-  /* The flag is URL-driven, so it can only be read after mount; reading it in
-     a lazy initialiser would mismatch the server render. */
-  const [dev, setDev] = useState(false);
-  useEffect(() => { setDev(meshModeEnabled()); }, []);
+  const status = useSmartSession(s => s.status);
+  const downloaded = useSmartSession(s => s.downloaded);
 
   const apply = useCallback(() => {
-    const session = useSmartSession.getState();
-    if (session.staged) state().showToast(`Applied ${session.staged.name}`);
-    session.reset();
-    state().setStudioPage('default');
-  }, [state]);
+    /* Guarded here too, not only on the disabled button: `Space` reaches this
+       directly. `applyPreview` is a no-op unless a preview is ready. */
+    if (useSmartSession.getState().status !== 'preview-ready') return;
+    applyPreview();
+  }, []);
 
   const revert = useCallback(() => {
-    const session = useSmartSession.getState();
-    /* Only restore when something was actually applied, or `Esc` on an empty
-       screen would clear the user's existing head selection. */
-    if (session.applied && session.staged) {
-      state().setAssets({ headMesh: session.staged.previousHeadId });
-      state().showToast('Head restored');
-    }
-    session.reset();
-    state().setStudioPage('default');
-  }, [state]);
+    discardPreview({ toast: 'Head restored' });
+    useCharacter.getState().setStudioPage('default');
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -75,7 +71,8 @@ export function SmartFooter() {
     return () => window.removeEventListener('keydown', onKey);
   }, [apply, revert]);
 
-  const canApply = Boolean(staged) || applied;
+  const canApply = status === 'preview-ready';
+  const sessionOnly = canApply && !downloaded;
 
   return (
     <footer className="pointer-events-auto absolute inset-x-0 bottom-0 z-30 flex min-h-[54px] flex-wrap md:flex-nowrap items-center justify-between gap-3 px-4 sm:px-8 py-2 md:py-0 select-none bg-gradient-to-t from-black/80 to-transparent">
@@ -90,7 +87,7 @@ export function SmartFooter() {
 
           <button
             type="button"
-            onClick={() => state().showToast('Drop a photo or a 3D mesh on the ring to import it')}
+            onClick={() => useCharacter.getState().showToast('Drop an isolated .obj head on the ring to fit it onto the UBE base')}
             className="flex items-center gap-1.5 transition-colors hover:text-white"
           >
             <Key>V</Key>
@@ -99,8 +96,8 @@ export function SmartFooter() {
 
           <button
             type="button"
-            onClick={() => state().showToast(staged
-              ? 'Randomize is not available while a custom head is staged'
+            onClick={() => useCharacter.getState().showToast(canApply
+              ? 'Randomize is not available while a fitted head is previewed'
               : 'Randomize is not part of this build yet')}
             className="flex items-center gap-1.5 transition-colors hover:text-white"
           >
@@ -110,7 +107,9 @@ export function SmartFooter() {
 
           <button
             type="button"
-            onClick={() => state().showToast('This screen assigns a 3D head mesh; photo-to-face matching is not available in this build')}
+            onClick={() => useCharacter.getState().showToast(
+              'Smart Customization fits an .obj head onto the UBE base (approximate, companion parts unchanged). The sculpt is session-only — download the .jslot to keep it.',
+            )}
             className="flex items-center gap-1.5 transition-colors hover:text-white"
           >
             <Key>F1</Key>
@@ -119,14 +118,15 @@ export function SmartFooter() {
         </div>
 
         <span className="font-mono text-[10px] tracking-wide text-[#7a7882]/80 select-none">
-          SMART CUSTOMIZATION{dev ? ' · MESH TEST' : ''}
+          SMART CUSTOMIZATION
+          {sessionOnly ? ' · SESSION ONLY — DOWNLOAD .JSLOT' : ''}
         </span>
       </div>
 
       <div className="flex items-center gap-4 sm:gap-6 text-xs text-[#cfcacf]">
         <button
           type="button"
-          onClick={() => state().showToast('Uploading to the Gallery is not part of this build yet')}
+          onClick={() => useCharacter.getState().showToast('Uploading to the Gallery is not part of this build yet')}
           className="flex items-center gap-1.5 transition-colors hover:text-white"
         >
           <Key>R</Key>
@@ -137,6 +137,7 @@ export function SmartFooter() {
           type="button"
           onClick={apply}
           disabled={!canApply}
+          title={sessionOnly ? 'This sculpt is session-only — download the .jslot to keep it' : undefined}
           className="flex items-center gap-2 rounded-[2px] border border-[#eac87f] bg-gradient-to-br from-[#d4b483] to-[#b89862] px-4 py-2 text-xs font-semibold text-[#12100c] shadow-[0_0_16px_rgba(212,180,131,0.22)] transition-all hover:from-[#e0c293] hover:to-[#c4a46e] disabled:cursor-not-allowed disabled:border-[#d4b483]/30 disabled:from-transparent disabled:to-transparent disabled:text-[#cfcacf]/40 disabled:shadow-none"
         >
           <Key>Space</Key>

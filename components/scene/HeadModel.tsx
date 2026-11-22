@@ -32,8 +32,30 @@ import { AuthoredPart } from '@/components/scene/AuthoredPart';
 import { SkinnedPart } from '@/components/scene/SkinnedPart';
 import { EquippedGarment } from '@/components/scene/EquippedGarment';
 import { EquippedHairPart } from '@/components/scene/EquippedHairPart';
+import { GlbHairPart } from '@/components/scene/GlbHairPart';
+import { HairlineUnderlay } from '@/components/scene/HairlineUnderlay';
 import { SkeletonRegistry, applySkeletonWeight } from '@/lib/character/skeleton';
+import { useBodySlideStore } from '@/lib/bodyslide/store';
+import {
+  loadAllBodySlideData,
+  applyBodySlideMorphs,
+  computeMeshShapeOffsets,
+  loadGarmentOsd,
+  resolveGarmentOsdUrl,
+  loadGarmentMappings,
+  loadHandOsd,
+  loadFeetOsd,
+  type BodySlideDataBundle,
+} from '@/lib/bodyslide/morphLoader';
+import type { OsdData, SliderOspMapping } from '@/lib/bodyslide/osdParser';
+import { useFaceMorphStore } from '@/lib/morphs/faceMorphStore';
+import {
+  loadFaceTriBundle,
+  applyPartFaceMorphs,
+  type FaceTriBundle,
+} from '@/lib/morphs/faceMorphLoader';
 import { BodyPhysics } from '@/components/scene/BodyPhysics';
+import { SecondaryPhysics } from '@/components/scene/SecondaryPhysics';
 import { AnimationDirector } from '@/components/scene/AnimationDirector';
 import { applyBodyPose, bodyPose, applyPoseTrack, fetchPoseTrack, BODY_POSES } from '@/lib/character/poses';
 import { buildPoseClip, setAuthoredPose } from '@/lib/character/animation';
@@ -174,6 +196,81 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const mouthGeo = useMeshGeometry(mouthMeshUrl, 'mouth')?.geometry ?? null;
   const browsGeo = useMeshGeometry(browsMeshUrl, 'brows')?.geometry ?? null;
 
+  /* ── FaceGen / UBE CharGen .tri Face Morphs ──────────────────────────
+     Reactively applies 3D vertex morph offsets from CharGen .tri files
+     to head, brows, and mouth geometries. */
+  const faceSliders = useFaceMorphStore((s) => s.faceSliders);
+  const [faceTriBundle, setFaceTriBundle] = useState<FaceTriBundle | null>(null);
+  const browsBasePositionsRef = useRef<Float32Array | null>(null);
+  const mouthBasePositionsRef = useRef<Float32Array | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadFaceTriBundle()
+      .then((bundle) => {
+        if (!cancelled) setFaceTriBundle(bundle);
+      })
+      .catch((err) => {
+        console.warn('[HeadModel] Could not load FaceGen TRI morph bundle:', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Snapshot brows and mouth base positions
+  useEffect(() => {
+    if (!browsGeo) {
+      browsBasePositionsRef.current = null;
+      return;
+    }
+    const pos = browsGeo.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (pos) browsBasePositionsRef.current = new Float32Array(pos.array);
+  }, [browsGeo]);
+
+  useEffect(() => {
+    if (!mouthGeo) {
+      mouthBasePositionsRef.current = null;
+      return;
+    }
+    const pos = mouthGeo.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (pos) mouthBasePositionsRef.current = new Float32Array(pos.array);
+  }, [mouthGeo]);
+
+  // Apply face morphs whenever faceSliders or faceTriBundle changes
+  useEffect(() => {
+    if (!faceTriBundle) return;
+
+    if (headBuild.geometry && headBuild.basePositions && faceTriBundle.head) {
+      applyPartFaceMorphs(
+        headBuild.geometry,
+        headBuild.basePositions,
+        faceSliders,
+        faceTriBundle.head,
+      );
+    }
+
+    if (browsGeo && browsBasePositionsRef.current && faceTriBundle.brows) {
+      applyPartFaceMorphs(
+        browsGeo,
+        browsBasePositionsRef.current,
+        faceSliders,
+        faceTriBundle.brows,
+      );
+    }
+
+    if (mouthGeo && mouthBasePositionsRef.current && faceTriBundle.mouth) {
+      applyPartFaceMorphs(
+        mouthGeo,
+        mouthBasePositionsRef.current,
+        faceSliders,
+        faceTriBundle.mouth,
+      );
+    }
+
+    onDirty();
+  }, [faceTriBundle, faceSliders, headBuild, browsGeo, mouthGeo, onDirty]);
+
   /* ── body weight ──────────────────────────────────────────────────
      A `_0`/`_1` pair is two meshes over one atlas, exactly as in Skyrim. When
      the producer measured a pair the resolved part carries both URLs; both are
@@ -195,6 +292,63 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const bodyMesh = bodyResource.mesh;
   const bodyGeo = bodyMesh?.geometry ?? null;
 
+  /* ── BodySlide 0Necoco morph deformation ───────────────────────────
+     Deforms the loaded UBE body mesh dynamically based on active
+     BodySlide sliders (0NecocoSliders / UBE Necoco). Operates directly
+     on the geometry vertex position buffer with zero lag (60 FPS). */
+  const bodySlideSliders = useBodySlideStore((s) => s.sliders);
+  const nudeSliders = useBodySlideStore((s) => s.nudeSliders);
+  const [bodySlideData, setBodySlideData] = useState<BodySlideDataBundle | null>(null);
+  const bodyBasePositionsRef = useRef<Float32Array | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadAllBodySlideData()
+      .then((bundle) => {
+        if (!cancelled) setBodySlideData(bundle);
+      })
+      .catch((err) => {
+        console.warn('[HeadModel] Could not load BodySlide morphs:', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Cache clean base positions when body mesh or weight changes
+  useEffect(() => {
+    if (!bodyMesh?.geometry) {
+      bodyBasePositionsRef.current = null;
+      return;
+    }
+    const posAttr = bodyMesh.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!posAttr) return;
+    bodyBasePositionsRef.current = new Float32Array(posAttr.array);
+  }, [bodyMesh, weight]);
+
+  // Apply BodySlide morphs whenever sliders or data update
+  useEffect(() => {
+    if (!bodyMesh?.geometry || !bodySlideData || !bodyBasePositionsRef.current) return;
+    const posAttr = bodyMesh.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!posAttr) return;
+
+    const base = bodyBasePositionsRef.current;
+    const target = posAttr.array as Float32Array;
+    if (target.length !== base.length) return;
+
+    applyBodySlideMorphs(
+      target,
+      base,
+      nudeSliders,
+      bodySlideData.mappings,
+      bodySlideData.osdData,
+    );
+
+    posAttr.needsUpdate = true;
+    bodyMesh.geometry.computeVertexNormals();
+    onDirty();
+  }, [bodyMesh, nudeSliders, bodySlideData, onDirty]);
+
   /* Hands and feet are authored as their own static prebaked pair assets over
      the same body atlas. Unlike the torso they have **no synthetic fallback**:
      a pack that does not supply them simply draws nothing there, and a pair
@@ -215,6 +369,103 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const handsMesh = handsResource.mesh;
   const feetMesh = feetResource.mesh;
 
+  /* ── Hands & Feet BodySlide morph deformation ─────────────────────
+     Applies real-time BodySlide morphs (nails, claws, fingers, toes,
+     soles, etc.) to UBE handsMesh and feetMesh at 60 FPS. */
+  const [handData, setHandData] = useState<{ osdData: OsdData; mappings: Record<string, SliderOspMapping> } | null>(null);
+  const [feetData, setFeetData] = useState<{ osdData: OsdData; mappings: Record<string, SliderOspMapping> } | null>(null);
+  const handsBasePositionsRef = useRef<Float32Array | null>(null);
+  const feetBasePositionsRef = useRef<Float32Array | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadHandOsd()
+      .then((data) => {
+        if (!cancelled) setHandData(data);
+      })
+      .catch((err) => {
+        console.warn('[HeadModel] Could not load Hand BodySlide morphs:', err);
+      });
+    loadFeetOsd()
+      .then((data) => {
+        if (!cancelled) setFeetData(data);
+      })
+      .catch((err) => {
+        console.warn('[HeadModel] Could not load Feet BodySlide morphs:', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Cache clean base positions when hands mesh or weight changes
+  useEffect(() => {
+    if (!handsMesh?.geometry) {
+      handsBasePositionsRef.current = null;
+      return;
+    }
+    const posAttr = handsMesh.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!posAttr) return;
+    handsBasePositionsRef.current = new Float32Array(posAttr.array);
+  }, [handsMesh, weight]);
+
+  // Cache clean base positions when feet mesh or weight changes
+  useEffect(() => {
+    if (!feetMesh?.geometry) {
+      feetBasePositionsRef.current = null;
+      return;
+    }
+    const posAttr = feetMesh.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!posAttr) return;
+    feetBasePositionsRef.current = new Float32Array(posAttr.array);
+  }, [feetMesh, weight]);
+
+  // Apply BodySlide morphs to hands
+  useEffect(() => {
+    if (!handsMesh?.geometry || !handData || !handsBasePositionsRef.current) return;
+    const posAttr = handsMesh.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!posAttr) return;
+
+    const base = handsBasePositionsRef.current;
+    const target = posAttr.array as Float32Array;
+    if (target.length !== base.length) return;
+
+    applyBodySlideMorphs(
+      target,
+      base,
+      nudeSliders,
+      handData.mappings,
+      handData.osdData,
+    );
+
+    posAttr.needsUpdate = true;
+    handsMesh.geometry.computeVertexNormals();
+    onDirty();
+  }, [handsMesh, nudeSliders, handData, onDirty]);
+
+  // Apply BodySlide morphs to feet
+  useEffect(() => {
+    if (!feetMesh?.geometry || !feetData || !feetBasePositionsRef.current) return;
+    const posAttr = feetMesh.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!posAttr) return;
+
+    const base = feetBasePositionsRef.current;
+    const target = posAttr.array as Float32Array;
+    if (target.length !== base.length) return;
+
+    applyBodySlideMorphs(
+      target,
+      base,
+      nudeSliders,
+      feetData.mappings,
+      feetData.osdData,
+    );
+
+    posAttr.needsUpdate = true;
+    feetMesh.geometry.computeVertexNormals();
+    onDirty();
+  }, [feetMesh, nudeSliders, feetData, onDirty]);
+
   // Authored hair/outfit: multi-part hair and clothing resources.
   const hairParts = useMemo(
     () => parts?.hairParts ?? (parts?.hair?.meshUrl ? [parts.hair] : []),
@@ -227,12 +478,130 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     'clothing mesh',
     weight,
   );
+  const clothingMesh = clothingResource.mesh;
+  const clothingBasePositionsRef = useRef<Float32Array | null>(null);
+  const [legacyClothingOsd, setLegacyClothingOsd] = useState<OsdData | null>(null);
+  const [legacyClothingMappings, setLegacyClothingMappings] = useState<Record<string, SliderOspMapping> | null>(null);
+
+  // Load matching legacy outfit OSD if available
+  useEffect(() => {
+    let cancelled = false;
+    const clothingPart = parts?.clothing;
+    const osdUrl = resolveGarmentOsdUrl(clothingPart);
+    if (!osdUrl) {
+      setLegacyClothingOsd(null);
+      setLegacyClothingMappings(null);
+      return;
+    }
+    Promise.all([
+      loadGarmentOsd(osdUrl),
+      loadGarmentMappings(clothingPart),
+    ])
+      .then(([data, mappings]) => {
+        if (!cancelled) {
+          setLegacyClothingOsd(data);
+          setLegacyClothingMappings(mappings);
+        }
+      })
+      .catch((err) => {
+        console.warn(`[HeadModel] Could not load legacy outfit OSD for ${clothingPart?.label || clothingMeshUrl}:`, err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clothingMeshUrl, parts?.clothing?.id, parts?.clothing?.file, parts?.clothing?.label]);
+
+  // Snapshot clean base positions when legacy outfit mesh or weight changes
+  useEffect(() => {
+    if (!clothingMesh?.geometry) {
+      clothingBasePositionsRef.current = null;
+      return;
+    }
+    const posAttr = clothingMesh.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!posAttr) return;
+    clothingBasePositionsRef.current = new Float32Array(posAttr.array);
+  }, [clothingMesh, weight]);
+
+  const legacyClothingOffsets = useMemo(
+    () => computeMeshShapeOffsets(clothingMesh),
+    [clothingMesh],
+  );
+
+  // Apply real-time BodySlide morphs to legacy outfit
+  useEffect(() => {
+    if (!clothingMesh?.geometry || !legacyClothingOsd || !bodySlideData || !clothingBasePositionsRef.current) return;
+    const posAttr = clothingMesh.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!posAttr) return;
+
+    const base = clothingBasePositionsRef.current;
+    const target = posAttr.array as Float32Array;
+    if (target.length !== base.length) return;
+
+    applyBodySlideMorphs(
+      target,
+      base,
+      bodySlideSliders,
+      legacyClothingMappings || bodySlideData.mappings,
+      legacyClothingOsd,
+      undefined,
+      legacyClothingOffsets,
+    );
+
+    posAttr.needsUpdate = true;
+    clothingMesh.geometry.computeVertexNormals();
+    onDirty();
+  }, [clothingMesh, bodySlideSliders, legacyClothingOsd, legacyClothingMappings, bodySlideData, legacyClothingOffsets, onDirty]);
   /* Worn garments from the paper-doll. Each is its own NIF over its own
      authored atlases, so unlike the whole outfit they have no shared texture
      override — only the embedded-body fallback below applies. */
   const equipped = useMemo(
     () => (parts?.equipment ?? []).filter((p) => Boolean(p.meshUrl)),
     [parts?.equipment],
+  );
+
+  // Modular Limb Culling: boots/shoes hide bare feet; gloves/gauntlets hide bare hands.
+  const hasFootwear = useMemo(
+    () =>
+      equipped.some(
+        (g) =>
+          g.slot === 'feet' ||
+          (g as { equipSlot?: string }).equipSlot === 'feet' ||
+          /boot|shoe|heel|sandals/i.test(g.label || g.rel || ''),
+      ),
+    [equipped],
+  );
+
+  const hasHandwear = useMemo(
+    () =>
+      equipped.some(
+        (g) =>
+          g.slot === 'hands' ||
+          (g as { equipSlot?: string }).equipSlot === 'hands' ||
+          /glove|gauntlet|mitt|bracer/i.test(g.label || g.rel || ''),
+      ),
+    [equipped],
+  );
+
+  const garmentVisible = useCharacter((s) => s.garmentVisible);
+
+  // Modular Body Culling: equipping a body outfit/suit hides the standalone nude body,
+  // allowing the outfit's own integrated BaseShape to render without clipping.
+  // When garments are toggled off (garmentVisible === false), the standalone nude body
+  // must always render so the user sees their complete unclipped anatomy.
+  const hasBodywear = useMemo(
+    () =>
+      garmentVisible !== false &&
+      equipped.some(
+        (g) =>
+          g.slot === 'outfit' ||
+          g.slot === 'body' ||
+          g.slot === 'top' ||
+          (g as { equipSlot?: string }).equipSlot === 'outfit' ||
+          (g as { equipSlot?: string }).equipSlot === 'body' ||
+          (g as { equipSlot?: string }).equipSlot === 'top' ||
+          /bodysuit|onepiece|dress|outfit|robe|suit|sweater/i.test(g.label || g.rel || ''),
+      ),
+    [equipped, garmentVisible],
   );
   /* Stable identities: `AuthoredPart` keys its texture effect on these, and an
      inline object would reload every map on every parent render.
@@ -269,7 +638,6 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const clothingHasEmbeddedBody = Boolean(
     clothingResource.mesh?.materials?.some((m) => m.role === 'skin'),
   );
-  const garmentVisible = useCharacter((s) => s.garmentVisible);
   const clothingHiddenRoles = useMemo(() => {
     const hidden: MaterialRole[] = [];
     if (garmentVisible === false) hidden.push('clothing', 'accessory');
@@ -704,6 +1072,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     };
   }, [skinSrc, detailFit?.cx, detailFit?.cy, detailFit?.kx, detailFit?.ky]);
   const hairSettings = useCharacter((s) => s.hair);
+  const hair = hairSettings;
   const skinGloss = useCharacter((s) => s.skinGloss);
   const skinSss = useCharacter((s) => s.skinSss);
   const skinDetail = useCharacter((s) => s.skinDetail);
@@ -1319,6 +1688,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         onAfterFrame={followAnimatedFrame}
       />
       <BodyPhysics registry={skeletonRegistry} />
+      <SecondaryPhysics registry={skeletonRegistry} />
       {/* Facial companions are authored against the UBE head's exact vertex
           layout: the eyes sit in sockets that exist only on that face, and the
           lashes/brows/mouth follow its contours. On an imported head they would
@@ -1343,7 +1713,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           <primitive object={browsMesh} material={partMaterial(browsTexState, browsMaterial)} dispose={null} />
         )}
       </primitive>
-      {bodyGeo && bodyMesh ? (
+      {bodyGeo && bodyMesh && !hasBodywear ? (
         bodyMesh.bones?.length || autoRigUnskinned ? (
           <SkinnedPart
             key="body"
@@ -1369,7 +1739,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         ) : (
           <mesh name="Body" geometry={bodyGeo} material={partMaterial(bodyTexState, bodyMaterial)} renderOrder={0} />
         )
-      ) : packMode ? null : (
+      ) : packMode || hasBodywear ? null : (
         <>
           {/* Procedural fallback only. This branch never draws alongside a body
               mesh — the arms above are exclusive — so the neck cannot double up
@@ -1386,7 +1756,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           have no synthetic stand-in — an un-authored or half-loaded pair draws
           nothing rather than a proxy shape — and their `skin` slots take the
           body selection even if the baked asset named its own material. */}
-      {handsMesh && (
+      {handsMesh && !hasHandwear && (
         <SkinnedPart
           key="hands"
           name="Hands"
@@ -1405,7 +1775,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           weight={weight}
         />
       )}
-      {feetMesh && (
+      {feetMesh && !hasFootwear && (
         <SkinnedPart
           key="feet"
           name="Feet"
@@ -1474,29 +1844,45 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           rigDonor={bodyMesh ?? undefined}
           weight={weight}
           hiddenRoles={equipmentHiddenRoles}
-          hideEmbeddedBody={Boolean(bodyGeo)}
+          hideEmbeddedBody={!hasBodywear || garmentVisible === false}
           fallbackByRole={clothingFallback}
           fallbackNormalByRole={clothingNormalFallback}
+          fallbackRoughnessByRole={bodyRoughnessFallback}
+          skinOverride={bodySkinOverride}
           skinColor={skinColor}
           skinDetailMap={skinDetailTex}
           skinDetail={skinDetail}
           renderOrder={0}
         />
       ))}
-      {hairParts.map((part, index) => (
-        <EquippedHairPart
-          key={`hair:${part.id || part.meshUrl || index}`}
-          part={part}
-          registry={skeletonRegistry}
-          rigDonor={bodyMesh ?? undefined}
-          rigRoot={rig?.root}
-          defaultRole="hair"
-          fallbackTexture={hairSrc}
-          fallbackNormalByRole={hairNormalFallback}
-          hair={hairSettings}
-          renderOrder={6 + index}
-        />
-      ))}
+      <HairlineUnderlay rigRoot={rig?.root} hair={hair} renderOrder={5} />
+      {hairParts.map((part, index) => {
+        if (part.meshUrl?.endsWith('.glb')) {
+          return (
+            <GlbHairPart
+              key={`hair:glb:${part.id || part.meshUrl || index}`}
+              url={part.meshUrl}
+              rigRoot={rig?.root}
+              hair={hairSettings}
+              renderOrder={6 + index}
+            />
+          );
+        }
+        return (
+          <EquippedHairPart
+            key={`hair:${part.id || part.meshUrl || index}`}
+            part={part}
+            registry={skeletonRegistry}
+            rigDonor={bodyMesh ?? undefined}
+            rigRoot={rig?.root}
+            defaultRole="hair"
+            fallbackTexture={hairSrc}
+            fallbackNormalByRole={hairNormalFallback}
+            hair={hairSettings}
+            renderOrder={6 + index}
+          />
+        );
+      })}
       {!importedHead && <MeshOverlay rig={rig} headBuild={headBuild} />}
       {!importedHead && <FaceGizmo rig={rig} />}
     </group>

@@ -52,6 +52,7 @@ export function Footer({
   if ((isHair || isMakeup) && smart) return <SmartFooter />;
   if (isHair) return <HairFooter onToggleImport={onToggleCustomizationDrawer} />;
   if (isMakeup) return <MakeupFooter onToggleImport={onToggleCustomizationDrawer} />;
+  if (isFace) return <FeaturesFooter onToggleImport={onToggleCustomizationDrawer} />;
 
   return (
     <footer className="creator-footer">
@@ -475,6 +476,141 @@ function HairFooter({ onToggleImport }: { onToggleImport?: () => void }) {
         >
           <Key>R</Key>
           <span>Upload to the Gallery</span>
+        </button>
+      </div>
+    </footer>
+  );
+}
+
+function FeaturesFooter({ onToggleImport }: { onToggleImport?: () => void }) {
+  const state = useCharacter.getState;
+  const setPreviewMode = useCharacter(s => s.setPreviewMode);
+  const preview = useCharacter(s => s.previewMode);
+  const comparing = useCharacter(s => s.faceCompareStart !== null);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest('button, summary, a, input, textarea, select, [role="button"], [role="slider"], [contenteditable="true"]')
+      )
+        return;
+
+      if (event.key.toLowerCase() === 'v') {
+        event.preventDefault();
+        onToggleImport?.();
+      } else if (event.key.toLowerCase() === 't') {
+        event.preventDefault();
+        randomize();
+      } else if (event.key.toLowerCase() === 'r') {
+        event.preventDefault();
+        state().showToast('Uploading customization data to the gallery…');
+      } else if (event.code === 'Space') {
+        event.preventDefault();
+        state().applyFaceBaseline();
+        setPreviewMode(!preview);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onToggleImport, preview, setPreviewMode]);
+
+  const randomize = () => {
+    state().resetFaceRegion();
+    state().showToast('Reset current region');
+  };
+
+  return (
+    <footer className="pointer-events-auto absolute inset-x-0 bottom-0 z-20 flex min-h-[54px] flex-wrap md:flex-nowrap items-center justify-between gap-3 px-4 sm:px-8 py-2 md:py-0 select-none bg-gradient-to-t from-black/80 to-transparent">
+      {/* Left Actions */}
+      <div className="flex flex-col gap-0.5">
+        <div className="flex items-center gap-3 sm:gap-5 text-xs text-[#cfcacf] flex-wrap">
+          {/* Return */}
+          <button
+            type="button"
+            onClick={() => state().setWorkspace('edit')}
+            className="flex items-center gap-1.5 transition-colors hover:text-white"
+          >
+            <span className="flex h-4 w-4 items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 font-mono text-[10px] font-medium text-[#eae5dc]">
+              ↵
+            </span>
+            <span>Return</span>
+          </button>
+
+          {/* [V] Import Customization Data */}
+          <button
+            type="button"
+            onClick={onToggleImport}
+            className="flex items-center gap-1.5 transition-colors hover:text-white"
+          >
+            <Key>V</Key>
+            <span>Import Customization Data</span>
+          </button>
+
+          {/* [T] Random */}
+          <button
+            type="button"
+            onClick={randomize}
+            className="flex items-center gap-1.5 transition-colors hover:text-white"
+          >
+            <Key>T</Key>
+            <span>Random</span>
+          </button>
+
+          {/* [C] Hold to Compare */}
+          <button
+            type="button"
+            aria-pressed={comparing}
+            onPointerDown={e => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              state().beginFaceCompare();
+            }}
+            onPointerUp={() => state().endFaceCompare()}
+            onPointerCancel={() => state().endFaceCompare()}
+            className="hidden lg:flex items-center gap-1.5 transition-colors hover:text-white"
+          >
+            <Key>C</Key>
+            <span>{comparing ? 'Comparing' : 'Compare'}</span>
+          </button>
+        </div>
+
+        {/* Watermark matching Image 2: ID: 1127544843 */}
+        <span className="font-mono text-[10px] tracking-wide text-[#7a7882]/80 select-none">
+          ID: 1127544843
+        </span>
+      </div>
+
+      {/* Right Actions */}
+      <div className="flex items-center gap-4 sm:gap-6 text-xs text-[#cfcacf]">
+        {/* [R] Upload to the Gallery */}
+        <button
+          type="button"
+          onClick={() => state().showToast('Uploading customization data to the gallery…')}
+          className="flex items-center gap-1.5 transition-colors hover:text-white"
+        >
+          <Key>R</Key>
+          <span>Upload to the Gallery</span>
+        </button>
+
+        {/* Select */}
+        <span className="hidden sm:inline-flex items-center gap-1 text-[#8f8d97]">
+          <span className="text-[11px] font-mono">✕</span>
+          <span>Select</span>
+        </span>
+
+        {/* Gold Preview Button (Image 2 Match) */}
+        <button
+          type="button"
+          onClick={() => {
+            state().applyFaceBaseline();
+            setPreviewMode(!preview);
+          }}
+          className="flex items-center gap-2 rounded-sm bg-[#dfba73] px-3.5 py-1.5 text-xs font-semibold text-black shadow-md transition-all hover:bg-[#eac87f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+        >
+          <span className="font-mono text-[10px] bg-black/20 px-1 rounded-[2px] text-black">Space</span>
+          <span>Preview</span>
         </button>
       </div>
     </footer>

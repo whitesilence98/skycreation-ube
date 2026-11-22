@@ -8,6 +8,7 @@ import { CategoryRail } from '@/components/hud/shell/CategoryRail';
 import { SubList } from '@/components/hud/shell/SubList';
 import { RegionStrip, ControlsDisclosure } from '@/components/hud/shell/RegionStrip';
 import { ControlColumn } from '@/components/hud/shell/ControlColumn';
+import { WuxiaSubCategoryRail } from '@/components/hud/common/WuxiaSubCategoryRail';
 import { ToolStrip } from '@/components/hud/shell/ToolStrip';
 import { HdrPanel } from '@/components/hud/HdrPanel';
 import { CameraPanel } from '@/components/hud/CameraPanel';
@@ -111,9 +112,9 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
   }, [category, toolOpen]);
   useEffect(() => { if (category === 'face') state().applyFaceBaseline(); }, [category]);
 
-  const isWuxiaFloating = category === 'outfit' || category === 'hair' || category === 'styling';
+  const isWuxiaFloating = category === 'outfit' || category === 'hair' || category === 'styling' || category === 'face' || category === 'body' || category === 'preset';
 
-  return <div className="creator-shell pointer-events-none absolute inset-0 z-10" data-outfit={category === 'outfit' ? 'true' : undefined} data-hair={category === 'hair' ? 'true' : undefined} data-makeup={category === 'styling' ? 'true' : undefined} data-smart={smart ? 'true' : undefined}>
+  return <div className="creator-shell pointer-events-none absolute inset-0 z-10" data-outfit={category === 'outfit' ? 'true' : undefined} data-hair={category === 'hair' ? 'true' : undefined} data-makeup={category === 'styling' ? 'true' : undefined} data-face={category === 'face' ? 'true' : undefined} data-body={category === 'body' ? 'true' : undefined} data-preset={category === 'preset' ? 'true' : undefined} data-smart={smart ? 'true' : undefined}>
     <TopBar manifest={manifest} />
     {!preview && <>
       {!isWuxiaFloating && <CategoryRail selected={category} onSelect={selectCategory} />}
@@ -121,19 +122,16 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
         aria-expanded={editorOpen && (!isMobile || !toolOpen)} hidden={isMobile && toolOpen}
         onClick={() => setEditorOpen(v => !v)}>{editorOpen ? 'Hide panel' : 'Show panel'}</button>}
       {smart ? (
-        <SmartCustomization manifest={manifest} />
+        <SmartCustomization />
       ) : (
         <aside id="creator-editor" className={`creator-editor ${category === 'face' ? 'creator-editor-face' : category === 'outfit' ? 'creator-editor-outfit' : ''}`}
           aria-label={`${CATEGORY_LABELS[category]} editor`} hidden={editorHidden} inert={compare}>
-          {category === 'face' ? <>
-            <RegionStrip selected={section} onSelect={setSection} />
-            <ControlsDisclosure><ControlColumn section={section} /></ControlsDisclosure>
-          </> : <LeftPanel manifest={manifest} category={category} />}
+          <LeftPanel manifest={manifest} category={category} />
         </aside>
       )}
-      {!smart && (category === 'outfit' || category === 'styling') && <OutfitSideActions />}
-      {!smart && (category === 'hair' || category === 'styling') && <ImportCustomizationDrawer isOpen={importDrawerOpen} onClose={() => setImportDrawerOpen(false)} />}
-      {!smart && (category === 'styling' || !isWuxiaFloating) && <ToolStrip />}
+      {!smart && category === 'outfit' && <OutfitSideActions />}
+      {!smart && (category === 'hair' || category === 'styling' || category === 'face') && <ImportCustomizationDrawer isOpen={importDrawerOpen} onClose={() => setImportDrawerOpen(false)} />}
+      {!smart && <ToolStrip />}
       {!smart && toolOpen && <aside ref={tools} className="creator-tool-drawer" aria-label="Studio properties" tabIndex={-1}>
         {workspace === 'camera' && <CameraPanel onClose={closeTool} />}
         {workspace === 'hdr' && <HdrPanel onClose={closeTool} />}

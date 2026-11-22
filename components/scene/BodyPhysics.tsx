@@ -100,12 +100,13 @@ const SOFT_NODES_DEF: readonly SoftNodeDef[] = [
   // Abdominal / Belly
   {
     name: 'NPC Belly',
+    fallbackName: 'Belly',
     type: 'belly',
-    radius: 0.065,
-    mass: 0.9,
-    maxDisp: 0.016,
-    stiffnessMult: 1.25,
-    dampingMult: 1.1,
+    radius: 0.045,
+    mass: 1.2,
+    maxDisp: 0.008,
+    stiffnessMult: 1.8,
+    dampingMult: 2.2,
   },
 ];
 
@@ -262,13 +263,15 @@ export function BodyPhysics({ registry }: BodyPhysicsProps) {
               node.velocity.y += 0.20 * factor;
               node.velocity.z -= 0.10 * factor;
             } else if (def.type === 'belly') {
-              node.velocity.y += 0.16 * factor;
-              node.velocity.z += 0.08 * factor;
+              node.velocity.y += 0.08 * factor;
+              node.velocity.z += 0.04 * factor;
             }
           }
           if (hasPoseTransition) {
-            // Subtle transition kick
-            node.velocity.y += (Math.random() - 0.5) * 0.05;
+            // Subtle transition kick for breasts
+            if (def.type === 'breast') {
+              node.velocity.y += (Math.random() - 0.5) * 0.05;
+            }
           }
         }
 
@@ -286,8 +289,13 @@ export function BodyPhysics({ registry }: BodyPhysicsProps) {
         scratch.acc.set(0, 0, 0);
         scratch.acc.add(scratch.springForce);
         scratch.acc.add(scratch.dampForce);
-        scratch.acc.y += gravityY;
-        scratch.acc.add(scratch.externalImpulse);
+        if (def.type === 'belly') {
+          scratch.acc.y += gravityY * 0.2;
+          scratch.acc.addScaledVector(scratch.externalImpulse, 0.15);
+        } else {
+          scratch.acc.y += gravityY;
+          scratch.acc.add(scratch.externalImpulse);
+        }
         scratch.acc.divideScalar(def.mass);
 
         // Integrate
@@ -304,7 +312,8 @@ export function BodyPhysics({ registry }: BodyPhysicsProps) {
         }
 
         // ── 4. CBPC Analytical Sphere Collisions ─────────────────────
-        if (collisionsEnabled) {
+        // Hand and arm colliders interact with breasts and glutes; exempt belly to eliminate idle penetration chatter
+        if (collisionsEnabled && def.type !== 'belly') {
           for (const col of COLLIDERS_DEF) {
             const colBone = registry.byName.get(col.boneName);
             if (!colBone) continue;

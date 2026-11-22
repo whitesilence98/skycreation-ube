@@ -51,8 +51,8 @@ def load_obj(path):
                     faces.extend([ids[0], ids[i], ids[i + 1]] for i in range(1, len(ids) - 1))
             except ValueError as exc:
                 raise ValueError(f"OBJ line {line_number}: {exc}") from exc
-            if len(vertices) > 200_000 or len(faces) > 400_000:
-                raise ValueError("OBJ too dense; limit 200,000 vertices / 400,000 triangles")
+            if len(vertices) > 350_000 or len(faces) > 700_000:
+                raise ValueError("OBJ too dense; limit 350,000 vertices / 700,000 triangles")
     if not vertices or not faces:
         raise ValueError("OBJ needs vertices and polygon faces")
     p = np.asarray(vertices, dtype=float)
@@ -271,6 +271,127 @@ def encode(base, fitted, name):
     ]}}
 
 
+def quality_regions(base, faces):
+    """ponytail: canonical coordinate bands, not landmarks; replace after reference calibration."""
+    x, y, z = base.T
+    shell = facial_mask(base, faces) > 0
+    # Recover pinned opening vertices adjacent to the main shell, not the
+    # boundaries of disconnected accessory shells.
+    shell[np.unique(faces[np.any(shell[faces], axis=1)])] = True
+    front = shell & (z > .035)
+    return {
+        "nose": front & (np.abs(x) < .025) & (y > -.022) & (y < .025),
+        "eyes": front & (np.abs(x) > .015) & (np.abs(x) < .065) & (y > .018) & (y < .055),
+        "lips": front & (np.abs(x) < .035) & (y > -.055) & (y < -.022),
+        "jaw": shell & (z > 0) & (y > -.09) & (y < -.055),
+    }
+
+
+def validate_fitted_geometry(base, faces, fitted):
+    """Check the final decoded sculpt, not only its pre-quantization proposal."""
+    if fitted.shape != base.shape or not np.isfinite(fitted).all():
+        raise ValueError("Fit rejected: invalid decoded geometry")
+    rest = np.cross(base[faces[:, 1]]-base[faces[:, 0]], base[faces[:, 2]]-base[faces[:, 0]])
+    current = np.cross(fitted[faces[:, 1]]-fitted[faces[:, 0]], fitted[faces[:, 2]]-fitted[faces[:, 0]])
+    if np.any(((rest*current).sum(1) <= 0) & (np.linalg.norm(rest, axis=1) > 1e-12)):
+        raise ValueError("Fit rejected: encoded sculpt folded / collapsed triangles")
+    if np.any(fitted[collar_indices()] != base[collar_indices()]):
+        raise ValueError("Fit rejected: encoded sculpt moved the protected collar")
+
+
+def summarise_errors(errors):
+    """RMS/p95/max for one region. Pure, so the evaluator can be tested without a fit."""
+    if not len(errors):
+        raise ValueError("No diagnostic vertices in region")
+    return {"vertices": int(len(errors)),
+            "rms_m": float(np.sqrt(np.mean(errors**2))),
+            "p95_m": float(np.quantile(errors, .95)), "max_m": float(errors.max())}
+
+
+def projected_envelopes(fitted, source, base):
+    """ponytail: horizontal-band extents are silhouette proxies; upgrade to
+    visibility-aware raster contours before treating this as silhouette truth."""
+    envelopes = {}
+    for name, angle in (("front", 0), ("profile", 90), ("three-quarter", 45)):
+        a, b = rotate_y(fitted, angle), rotate_y(source, angle)
+        bounds = np.linspace(base[:, 1].min(), base[:, 1].max(), 41)
+        differences = []
+        for lo, hi in zip(bounds[:-1], bounds[1:]):
+            aa = a[(a[:, 1] >= lo) & (a[:, 1] < hi), 0]
+            bb = b[(b[:, 1] >= lo) & (b[:, 1] < hi), 0]
+            if len(aa) and len(bb):
+                differences.extend((aa.min()-bb.min(), aa.max()-bb.max()))
+        errors = np.abs(differences)
+        envelopes[name] = {"samples": len(errors),
+                           "rms_m": float(np.sqrt(np.mean(errors**2))) if len(errors) else None,
+                           "max_m": float(errors.max()) if len(errors) else None}
+    return envelopes
+
+
+def quality_metrics(base, faces, fitted, source, source_faces, protected=None):
+    """Distances include constrained regions. Scores do not certify identity.
+
+    `protected` may be passed when the caller already computed the facial mask;
+    the mask walks the whole mesh in Python, so recomputing it per fixture is
+    the single most expensive avoidable step in the quality suite.
+    """
+    matched = surface_matches(fitted, source, source_faces)
+    distances = np.linalg.norm(matched-fitted, axis=1)
+    regions = {name: summarise_errors(distances[mask])
+               for name, mask in quality_regions(base, faces).items()}
+    displacement = np.linalg.norm(fitted-base, axis=1)
+    if protected is None:
+        protected = facial_mask(base, faces) == 0
+    return {"regions": regions, "projected_envelopes": projected_envelopes(fitted, source, base),
+            "collar_max_displacement_m": float(displacement[collar_indices()].max()),
+            "protected_max_displacement_m": float(displacement[protected].max()),
+            "likeness_approved": False,
+            "limitations": ["Coordinate bands are not anatomical landmarks",
+                            "Surface distances are one-directional local-search estimates",
+                            "Eye/lip boundaries remain constrained; companions not fitted"]}
+
+
+def write_quality_report(directory, base, faces, fitted, source, source_faces, report):
+    """Optional Pillow diagnostic: fixed orthographic cameras, no textures or materials."""
+    from PIL import Image, ImageDraw
+
+    directory.mkdir(parents=True, exist_ok=False)
+    (directory / "metrics.json").write_text(json.dumps(report, indent=2, allow_nan=False), encoding="utf-8")
+    # Separate panels avoid color-only source/result identity and occlusion from
+    # overlaying two surfaces. Same world scale and framing in every panel.
+    width, height = 420, 480
+    image = Image.new("RGB", (width*3, height*2+90), "#ffffff")
+    draw = ImageDraw.Draw(image)
+    draw.text((16, 10), "Skin-off geometry comparison / SOURCE top / FITTED UBE bottom", fill="#111111")
+    draw.text((16, 30), "Fixed orthographic scale. Synthetic fixtures do not certify real-head likeness.", fill="#333333")
+    low, high = base.min(0), base.max(0)
+    scale = 350 / max(high-low)
+    center_y = (low[1]+high[1])/2
+    for column, (name, angle) in enumerate((("Front", 0), ("Profile", 90), ("Three-quarter", 45))):
+        for row, (points, triangles, label) in enumerate(((source, source_faces, "SOURCE"), (fitted, faces, "FITTED UBE"))):
+            rotated = rotate_y(points, angle)
+            normals = np.cross(rotated[triangles[:, 1]]-rotated[triangles[:, 0]],
+                               rotated[triangles[:, 2]]-rotated[triangles[:, 0]])
+            light = np.array([.3, .5, 1.0]); light /= np.linalg.norm(light)
+            lengths = np.linalg.norm(normals, axis=1)
+            shades = np.clip(np.abs(normals @ light)/np.maximum(lengths, 1e-15), 0, 1)
+            xy = np.column_stack((column*width+width/2+rotated[:, 0]*scale,
+                                  70+row*height+height/2-(rotated[:, 1]-center_y)*scale))
+            # Orthographic painter's algorithm; diagnostic only, not a GPU render.
+            for index in np.argsort(rotated[triangles, 2].mean(1)):
+                shade = int(65+170*shades[index])
+                draw.polygon([tuple(p) for p in xy[triangles[index]]], fill=(shade, shade, shade))
+            draw.text((column*width+16, 70+row*height+8), f"{name} / {label}", fill="#111111")
+    image.save(directory / "comparison.png")
+    # These are generated reference outputs; never change the shipped base mesh.
+    for name, points, triangles in (("source.obj", source, source_faces), ("fitted.obj", fitted, faces)):
+        with (directory / name).open("x", encoding="utf-8") as stream:
+            for x, y, z in points:
+                stream.write(f"v {x} {y} {z}\n")
+            for a, b, c in triangles:
+                stream.write(f"f {a+1} {b+1} {c+1}\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mesh", type=Path, required=True)
@@ -278,7 +399,10 @@ def main():
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--yaw", type=float, help="Yaw seed in degrees; otherwise search eight upright orientations")
     parser.add_argument("--mirror", action="store_true", help="Explicitly mirror X; never guessed automatically")
+    parser.add_argument("--report-dir", type=Path, help="NEW directory for regional metrics and fixed-camera skin-off PNGs (requires Pillow)")
     args = parser.parse_args()
+    if args.report_dir and args.report_dir.exists():
+        raise ValueError("Report directory already exists; choose a new --report-dir")
     if args.out.exists():
         raise ValueError("Output already exists; choose another --out path")
     if args.yaw is not None and not np.isfinite(args.yaw):
@@ -300,10 +424,19 @@ def main():
     metrics.update(quality)
     if metrics["alignment_rms_m"] > 0.015 or metrics["face_coverage_15mm"] < 0.8 or metrics["face_surface_rms_m"] > 0.01:
         raise ValueError(f"Fit rejected: {json.dumps(metrics)}; prepare an isolated upright head / adjust --yaw")
+    sculpt = encode(base, fitted, args.mesh.stem)
+    decoded = base.copy()
+    for index, x, z, y in sculpt["morphs"]["sculpt"][0]["data"]:
+        decoded[index] += np.array([x, y, z]) * SCALE
+    validate_fitted_geometry(base, faces, decoded)
+    regional = quality_metrics(base, faces, decoded, source, source_faces)
+    if args.report_dir:
+        write_quality_report(args.report_dir, base, faces, decoded, source, source_faces,
+                             {"approximate": True, "alignment_and_fit": metrics, "quality": regional})
     # Exclusive creation avoids overwriting a previous sculpt, including concurrent runs.
     with args.out.open("x", encoding="utf-8") as stream:
-        json.dump(encode(base, fitted, args.mesh.stem), stream, allow_nan=False)
-    print(json.dumps({"output": str(args.out), "approximate": True, **metrics}))
+        json.dump(sculpt, stream, allow_nan=False)
+    print(json.dumps({"output": str(args.out), "approximate": True, **metrics, "quality": regional}, allow_nan=False))
 
 
 if __name__ == "__main__":

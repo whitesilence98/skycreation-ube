@@ -139,7 +139,7 @@ for (const bone of scale.BODY_SCALE_BONES) {
 // 8. The wired body ids flip to `wired`; the material stub does not leak.
 for (const id of ['body.heightCm', 'body.headScale', 'body.fat', 'body.shoulderWidth',
   'body.chestSize', 'body.waistSize', 'body.hipWidth', 'body.armLength', 'body.legLength',
-  'body.buttSize', 'body.thighWidth', 'body.belly']) {
+  'body.buttSize', 'body.thighWidth', 'body.belly', 'body.handSize', 'body.fingerLength', 'body.footSize']) {
   assert.equal(scale.hasBodyScale(id), true, id);
   assert.equal(params.ANATOMY_BY_ID[id].status, 'wired', id);
   assert.equal(params.ANATOMY_BY_ID[id].group, 'body', id);

@@ -7,6 +7,7 @@ import { convertUrl } from '@/lib/mo2/client';
 import { EQUIP_SLOTS, isWholeOutfit, equipSlotOf, type EquipSelection, type EquipSlot } from '@/lib/equipment';
 import { getDynamicSculptHeads } from '@/lib/head/dynamicSculpt';
 import { buildHairGroups, findHairGroupForPartId } from '@/lib/hair';
+import { findCuratedGlbHair } from '@/lib/hairGlbRegistry';
 
 export type PartMeshKind = 'headMesh' | 'eyeMesh' | 'lashesMesh' | 'browsMesh' | 'mouthMesh' | 'bodyMesh' | 'handsMesh' | 'feetMesh' | 'hairMesh' | 'clothingMesh';
 export type AssetKind = PartMeshKind | 'skin' | 'eyes' | 'lashes' | 'brows' | 'mouth' | 'body' | 'hair' | 'clothing'
@@ -296,7 +297,7 @@ export function resolveManifest(
       meshUrl: (name === 'lashes' ? companionLashesMesh : name === 'brows' ? companionBrowsMesh : name === 'mouth' ? companionMouthMesh : undefined)
         ?? (name === 'hair' || name === 'clothing'
           ? usableMesh?.meshUrl
-          : usableMesh?.meshUrl ?? fallback?.meshUrl ?? (name === 'body' ? body?.meshUrl : undefined)),
+          : (weightVariants?.w0 ?? usableMesh?.meshUrl ?? fallback?.meshUrl ?? (name === 'body' ? body?.meshUrl : undefined))),
       texture: pair ? convertUrl({ kind: textureKind, id: pair.id, mode: 'atlas' }) : resolvedTexture,
       normalTexture: pair ? (pair.normalId ? convertUrl({ kind: textureKind, id: pair.normalId, mode: 'normal' }) : undefined) : resolvedNormal,
       roughnessTexture: resolvedRoughness,
@@ -375,8 +376,39 @@ export function resolveManifest(
   const activeHairGroup = findHairGroupForPartId(hairGroups, activeHairId);
 
   const resolvedHairParts: Mo2PartOption[] = [];
-  if (activeHairGroup && activeHairGroup.parts.length > 0) {
+  const curatedGlb = findCuratedGlbHair(activeHairId);
+  if (curatedGlb) {
+    resolvedHairParts.push({
+      id: curatedGlb.id,
+      label: curatedGlb.label,
+      mod: curatedGlb.mod || curatedGlb.author || 'Custom',
+      file: curatedGlb.file,
+      rel: curatedGlb.file,
+      meshUrl: curatedGlb.meshUrl,
+    });
+  } else if (activeHairId === 'dint_hair_03' || (typeof activeHairId === 'string' && activeHairId.endsWith('.glb'))) {
+    resolvedHairParts.push({
+      id: activeHairId,
+      label: 'Dint Hair 03',
+      mod: '[Dint999] HairPack02',
+      file: 'hair_03.glb',
+      rel: 'hair_03.glb',
+      meshUrl: activeHairId.endsWith('.glb') ? activeHairId : '/assets/hair/hair_03.glb',
+    });
+  } else if (activeHairGroup && activeHairGroup.parts.length > 0) {
     for (const p of activeHairGroup.parts) {
+      const glbUrl = (p.raw as any)?.meshUrl;
+      if (typeof glbUrl === 'string' && glbUrl.endsWith('.glb')) {
+        resolvedHairParts.push({
+          id: p.id,
+          label: p.label,
+          mod: (p.raw as any)?.mod || 'Dint999',
+          file: (p.raw as any)?.file || 'hair_03.glb',
+          rel: (p.raw as any)?.rel || p.id,
+          meshUrl: glbUrl,
+        });
+        continue;
+      }
       const resolved = resolveMeshUrl('hairMesh', p.raw);
       if (resolved?.meshUrl) {
         resolvedHairParts.push({

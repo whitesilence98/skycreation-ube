@@ -63,6 +63,8 @@ export interface RiggerState {
   landmarks: Partial<LandmarkMap>;
   landmarkMode: LandmarkMode;
   activeLandmark: LandmarkId | null; // which landmark handle is selected
+  isDraggingLandmark: boolean;
+  useSymmetry: boolean;
   landmarksConfirmed: boolean;
 
   // ── Pipeline results (non-serialisable Three.js objects — no persist) ──
@@ -94,6 +96,8 @@ export interface RiggerState {
   setLandmark: (id: LandmarkId, pos: THREE.Vector3) => void;
   clearLandmarks: () => void;
   setActiveLandmark: (id: LandmarkId | null) => void;
+  setIsDraggingLandmark: (dragging: boolean) => void;
+  setUseSymmetry: (use: boolean) => void;
   setLandmarkMode: (mode: LandmarkMode) => void;
   confirmLandmarks: () => void;
   setFitResult: (r: FitResult) => void;
@@ -130,6 +134,8 @@ type RiggerStateData = Omit<
   | 'setLandmark'
   | 'clearLandmarks'
   | 'setActiveLandmark'
+  | 'setIsDraggingLandmark'
+  | 'setUseSymmetry'
   | 'setLandmarkMode'
   | 'confirmLandmarks'
   | 'setFitResult'
@@ -155,6 +161,8 @@ const DEFAULT_STATE: RiggerStateData = {
   landmarks: {},
   landmarkMode: 'auto',
   activeLandmark: null,
+  isDraggingLandmark: false,
+  useSymmetry: true,
   landmarksConfirmed: false,
   // Pipeline results
   fitResult: null,
@@ -170,7 +178,7 @@ const DEFAULT_STATE: RiggerStateData = {
   // Options
   characterName: '',
   includeVrm: true,
-  diffuseIterations: 10,
+  diffuseIterations: 4,
   bilateralStrength: 0.5,
   requiredBonesOnly: false,
 };
@@ -220,18 +228,47 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
   // ── Landmarks ─────────────────────────────────────────────────────────────
 
   setLandmark: (id, pos) => {
-    set((s) => ({
-      landmarks: { ...s.landmarks, [id]: pos },
-      landmarksConfirmed: false,
-    }));
+    set((s) => {
+      const nextLandmarks: Partial<LandmarkMap> = { ...s.landmarks, [id]: pos };
+      if (s.useSymmetry) {
+        if (id === 'headTop' || id === 'neckBase') {
+          nextLandmarks[id] = new THREE.Vector3(0, pos.y, pos.z);
+        } else {
+          const pairMap: Partial<Record<LandmarkId, LandmarkId>> = {
+            leftShoulder: 'rightShoulder',
+            rightShoulder: 'leftShoulder',
+            leftHip: 'rightHip',
+            rightHip: 'leftHip',
+            leftAnkle: 'rightAnkle',
+            rightAnkle: 'leftAnkle',
+          };
+          const pairId = pairMap[id];
+          if (pairId) {
+            nextLandmarks[pairId] = new THREE.Vector3(-pos.x, pos.y, pos.z);
+          }
+        }
+      }
+      return {
+        landmarks: nextLandmarks,
+        landmarksConfirmed: false,
+      };
+    });
   },
 
   clearLandmarks: () => {
-    set({ landmarks: {}, landmarksConfirmed: false, activeLandmark: null });
+    set({ landmarks: {}, landmarksConfirmed: false, activeLandmark: null, isDraggingLandmark: false });
   },
 
   setActiveLandmark: (id) => {
     set({ activeLandmark: id });
+  },
+
+  setIsDraggingLandmark: (dragging) => {
+    set({ isDraggingLandmark: dragging });
+  },
+
+  setUseSymmetry: (use) => {
+    set({ useSymmetry: use });
   },
 
   setLandmarkMode: (mode) => {
@@ -259,7 +296,11 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
 
   setProgress: (p) => set({ progress: p }),
 
-  setError: (e) => set({ error: e, stage: e !== null ? 'error' : 'idle' }),
+  setError: (e) => set((s) => ({
+    error: e,
+    // Only change stage when setting an error; clearing error keeps current stage.
+    stage: e !== null ? 'error' : s.stage,
+  })),
 
   // ── Preview toggles ───────────────────────────────────────────────────────
 

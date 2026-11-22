@@ -12,11 +12,21 @@ export function navigateCategory(id: EditorCategory): void {
   if (id !== 'outfit') previous = id;
   state().endFaceCompare(); state().endFaceEdit();
   if (category === 'face' && id !== 'face') state().applyFaceBaseline();
-  const tabs = { preset: 'PRESET', face: 'FACE SHAPE', hair: 'HAIR', body: 'BODY', outfit: 'EQUIPMENT', styling: 'FACE' };
+  const tabs: Record<EditorCategory, string> = {
+    preset: 'PRESET',
+    face: 'FACE SHAPE',
+    hair: 'HAIR',
+    body: 'BODY',
+    outfit: 'EQUIPMENT',
+    styling: 'FACE',
+  };
   state().setPrimaryTab(tabs[id]);
   state().setWorkspace('edit');
   if (id === 'face') state().applyFaceBaseline();
-  if (id === 'body' && !state().bodyTab) state().setBodyTab('physique');
+  if (id === 'body') {
+    if (!state().bodyTab) state().setBodyTab('physique');
+    state().setCameraFraming('body');
+  }
   if (id === 'outfit' && !state().bodyTab) state().setBodyTab('gear');
   if (id === 'styling') {
     const kind = (state().subTab || 'skin').toLowerCase();

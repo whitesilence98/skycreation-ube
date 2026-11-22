@@ -82,6 +82,9 @@ export const ANATOMY_PARAMS = [
   param('body.buttSize', 'body', 'Butt volume', 'rig'),
   param('body.thighWidth', 'body', 'Thigh fullness', 'rig'),
   param('body.belly', 'body', 'Belly softness', 'rig'),
+  param('body.handSize', 'body', 'Hand size'),
+  param('body.fingerLength', 'body', 'Finger length', 'rig'),
+  param('body.footSize', 'body', 'Foot size'),
   param('skin.tone', 'surface', 'Skin tone', 'material'),
 ] as const;
 export type AnatomyParamId = (typeof ANATOMY_PARAMS)[number]['id'];

@@ -7,6 +7,9 @@ import { downloadPresetJson } from '@/lib/presets/download';
 import { useGlbExport } from '@/components/hud/useGlbExport';
 import { exportCharacterPackage } from '@/lib/exportPackage';
 import { importPresetFromFiles } from '@/lib/head/nifImport';
+import { runWardrobeBatchBuild, type BatchBuildProgress } from '@/lib/bodyslide/batchBuilder';
+import { BatchBuildModal } from './bodyslide/BatchBuildModal';
+import { useBodySlideStore } from '@/lib/bodyslide/store';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
@@ -38,6 +41,27 @@ export function PresetIO({ manifest }: PresetIOProps) {
   const [busy, setBusy] = useState(false);
   const characterName = useCharacter((s) => s.name);
   const [exportingPackage, setExportingPackage] = useState(false);
+  const bodySlideSliders = useBodySlideStore((s) => s.sliders);
+  const [batchProgress, setBatchProgress] = useState<BatchBuildProgress | null>(null);
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+  const [isBatchBuilding, setIsBatchBuilding] = useState(false);
+
+  const onStartBatchBuild = async () => {
+    setOpen(false);
+    setIsBatchBuilding(true);
+    setIsBatchModalOpen(true);
+    try {
+      await runWardrobeBatchBuild({
+        sliders: bodySlideSliders,
+        onProgress: (p) => setBatchProgress(p),
+      });
+      flash({ kind: 'ok', text: 'WARDROBE CONFORMED WITH ZERO CLIPPING' });
+    } catch (err) {
+      flash({ kind: 'error', text: err instanceof Error ? err.message : 'Batch build failed' });
+    } finally {
+      setIsBatchBuilding(false);
+    }
+  };
 
   // Close dropdown on outside click or Escape key
   useEffect(() => {
@@ -298,6 +322,33 @@ export function PresetIO({ manifest }: PresetIOProps) {
                   </span>
                 </div>
               </button>
+              <div className="mx-1 h-px bg-[#463a2e]/40" />
+
+              {/* 4. Batch Build Wardrobe (Converting Outfits) */}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={onStartBatchBuild}
+                disabled={isBatchBuilding || exportingPackage || exportingGlb}
+                className="group relative flex w-full items-start gap-2.5 rounded-[2px] border border-transparent px-2 py-1.5 text-left transition-all duration-150 hover:border-[#d4b483]/45 hover:bg-[#d4b483]/12 disabled:opacity-40"
+              >
+                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[2px] border border-[#d4b483]/30 bg-black/45 text-[#d4b483] transition-all group-hover:border-[#eac87f] group-hover:text-[#f2dfbe] group-hover:shadow-[0_0_8px_rgba(234,200,127,0.3)]">
+                  <span className="text-[12px] font-bold text-[#eac87f]">✦</span>
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="text-[10px] font-medium tracking-[0.1em] text-[#e8dcce] group-hover:text-[#fff]">
+                      BATCH BUILD WARDROBE
+                    </span>
+                    <span className="rounded-xs border border-[#d4b483]/35 bg-[#d4b483]/15 px-1 py-0.5 font-mono text-[10px] tracking-wider text-[#eac87f]">
+                      51 MESHES
+                    </span>
+                  </div>
+                  <span className="mt-0.5 text-[10px] leading-tight text-[#9a9182] group-hover:text-[#c4bcad]">
+                    Conform all Clothes Pack 6 pieces to UBE Necoco
+                  </span>
+                </div>
+              </button>
             </div>
 
             {/* Footer */}
@@ -307,6 +358,12 @@ export function PresetIO({ manifest }: PresetIOProps) {
           </div>
         )}
       </div>
+
+      <BatchBuildModal
+        isOpen={isBatchModalOpen}
+        progress={batchProgress}
+        onClose={() => setIsBatchModalOpen(false)}
+      />
 
       {status && (
         <span

@@ -1,0 +1,220 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<SliderPresets>
+    <Preset name="UBE Necoco for Converting Outfits" set="UBE SE 2.0 - Necoco Body">
+        <Group name="UBE"/>
+        <Group name="UBE Female"/>
+        <Group name="UBE Male"/>
+        <Group name="UBE Outfit"/>
+        <SetSlider name="Amazon" size="big" value="20"/>
+        <SetSlider name="AnkleThickness p|n" size="big" value="-80"/>
+        <SetSlider name="AnusSize" size="big" value="30"/>
+        <SetSlider name="AnusSize" size="small" value="56"/>
+        <SetSlider name="AnusTriangular" size="big" value="200"/>
+        <SetSlider name="AponeurosisExternalOblique" size="big" value="20"/>
+        <SetSlider name="AponeurosisExternalOblique" size="small" value="21"/>
+        <SetSlider name="AreolaErection" size="big" value="5"/>
+        <SetSlider name="AreolaHorizontal" size="big" value="5"/>
+        <SetSlider name="AreolaHorizontal" size="small" value="5"/>
+        <SetSlider name="AreolaVertical" size="big" value="-5"/>
+        <SetSlider name="AreolaeSizeBig" size="big" value="100"/>
+        <SetSlider name="AreolaeSizeBig_UV_fix" size="big" value="100"/>
+        <SetSlider name="AreolaeSizeSmall_UV_fix" size="big" value="150"/>
+        <SetSlider name="AreolaeSizeSmall_UV_fix" size="small" value="55"/>
+        <SetSlider name="Arms_width" size="big" value="20"/>
+        <SetSlider name="Arms_width" size="small" value="-20"/>
+        <SetSlider name="BackFatFolds" size="big" value="25"/>
+        <SetSlider name="BackValley" size="big" value="50"/>
+        <SetSlider name="BackValley" size="small" value="46"/>
+        <SetSlider name="BellyFatty" size="big" value="25"/>
+        <SetSlider name="BellyHorizontalCrease" size="big" value="10"/>
+        <SetSlider name="BellyVerticalCrease" size="big" value="30"/>
+        <SetSlider name="BellyVerticalCrease" size="small" value="55"/>
+        <SetSlider name="BellyVerticalCrease_Lower" size="small" value="9"/>
+        <SetSlider name="BellyWidth n|p" size="small" value="-20"/>
+        <SetSlider name="Belly_Prominence" size="big" value="50"/>
+        <SetSlider name="Belly_Prominence" size="small" value="17"/>
+        <SetSlider name="Belly_lower_crease" size="small" value="-50"/>
+        <SetSlider name="Biceps" size="big" value="10"/>
+        <SetSlider name="Big_SaggyBreasts" size="big" value="34"/>
+        <SetSlider name="BiggerAnus" size="big" value="20"/>
+        <SetSlider name="BiggerAnus" size="small" value="31"/>
+        <SetSlider name="Bowed_Calves" size="big" value="50"/>
+        <SetSlider name="Breast Diameter_big" size="big" value="6"/>
+        <SetSlider name="Breast Diameter_small" size="big" value="94"/>
+        <SetSlider name="BreastCenterGapLowerHeight n|p" size="big" value="-82"/>
+        <SetSlider name="BreastFlat" size="big" value="13"/>
+        <SetSlider name="BreastFlat" size="small" value="13"/>
+        <SetSlider name="BreastUnderCurve" size="big" value="200"/>
+        <SetSlider name="BreastUpperCurve n|p" size="big" value="-10"/>
+        <SetSlider name="BreastUpperCurve n|p" size="small" value="31"/>
+        <SetSlider name="BreastsBigger" size="big" value="31"/>
+        <SetSlider name="BreastsCupSag n|p" size="big" value="26"/>
+        <SetSlider name="BreastsPositionWidth n|p" size="big" value="-70"/>
+        <SetSlider name="BreastsRotate_Y" size="big" value="-12"/>
+        <SetSlider name="BreastsRotate_Y" size="small" value="33"/>
+        <SetSlider name="BreastsSmaller" size="big" value="-26"/>
+        <SetSlider name="BreastsTBD" size="big" value="8"/>
+        <SetSlider name="BreastsTBD" size="small" value="31"/>
+        <SetSlider name="BreastsZero" size="big" value="-153"/>
+        <SetSlider name="ChestUpperSize n|p" size="big" value="-60"/>
+        <SetSlider name="ClaviclesAngle" size="small" value="17"/>
+        <SetSlider name="ClaviclesFront" size="big" value="10"/>
+        <SetSlider name="Clavicles_Center_height" size="big" value="20"/>
+        <SetSlider name="Clavicles_Center_height" size="small" value="21"/>
+        <SetSlider name="Clavicles_Width n|p" size="big" value="70"/>
+        <SetSlider name="Clavicles_Width n|p" size="small" value="100"/>
+        <SetSlider name="ClitorisErection" size="big" value="100"/>
+        <SetSlider name="CostalAnglePointed" size="big" value="40"/>
+        <SetSlider name="CostalAnglePointed" size="small" value="21"/>
+        <SetSlider name="Donaught" size="big" value="8"/>
+        <SetSlider name="ExternalObliqueStraighten" size="big" value="10"/>
+        <SetSlider name="ExternalObliqueStraighten" size="small" value="10"/>
+        <SetSlider name="FitnessDetails_2.0" size="big" value="10"/>
+        <SetSlider name="ForearmSize" size="big" value="30"/>
+        <SetSlider name="FrontRibsProminence" size="big" value="40"/>
+        <SetSlider name="FrontRibsProminence" size="small" value="52"/>
+        <SetSlider name="GluteFolds" size="big" value="50"/>
+        <SetSlider name="GluteFolds" size="small" value="9"/>
+        <SetSlider name="GluteHeight p|n" size="big" value="67"/>
+        <SetSlider name="GluteInnerHeight p|n" size="small" value="9"/>
+        <SetSlider name="GluteLower" size="small" value="61"/>
+        <SetSlider name="GluteLowerHeight p|n" size="big" value="-40"/>
+        <SetSlider name="GluteLowerWidth p|n" size="big" value="50"/>
+        <SetSlider name="GluteLowerWidth p|n" size="small" value="9"/>
+        <SetSlider name="GluteSeparateWidth p|n" size="big" value="100"/>
+        <SetSlider name="GluteSeparateWidth p|n" size="small" value="64"/>
+        <SetSlider name="GluteSize p|n" size="big" value="33"/>
+        <SetSlider name="GluteSize p|n" size="small" value="32"/>
+        <SetSlider name="GluteSpread p|n" size="big" value="100"/>
+        <SetSlider name="GluteStretch p|n" size="big" value="65"/>
+        <SetSlider name="GluteStretch p|n" size="small" value="100"/>
+        <SetSlider name="GluteTwistX p|n" size="big" value="20"/>
+        <SetSlider name="GluteUpperWidth p|n" size="big" value="65"/>
+        <SetSlider name="GluteUpperWidth p|n" size="small" value="34"/>
+        <SetSlider name="GlutesUpperDepth p|n" size="big" value="140"/>
+        <SetSlider name="Glutes_tighter" size="big" value="20"/>
+        <SetSlider name="GluteusDefinition" size="small" value="38"/>
+        <SetSlider name="GreaterTrochanterBone" size="big" value="100"/>
+        <SetSlider name="HigherAbs" size="big" value="10"/>
+        <SetSlider name="HigherAbs" size="small" value="44"/>
+        <SetSlider name="HigherAbs_crease" size="small" value="30"/>
+        <SetSlider name="HipHeight p|n" size="big" value="70"/>
+        <SetSlider name="HipPointyBones" size="big" value="80"/>
+        <SetSlider name="HipPointyBones" size="small" value="16"/>
+        <SetSlider name="HipSize p|n" size="big" value="40"/>
+        <SetSlider name="HipSize p|n" size="small" value="40"/>
+        <SetSlider name="Hip_Upper_Width n|p" size="big" value="40"/>
+        <SetSlider name="Hip_Wide" size="big" value="80"/>
+        <SetSlider name="Hip_narrow" size="big" value="-70"/>
+        <SetSlider name="HipsAndLegsDistanceApart p|n" size="big" value="50"/>
+        <SetSlider name="HipsAndLegsDistanceApart p|n" size="small" value="30"/>
+        <SetSlider name="HipsOuterBonesFatty" size="big" value="80"/>
+        <SetSlider name="HipsOuterBonesFatty" size="small" value="16"/>
+        <SetSlider name="HipsSideMuscles" size="big" value="50"/>
+        <SetSlider name="HipsSideMuscles" size="small" value="15"/>
+        <SetSlider name="Juicy_body" size="big" value="41"/>
+        <SetSlider name="Juicy_body" size="small" value="29"/>
+        <SetSlider name="Juicy_breasts" size="big" value="41"/>
+        <SetSlider name="Juicy_breasts" size="small" value="44"/>
+        <SetSlider name="KneeDefinition" size="big" value="50"/>
+        <SetSlider name="KneeDefinition" size="small" value="47"/>
+        <SetSlider name="KneeOuter p|n" size="big" value="58"/>
+        <SetSlider name="KneeOuter p|n" size="small" value="18"/>
+        <SetSlider name="LatsSize" size="big" value="-20"/>
+        <SetSlider name="LatsSize" size="small" value="2"/>
+        <SetSlider name="LessProminentAbs" size="big" value="-50"/>
+        <SetSlider name="LowerInnerThighSize p|n" size="small" value="11"/>
+        <SetSlider name="LowerOuterThighSize Bigger" size="small" value="25"/>
+        <SetSlider name="LowerThighsSizeBig" size="big" value="10"/>
+        <SetSlider name="LowerThighsSizeBig" size="small" value="23"/>
+        <SetSlider name="LowerThighsSizeSmall" size="big" value="20"/>
+        <SetSlider name="LowerThighsSizeSmall" size="small" value="100"/>
+        <SetSlider name="MusclyArms" size="big" value="-20"/>
+        <SetSlider name="NEW_NippleCircularCrease_Uv_fix" size="big" value="20"/>
+        <SetSlider name="NEW_NippleDiameter_neg_value_Uv_fix" size="big" value="100"/>
+        <SetSlider name="NEW_Nipples_Fantasy_UV_fix" size="big" value="100"/>
+        <SetSlider name="Navel Width n|p" size="big" value="50"/>
+        <SetSlider name="Navel Width n|p" size="small" value="38"/>
+        <SetSlider name="Necoco_Body_Addon_Belly" size="big" value="100"/>
+        <SetSlider name="Necoco_Body_Addon_Butt" size="big" value="100"/>
+        <SetSlider name="Necoco_Body_Addon_Leg" size="big" value="100"/>
+        <SetSlider name="Necoco_Body_Addon_Lewd_Zone" size="big" value="100"/>
+        <SetSlider name="Necoco_Body_Addon_Upper_Body_Smooth" size="big" value="100"/>
+        <SetSlider name="Necoco_Boob_Addon_Bom39" size="big" value="65"/>
+        <SetSlider name="Necoco_Boob_Addon_MafaVam" size="big" value="100"/>
+        <SetSlider name="Necoco_Boob_Base_For_Body_with_Boob" size="big" value="100"/>
+        <SetSlider name="NippleCircularCrease" size="big" value="20"/>
+        <SetSlider name="NippleCreaseHorizontal" size="big" value="160"/>
+        <SetSlider name="NippleCreaseVertical" size="big" value="100"/>
+        <SetSlider name="NippleDiameter n|p" size="big" value="100"/>
+        <SetSlider name="NippleDispertionSides n|p" size="big" value="114"/>
+        <SetSlider name="NippleHeight n|p" size="big" value="-50"/>
+        <SetSlider name="NippleInverted_PuffyAreola" size="small" value="7"/>
+        <SetSlider name="NippleLength" size="big" value="20"/>
+        <SetSlider name="Nippleinverted" size="small" value="100"/>
+        <SetSlider name="NipplesPerkiness" size="big" value="43"/>
+        <SetSlider name="NipplesPerkiness" size="small" value="20"/>
+        <SetSlider name="NipplesShowUp" size="big" value="150"/>
+        <SetSlider name="NipplesShowUp" size="small" value="50"/>
+        <SetSlider name="Nipples_Fantasy" size="big" value="100"/>
+        <SetSlider name="Nipples_Fantasy" size="small" value="32"/>
+        <SetSlider name="Peachy" size="small" value="12"/>
+        <SetSlider name="PubicAreaHilly" size="big" value="37"/>
+        <SetSlider name="PubicAreaHilly" size="small" value="24"/>
+        <SetSlider name="PubicAreaSize p|n" size="big" value="58"/>
+        <SetSlider name="PubicAreaSize p|n" size="small" value="48"/>
+        <SetSlider name="PussyCute" size="big" value="46"/>
+        <SetSlider name="PussyCute" size="small" value="77"/>
+        <SetSlider name="RibcageSize n|p" size="big" value="10"/>
+        <SetSlider name="SacralDimples" size="big" value="55"/>
+        <SetSlider name="SaggingBreastsZone" size="big" value="100"/>
+        <SetSlider name="ScapulaDepth" size="big" value="10"/>
+        <SetSlider name="ScapulaDepth" size="small" value="18"/>
+        <SetSlider name="ShinSize p|n" size="small" value="26"/>
+        <SetSlider name="Shin_Forward" size="big" value="37"/>
+        <SetSlider name="ShoulderOuterSize n|p" size="small" value="-10"/>
+        <SetSlider name="ShoulderWidthSmall" size="small" value="100"/>
+        <SetSlider name="Skinny2.0" size="big" value="20"/>
+        <SetSlider name="Skinny2.0" size="small" value="34"/>
+        <SetSlider name="SmoothHips" size="big" value="20"/>
+        <SetSlider name="SmoothHips" size="small" value="60"/>
+        <SetSlider name="SpineDiscs_Prominence" size="big" value="60"/>
+        <SetSlider name="SpineMuscles" size="big" value="-20"/>
+        <SetSlider name="SpineMuscles" size="small" value="2"/>
+        <SetSlider name="SquarePeg3d" size="big" value="20"/>
+        <SetSlider name="SternumDepth n|p" size="big" value="3"/>
+        <SetSlider name="SternumDepth n|p" size="small" value="10"/>
+        <SetSlider name="TBD  2.0" size="big" value="6"/>
+        <SetSlider name="TBD  2.0" size="small" value="17"/>
+        <SetSlider name="Thicc_calves" size="big" value="-10"/>
+        <SetSlider name="Thicc_forearms" size="big" value="-20"/>
+        <SetSlider name="ThighApart" size="small" value="40"/>
+        <SetSlider name="ThighBackDepth" size="small" value="100"/>
+        <SetSlider name="ThighFrontDepth" size="big" value="40"/>
+        <SetSlider name="Thighs_Inner_Size_n|p" size="big" value="37"/>
+        <SetSlider name="Thighs_Inner_Size_n|p" size="small" value="39"/>
+        <SetSlider name="Trapezius_lower" size="big" value="10"/>
+        <SetSlider name="Trapezius_smaller" size="big" value="10"/>
+        <SetSlider name="Trapezius_upper" size="big" value="-30"/>
+        <SetSlider name="Triceps" size="big" value="10"/>
+        <SetSlider name="UpperArmSize n|p" size="big" value="-50"/>
+        <SetSlider name="UpperThighsChubby" size="small" value="30"/>
+        <SetSlider name="UpperThighsDepth" size="big" value="60"/>
+        <SetSlider name="UpperThighsSizeBig" size="big" value="-110"/>
+        <SetSlider name="UpperThighsSizeBig" size="small" value="40"/>
+        <SetSlider name="UpperThighsSizeSmall" size="big" value="-100"/>
+        <SetSlider name="UpperThighsSizeSmall" size="small" value="10"/>
+        <SetSlider name="Upper_TorsoSize n|p" size="big" value="30"/>
+        <SetSlider name="Vagina_Fantasy" size="big" value="100"/>
+        <SetSlider name="Vagina_Fantasy" size="small" value="100"/>
+        <SetSlider name="Vagina_shape" size="big" value="7"/>
+        <SetSlider name="Vagina_shape_wider" size="small" value="31"/>
+        <SetSlider name="VastusMedialis" size="big" value="-40"/>
+        <SetSlider name="VastusMedialis" size="small" value="10"/>
+        <SetSlider name="Venus" size="big" value="7"/>
+        <SetSlider name="WaistLine n|p" size="big" value="20"/>
+        <SetSlider name="WaistLine n|p" size="small" value="70"/>
+        <SetSlider name="WaistThickness n|p" size="big" value="30"/>
+        <SetSlider name="WristSize n|p" size="small" value="100"/>
+    </Preset>
+</SliderPresets>

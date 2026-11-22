@@ -35,6 +35,7 @@
     "check:skeleton": "node scripts/check_skeleton_hierarchy.cjs",
     "check:body-scale": "node scripts/check_body_scale.cjs",
     "check:retarget": "node scripts/check_retarget.cjs",
+    "check:retarget:quality": "python -I scripts/check_retarget_quality.py",
     "check:jslot": "node scripts/check_dynamic_jslot_import.cjs",
     "check:nif": "node scripts/check_nif_import.cjs",
     "check:equip": "node scripts/check_equipment_thumbnails.cjs",

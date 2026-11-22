@@ -8,28 +8,38 @@ import { cn } from '@/lib/cn';
  *
  * A ring, not a card. The reference's concentric hairlines and centred head
  * silhouette are the whole focal moment, and they earn it: the ring is also
- * the progress indicator and the file's own preview surface, so the one
+ * the progress indicator and the fitted head's preview surface, so the one
  * animated element is the one carrying state.
  *
  * Everything interactive is a real `<label>` wrapping a real file input, so
  * keyboard users and screen readers reach the native picker without a custom
  * affordance.
+ *
+ * The preview is the *sculpted UBE* silhouette built from the fitted mesh, not
+ * the uploaded OBJ. During fitting the ring spins with no percentage — the
+ * converter reports no intermediate progress and inventing one would be a lie.
  */
 
-export type DropZoneState = 'idle' | 'drag-over' | 'parsing' | 'rejected' | 'staged' | 'image';
+export type DropZoneState =
+  | 'idle'
+  | 'drag-over'
+  | 'converting'
+  | 'preview-ready'
+  | 'rejected'
+  | 'image';
 
 export interface DropZoneProps {
   state: DropZoneState;
   accept: string;
-  /** Staged mesh preview, already projected to a square edge list. */
+  /** Fitted-UBE preview, already projected to a square edge list. */
   preview?: { edges: Float32Array; size: number } | null;
-  /** Staged image object URL, shown instead of the ring glyph. */
+  /** Photo object URL, shown instead of the ring glyph (preview-only). */
   imageUrl?: string | null;
-  /** File name shown while parsing or staged. */
+  /** File name shown while fitting or previewing. */
   fileName?: string | null;
   /** Human-readable reason for a rejection. */
   error?: string | null;
-  /** Detail line under the headline while staged, e.g. "11,498 verts · 22,044 tris". */
+  /** Fit summary line under the headline while previewing. */
   detail?: string | null;
   onFile: (file: File) => void;
   onDragStateChange: (over: boolean) => void;
@@ -48,11 +58,10 @@ function HeadGlyph({ className }: { className?: string }) {
 }
 
 /**
- * Draw the staged mesh's projected edges onto a canvas.
+ * Ink the fitted mesh's projected edges onto a canvas.
  *
- * The edge list is precomputed when the file is parsed (see
- * `lib/smart/importHeadMesh.ts`); this only inks it. Kept separate from the
- * parse so a re-render never re-walks the mesh.
+ * The edge list is precomputed from the fitted UBE (`lib/smart/retarget.ts`);
+ * this only draws it, so a re-render never re-walks the mesh.
  */
 function MeshPreview({ preview }: { preview: { edges: Float32Array; size: number } }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -94,7 +103,8 @@ export function SmartDropZone({
   state, accept, preview, imageUrl, fileName, error, detail, onFile, onDragStateChange,
 }: DropZoneProps) {
   const active = state === 'drag-over';
-  const busy = state === 'parsing';
+  const busy = state === 'converting';
+  const ready = state === 'preview-ready';
 
   const handleFiles = (files: FileList | null) => {
     const file = files?.[0];
@@ -103,20 +113,22 @@ export function SmartDropZone({
 
   const headline = useMemo(() => {
     switch (state) {
-      case 'parsing': return 'Reading your file…';
+      case 'converting': return 'Fitting your head to the UBE base…';
       case 'rejected': return 'That file could not be used';
-      case 'staged': return 'Ready to apply';
+      case 'preview-ready': return 'Previewing your head';
       case 'image': return 'Photo preview only';
-      default: return 'Upload your photo to generate your custom character';
+      default: return 'Fit an OBJ head to your character';
     }
   }, [state]);
 
   const detailLine = useMemo(() => {
-    if (state === 'rejected') return error ?? 'This file could not be read.';
-    if (state === 'image') return 'Photo matching is not available in this build. Drop a 3D mesh (.obj, .glb) to change the character.';
-    if (busy) return fileName ? `${fileName} · reading geometry` : 'Reading geometry';
-    if (state === 'staged') return detail ?? fileName ?? null;
-    return 'Drop a .obj, .glb or .gltf here, or choose a file. The mesh replaces the head on the live character.';
+    if (state === 'rejected') return error ?? 'This file could not be used.';
+    if (state === 'image') {
+      return 'This photo is a preview only — drop an .obj head to fit it onto the UBE base.';
+    }
+    if (busy) return fileName ? `${fileName} · fitting (~1 min)` : 'Fitting (~1 min)';
+    if (state === 'preview-ready') return detail ?? fileName ?? null;
+    return 'Drop an isolated .obj head to fit it onto the UBE base. Photos are a preview only.';
   }, [state, error, fileName, detail, busy]);
 
   return (
@@ -128,7 +140,7 @@ export function SmartDropZone({
           active && 'is-drag-over',
           busy && 'is-parsing',
           state === 'rejected' && 'is-rejected',
-          (state === 'staged' || state === 'image') && 'is-staged',
+          (state === 'preview-ready' || state === 'image') && 'is-staged',
         )}
         onDragOver={(event) => {
           event.preventDefault();
@@ -150,7 +162,7 @@ export function SmartDropZone({
           type="file"
           accept={accept}
           className="sr-only"
-          aria-label="Choose a file for smart customization"
+          aria-label="Choose an .obj head to fit or a photo to preview"
           onChange={(event) => {
             handleFiles(event.target.files);
             /* Reset so re-picking the same file still fires a change. */
@@ -167,7 +179,7 @@ export function SmartDropZone({
         <span className="creator-smart-ring-body">
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- object URL of a local pick, never a remote asset
-            <img src={imageUrl} alt="Selected photo" className="h-full w-full rounded-full object-cover" />
+            <img src={imageUrl} alt="Selected photo preview" className="h-full w-full rounded-full object-cover" />
           ) : preview ? (
             <MeshPreview preview={preview} />
           ) : (
@@ -189,7 +201,7 @@ export function SmartDropZone({
       >
         {headline}
       </p>
-      <p className="creator-smart-detail">{detailLine}</p>
+      <p className="creator-smart-detail" aria-live="polite">{detailLine}</p>
 
       <label className="creator-smart-upload">
         <input
@@ -205,7 +217,7 @@ export function SmartDropZone({
           <path d="M12 16V4m0 0L8 8m4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" strokeLinecap="round" />
         </svg>
-        <span>{state === 'staged' ? 'Choose another file' : 'Upload Image'}</span>
+        <span>{ready ? 'Fit another head' : busy ? 'Fitting…' : 'Upload .obj or photo'}</span>
       </label>
     </div>
   );

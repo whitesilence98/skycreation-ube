@@ -212,6 +212,22 @@ export function IconSearch({ className }: IconProps) {
   );
 }
 
+/** Sub-rail: Presets / Character Gallery / Album icon */
+export function IconSubPreset({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={cn('fill-none stroke-current stroke-[1.4]', className)} aria-hidden>
+      {/* Outer portrait / preset card frame */}
+      <rect x="4.5" y="3.5" width="15" height="17" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Head silhouette */}
+      <circle cx="12" cy="9.2" r="2.3" />
+      {/* Bust / shoulder contour */}
+      <path d="M7.5 17 C7.5 14.4 9.5 13.5 12 13.5 C14.5 13.5 16.5 14.4 16.5 17" strokeLinecap="round" />
+      {/* Top hanger / card tab */}
+      <line x1="8.5" y1="3.5" x2="15.5" y2="3.5" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /** Sub-rail: Face Customization / Sculpt icon */
 export function IconSubFace({ className }: IconProps) {
   return (
@@ -220,6 +236,27 @@ export function IconSubFace({ className }: IconProps) {
       <path d="M12 4 C16 4 19 7 19 12 C19 17 16 20 12 21" />
       <path d="M12 4 C8 4 6 7 6 12 C6 17 8 20 12 21" strokeDasharray="1.5 1.5" />
       <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** Sub-rail: Physique / Athletic Body Torso icon */
+export function IconSubPhysique({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={cn('fill-none stroke-current stroke-[1.4]', className)} aria-hidden>
+      {/* Torso silhouette: Neck to shoulders, waist taper, and hips */}
+      <path
+        d="M9.5 4 C8 5.2 5.5 6.8 4.5 8.5 C5.5 11 7 12.8 7.5 15 C8 17 6.5 19 6 20 C8.5 21 11 21 12 21 C13 21 15.5 21 18 20 C17.5 19 16 17 16.5 15 C17 12.8 18.5 11 19.5 8.5 C18.5 6.8 16 5.2 14.5 4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Neck arch */}
+      <path d="M9.5 4 C10.5 4.8 13.5 4.8 14.5 4" strokeLinecap="round" />
+      {/* Clavicle / Collarbone */}
+      <path d="M8 8 C10 9 11.5 8.5 12 7.2 C12.5 8.5 14 9 16 8" strokeLinecap="round" />
+      {/* Athletic abdominal / torso definition */}
+      <line x1="12" y1="9.5" x2="12" y2="15.5" strokeLinecap="round" />
+      <path d="M9 12 C10.5 13 13.5 13 15 12" strokeLinecap="round" />
     </svg>
   );
 }
@@ -246,6 +283,22 @@ export function IconSubHair({ className }: IconProps) {
       <path d="M12 7 C7.5 7 5 10 5 15 C5 17 6.5 19 7.5 18 C8.5 17 8.5 14 9.5 12 C10.5 10 13.5 10 14.5 12 C15.5 14 15.5 17 16.5 18 C17.5 19 19 17 19 15 C19 10 16.5 7 12 7 Z" />
       {/* Trailing back strand */}
       <path d="M12 5.5 C13.5 5.5 16 8 16.5 11 C15.5 10 13.5 9 12 9 Z" />
+    </svg>
+  );
+}
+
+/** Sub-rail: Outfit / Robe / Wardrobe icon */
+export function IconSubOutfit({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={cn('fill-none stroke-current stroke-[1.4]', className)} aria-hidden>
+      {/* Crossover collar */}
+      <path d="M8 5 L12 10 L16 5" />
+      <path d="M12 10 L9 19" />
+      <path d="M11 13 L15 19" />
+      {/* Shoulders and sleeves */}
+      <path d="M8 5 L3 9 L5 13 L8 11 L8 19 L16 19 L16 11 L19 13 L21 9 L16 5 Z" strokeLinejoin="round" />
+      {/* Sash */}
+      <line x1="8" y1="15" x2="16" y2="15" />
     </svg>
   );
 }

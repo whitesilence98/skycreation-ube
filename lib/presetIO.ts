@@ -14,6 +14,7 @@ import { ASSET_KINDS, type AssetSelection } from '@/lib/manifestSelect';
 import { isEquipSelection, type EquipSelection } from '@/lib/equipment';
 import type { AnatomySnapshot, AnatomyMode } from '@/lib/anatomy/params';
 import { coerceAnatomy, coerceAsymmetry, coerceAnatomyColors } from '@/lib/anatomy/validate';
+import { mapLegacySilhouetteToBodySlide } from '@/lib/bodyslide/store';
 
 /**
  * Import/export for character presets.
@@ -72,6 +73,8 @@ export interface PresetFile extends Partial<AnatomySnapshot> {
   /** Eyelash opacity 0–1. */
   lashesOpacity?: number;
   overlays?: OverlayLayer[];
+  /** Active BodySlide morph sliders. */
+  bodySlide?: Record<string, number>;
 }
 
 /**
@@ -219,6 +222,8 @@ export interface PresetPayload extends Partial<AnatomySnapshot> {
   /** Eyelash opacity 0–1, when the file records it. */
   lashesOpacity?: number;
   overlays?: OverlayLayer[];
+  /** Active BodySlide morph sliders. */
+  bodySlide?: Record<string, number>;
 }
 
 /**
@@ -378,6 +383,7 @@ export function buildPresetFile(args: {
   lashesColor?: string;
   lashesOpacity?: number;
   overlays?: OverlayLayer[];
+  bodySlide?: Record<string, number>;
 } & Partial<AnatomySnapshot>): PresetFile {
   return {
     format: PRESET_FORMAT,
@@ -402,6 +408,7 @@ export function buildPresetFile(args: {
     lashesColor: args.lashesColor,
     lashesOpacity: args.lashesOpacity,
     overlays: args.overlays,
+    bodySlide: args.bodySlide,
     anatomyMode: args.anatomyMode === 'advanced' ? 'advanced' : 'legacy',
     anatomy: coerceAnatomy(args.anatomy),
     anatomyAsymmetry: coerceAsymmetry(args.anatomyAsymmetry),
@@ -595,6 +602,10 @@ export function parsePreset(text: string, fileName?: string): PresetPayload {
       lashesColor: typeof obj.lashesColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(obj.lashesColor) ? obj.lashesColor : undefined,
       lashesOpacity: typeof obj.lashesOpacity === 'number' && Number.isFinite(obj.lashesOpacity) ? Math.min(1, Math.max(0, obj.lashesOpacity)) : undefined,
       overlays: sanitizeOverlayLayers(obj.overlays),
+      bodySlide:
+        obj.bodySlide && typeof obj.bodySlide === 'object' && !Array.isArray(obj.bodySlide)
+          ? (obj.bodySlide as Record<string, number>)
+          : mapLegacySilhouetteToBodySlide(coerceAnatomy(obj.anatomy)),
     };
   }
 

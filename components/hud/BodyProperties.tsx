@@ -3,7 +3,7 @@
 import { useCharacter, BODY_WEIGHT_ENABLED } from '@/lib/store';
 import { BODY_POSES } from '@/lib/character/poses';
 import { StudioCard } from '@/components/hud/common/StudioCard';
-import { HudSlider } from '@/components/hud/HudSlider';
+import { BracketSlider } from '@/components/hud/common/BracketSlider';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
@@ -26,6 +26,19 @@ export function BodyProperties({ manifest = null, onClose }: BodyPropertiesProps
   const bodyCollisionsEnabled = useCharacter((s) => s.bodyCollisionsEnabled);
   const setBodyCollisionsEnabled = useCharacter((s) => s.setBodyCollisionsEnabled);
   const triggerPhysicsImpulse = useCharacter((s) => s.triggerPhysicsImpulse);
+  const secondaryPhysicsEnabled = useCharacter((s) => s.secondaryPhysicsEnabled);
+  const setSecondaryPhysicsEnabled = useCharacter((s) => s.setSecondaryPhysicsEnabled);
+  const hairPhysicsEnabled = useCharacter((s) => s.hairPhysicsEnabled);
+  const setHairPhysicsEnabled = useCharacter((s) => s.setHairPhysicsEnabled);
+  const clothPhysicsEnabled = useCharacter((s) => s.clothPhysicsEnabled);
+  const setClothPhysicsEnabled = useCharacter((s) => s.setClothPhysicsEnabled);
+  const secondaryStiffness = useCharacter((s) => s.secondaryStiffness);
+  const setSecondaryStiffness = useCharacter((s) => s.setSecondaryStiffness);
+  const secondaryDamping = useCharacter((s) => s.secondaryDamping);
+  const setSecondaryDamping = useCharacter((s) => s.setSecondaryDamping);
+  const secondaryWindIntensity = useCharacter((s) => s.secondaryWindIntensity);
+  const setSecondaryWindIntensity = useCharacter((s) => s.setSecondaryWindIntensity);
+  const triggerSecondaryImpulse = useCharacter((s) => s.triggerSecondaryImpulse);
   const bodyPoseId = useCharacter((s) => s.bodyPoseId);
   const setBodyPose = useCharacter((s) => s.setBodyPose);
   const toggleUtil = useCharacter((s) => s.toggleUtil);
@@ -41,19 +54,17 @@ export function BodyProperties({ manifest = null, onClose }: BodyPropertiesProps
 
       {/* ── Body Weight Slider ──────────────────────────────────── */}
       <section className="mb-[16px]">
-        <HudSlider
+        <BracketSlider
           label="BODY WEIGHT"
-          suffix={!BODY_WEIGHT_ENABLED ? '(LOCKED AT 0%)' : hasBodyPair ? undefined : '(UNSUPPORTED)'}
           min={0}
           max={1}
           step={0.01}
           value={weight}
           disabled={!BODY_WEIGHT_ENABLED || !hasBodyPair}
-          display={!BODY_WEIGHT_ENABLED ? '0% (DISABLED)' : `${Math.round(weight * 100)}% (${weight.toFixed(2)})`}
+          display={!BODY_WEIGHT_ENABLED ? '0% (DISABLED)' : `${Math.round(weight * 100)}%`}
           onChange={(v) => {
             if (BODY_WEIGHT_ENABLED && hasBodyPair) setWeight(v);
           }}
-          bracketed
         />
         <p className="-mt-[8px] mb-[10px] text-[10px] leading-[1.5] text-[#a9a192]/65">
           {!BODY_WEIGHT_ENABLED
@@ -173,7 +184,7 @@ export function BodyProperties({ manifest = null, onClose }: BodyPropertiesProps
         {bodyPhysicsEnabled && (
           <>
             <div className="mb-[8px]">
-              <HudSlider
+              <BracketSlider
                 label="BOUNCINESS"
                 min={0}
                 max={1}
@@ -187,7 +198,6 @@ export function BodyProperties({ manifest = null, onClose }: BodyPropertiesProps
                       : `NATURAL (${bodyPhysicsBounciness.toFixed(2)})`
                 }
                 onChange={setBodyPhysicsBounciness}
-                bracketed
               />
             </div>
 
@@ -220,6 +230,121 @@ export function BodyProperties({ manifest = null, onClose }: BodyPropertiesProps
               Prevents hands and arms from clipping into the chest and hips in poses.
             </p>
           </>
+        )}
+      </section>
+
+      {/* ── Secondary Physics (SMP Hair & Garments) ─────────────── */}
+      <section className="mb-[16px] border-t border-[#d4b483]/15 pt-[12px]">
+        <div className="mb-[8px] flex items-center justify-between">
+          <h4 className="text-[10px] font-medium tracking-[0.12em] text-[#d8c9ad]">
+            SECONDARY DYNAMICS (SMP / SPRINGBONE)
+          </h4>
+          <button
+            type="button"
+            onClick={triggerSecondaryImpulse}
+            disabled={!secondaryPhysicsEnabled}
+            title="Trigger dynamic inertia to preview hair and skirt swing"
+            className={cn(
+              'border px-[6px] py-[2px] text-[10px] tracking-[0.08em] leading-tight transition-colors',
+              secondaryPhysicsEnabled
+                ? 'border-[#d4b483]/60 bg-[#d4b483]/12 text-[#e8c691] hover:border-[#d4b483] hover:bg-[#d4b483]/22 active:scale-95'
+                : 'border-[#8c8477]/20 bg-transparent text-[#8c8477]/40 cursor-not-allowed',
+            )}
+          >
+            TEST SWAY ⟲
+          </button>
+        </div>
+
+        {/* Global Secondary Toggle */}
+        <button
+          type="button"
+          onClick={() => setSecondaryPhysicsEnabled(!secondaryPhysicsEnabled)}
+          aria-pressed={secondaryPhysicsEnabled}
+          className={cn(
+            'flex w-full items-center justify-between border px-[8px] py-[6px] text-[10px] tracking-[0.09em] transition-colors mb-[8px]',
+            secondaryPhysicsEnabled
+              ? 'border-[#d4b483]/70 bg-[#d4b483]/14 text-[#e8c691] font-medium shadow-[0_0_10px_rgba(212,180,131,0.12)]'
+              : 'border-[#8c8477]/30 bg-black/20 text-[#a8a294]/70 hover:border-[#d4b483]/45 hover:text-[#d5cdbd]',
+          )}
+        >
+          <span className="flex items-center gap-[6px]">
+            <span
+              className={cn(
+                'inline-block h-[5px] w-[5px] rounded-full transition-colors',
+                secondaryPhysicsEnabled ? 'bg-[#d4b483] shadow-[0_0_6px_#d4b483]' : 'bg-[#8c8477]/40',
+              )}
+            />
+            SECONDARY PHYSICS ENGINE
+          </span>
+          <span className="num text-[10px] uppercase text-[#c9b184]/80">
+            {secondaryPhysicsEnabled ? 'ACTIVE' : 'OFF'}
+          </span>
+        </button>
+
+        {secondaryPhysicsEnabled && (
+          <div className="flex flex-col gap-2">
+            {/* Sub-toggles for Hair & Cloth */}
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setHairPhysicsEnabled(!hairPhysicsEnabled)}
+                aria-pressed={hairPhysicsEnabled}
+                className={cn(
+                  'flex items-center justify-between border px-[6px] py-[5px] text-[9px] tracking-wider transition-colors',
+                  hairPhysicsEnabled
+                    ? 'border-[#d4b483]/60 bg-[#d4b483]/12 text-[#e8c691]'
+                    : 'border-[#8c8477]/30 bg-black/20 text-[#8c8477]/60 hover:text-white',
+                )}
+              >
+                <span>HAIR SWAY</span>
+                <span className="text-[#c9b184]">{hairPhysicsEnabled ? 'ON' : 'OFF'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setClothPhysicsEnabled(!clothPhysicsEnabled)}
+                aria-pressed={clothPhysicsEnabled}
+                className={cn(
+                  'flex items-center justify-between border px-[6px] py-[5px] text-[9px] tracking-wider transition-colors',
+                  clothPhysicsEnabled
+                    ? 'border-[#d4b483]/60 bg-[#d4b483]/12 text-[#e8c691]'
+                    : 'border-[#8c8477]/30 bg-black/20 text-[#8c8477]/60 hover:text-white',
+                )}
+              >
+                <span>CLOTH FLOW</span>
+                <span className="text-[#c9b184]">{clothPhysicsEnabled ? 'ON' : 'OFF'}</span>
+              </button>
+            </div>
+
+            {/* Elasticity / Stiffness Slider */}
+            <div className="mt-1">
+              <BracketSlider
+                label="FLEXIBILITY / BOUNCE"
+                min={0.1}
+                max={0.9}
+                step={0.05}
+                value={1 - secondaryStiffness}
+                display={`${Math.round((1 - secondaryStiffness) * 100)}%`}
+                onChange={(v) => setSecondaryStiffness(1 - v)}
+              />
+            </div>
+
+            {/* Ambient Wind Drift */}
+            <div>
+              <BracketSlider
+                label="AMBIENT WIND SWAY"
+                min={0}
+                max={1}
+                step={0.05}
+                value={secondaryWindIntensity}
+                display={secondaryWindIntensity === 0 ? 'CALM' : `${Math.round(secondaryWindIntensity * 100)}%`}
+                onChange={setSecondaryWindIntensity}
+              />
+            </div>
+            <p className="mt-[2px] text-[10px] leading-[1.4] text-[#a9a192]/65">
+              Simulates dynamic inertia, momentum, and collision avoidance on hair strands, skirts, cloaks, and robes.
+            </p>
+          </div>
         )}
       </section>
 

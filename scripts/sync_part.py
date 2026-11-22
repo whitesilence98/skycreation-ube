@@ -95,6 +95,14 @@ def sync_single_part(cfg: dict, part_name: str, force: bool = False, catalogue_o
         return 1
 
     part_label = canonical if canonical else "all"
+
+    if canonical == "hair":
+        print("\n[i] Hair synchronization is retired:")
+        print("    Hairstyles are now managed as standalone .glb files in public/assets/hair/.")
+        print("    Use 'scripts/export_hair_nif_to_glb.py' to convert Skyrim NIF hairs to .glb,")
+        print("    and register them in 'lib/hairGlbRegistry.ts'.")
+        return 0
+
     t0 = time.perf_counter()
     print(f"\n>>> Starting sync for part: [{part_label.upper()}] ...")
 

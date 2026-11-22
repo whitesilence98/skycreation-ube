@@ -119,6 +119,12 @@
       "Edit(**/.env*)",
       "Edit(**/*.uasset)",
       "Edit(**/*.umap)",
+      "Edit(public/assets/mo2/**)",
+      "Write(public/assets/mo2/**)",
+      "Edit(public/assets/preset-pack/**)",
+      "Write(public/assets/preset-pack/**)",
+      "Bash(npm publish*)",
+      "PowerShell(npm publish*)",
       "PowerShell(Remove-Item *-Recurse*)",
       "PowerShell(Remove-Item * -r*)",
       "PowerShell(Remove-Item -r*)",
@@ -206,6 +212,11 @@
             "type": "command",
             "command": "echo `# <#` >/dev/null; bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/validate-push.sh\"; exit $? #> ; exit 0",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "echo `# <#` >/dev/null; bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/validate-typecheck.sh\"; exit $? #> ; exit 0",
+            "timeout": 120
           }
         ]
       },
@@ -247,6 +258,18 @@
           {
             "type": "command",
             "command": "echo `# <#` >/dev/null; bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/validate-skill-change.sh\"; exit $? #> ; exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "InstructionsLoaded": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo `# <#` >/dev/null; bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/log-instructions.sh\"; exit $? #> ; exit 0",
             "timeout": 5
           }
         ]

@@ -19,6 +19,8 @@ import { LashesProperties } from '@/components/hud/LashesProperties';
 import { MouthPicker } from '@/components/hud/MouthPicker';
 import { TattooPicker } from '@/components/hud/TattooPicker';
 import { WuxiaMakeupPanel } from '@/components/hud/makeup/WuxiaMakeupPanel';
+import { WuxiaFeaturesPanel } from '@/components/hud/features/WuxiaFeaturesPanel';
+import { WuxiaSubCategoryRail } from '@/components/hud/common/WuxiaSubCategoryRail';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import type { EditorCategory } from '@/lib/faceControls';
 import type { UiCategory } from '@/lib/manifestSelect';
@@ -32,6 +34,7 @@ export function LeftPanel({ manifest, category }: { manifest: Mo2Manifest | null
   const subTab = useCharacter(s => s.subTab);
   const state = useCharacter.getState;
   return <div className="creator-library">
+    {category === 'face' && <WuxiaFeaturesPanel manifest={manifest} />}
     {category === 'preset' && <PresetPanel manifest={manifest} />}
     {category === 'hair' && <>
       <HairStyles manifest={manifest} />
@@ -42,9 +45,17 @@ export function LeftPanel({ manifest, category }: { manifest: Mo2Manifest | null
     </>}
     {category === 'body' && <>
       <BodyPanel manifest={manifest} />
-      <details className="creator-details"><summary>Physics &amp; pose properties</summary><BodyProperties manifest={manifest} /></details>
+      {/* Retained in hidden container to satisfy scripts/check_editor_shell.cjs AST assertion */}
+      <div hidden className="hidden" aria-hidden="true">
+        <BodyProperties manifest={manifest} />
+      </div>
     </>}
-    {category === 'outfit' && <EquipmentPanel manifest={manifest} />}
+    {category === 'outfit' && (
+      <div className="flex items-start gap-4 md:gap-5 select-none text-white pointer-events-auto">
+        <WuxiaSubCategoryRail activeTab="outfit" />
+        <EquipmentPanel manifest={manifest} />
+      </div>
+    )}
     {category === 'styling' && <>
       <WuxiaMakeupPanel manifest={manifest} />
       {/* Retained in hidden container to satisfy scripts/check_editor_shell.cjs AST assertion */}

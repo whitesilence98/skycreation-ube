@@ -1046,7 +1046,7 @@ def _nif_authored_geometry(path: Path, frame: str = "head") -> dict[str, object]
             raise ValueError(f"shape {shape['name']} has no triangles")
         fields = shape["fields"]
         if int(fields["shader"]) < 0:
-            if not dynamic and not re.search(r"virtual|dummy|collision|proxy", shape["name"], re.I):
+            if not dynamic and not re.search(r"virtual|dummy|collision|proxy|col|bound|marker", shape["name"], re.I):
                 # A static shape with no shader is not a layout this decoder
                 # has ever accepted; keep that refusal rather than inventing
                 # an untextured material for it.

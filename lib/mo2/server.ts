@@ -22,6 +22,7 @@ const PUBLIC = ASSET_SOURCE.output;
 const CATALOGUE_DIR = path.join(PUBLIC, 'catalogue');
 const CACHE_DIR = path.join(PUBLIC, 'cache');
 const WORKER = path.join(PROJECT_ROOT, 'scripts', 'convert_worker.py');
+const WARDROBE_ROOT = path.join(PROJECT_ROOT, 'public', 'assets', 'wardrobe', 'doneb14n-cp6');
 
 /** Conversions in flight, keyed by cache path, so a thumbnail burst that hits
  *  the same file 20 times runs the decoder once. */
@@ -156,10 +157,25 @@ export async function findEntry(
  * the real path must sit under the real archive root.
  */
 export async function resolveArchivePath(entry: CatalogueEntry): Promise<string | null> {
+  const normRel = entry.rel.replace(/\\/g, '/');
+
+  // 1. Resolve from self-contained public/assets/wardrobe/doneb14n-cp6/ if clothing asset
+  if (normRel.startsWith('clothing/') || entry.kind === 'clothingMesh' || entry.kind === 'clothing') {
+    const subRel = normRel.replace(/^clothing\//, '');
+    const wardrobeCandidate = path.resolve(WARDROBE_ROOT, subRel);
+    const wardrobeRel = path.relative(WARDROBE_ROOT, wardrobeCandidate);
+    if (!wardrobeRel.startsWith('..') && !path.isAbsolute(wardrobeRel)) {
+      const stat = await fs.stat(wardrobeCandidate).catch(() => null);
+      if (stat?.isFile()) {
+        return wardrobeCandidate;
+      }
+    }
+  }
+
   const rootReal = await fs.realpath(MODS_ROOT).catch(() => null);
   if (!rootReal) return null;
 
-  const candidate = path.resolve(rootReal, entry.rel.replace(/\\/g, '/'));
+  const candidate = path.resolve(rootReal, normRel);
   const rel = path.relative(rootReal, candidate);
   if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
 

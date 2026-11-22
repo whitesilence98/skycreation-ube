@@ -1,34 +1,30 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 import { useCharacter } from '@/lib/store';
-import type { Mo2Manifest } from '@/lib/head/faceTexture';
-import { MeshImportError } from '@/lib/smart/headMesh';
-import { readHeadFile } from '@/lib/smart/importHeadMesh';
-import { useSmartSession } from '@/lib/smart/session';
 import {
-  IMAGE_ACCEPT,
-  MESH_ACCEPT,
+  discardPreview,
+  markDownloaded,
+  startConversion,
+  useSmartSession,
+} from '@/lib/smart/session';
+import {
+  SMART_ACCEPT,
   isImageFile,
-  isMeshFile,
-  meshModeEnabled,
+  isObjFile,
+  isUnsupportedMeshFile,
 } from '@/lib/smart/smartMode';
+import { downloadJslot, fitSummary } from '@/lib/smart/retarget';
 import { SmartDropZone } from '@/components/hud/smart/SmartDropZone';
 import '@/components/hud/smart/smart.css';
 
 /**
- * Smart Customization — the "make me a face" screen.
+ * Smart Customization — fit an isolated OBJ head onto the canonical UBE head.
  *
- * Composition follows the reference: a source rail on the left (Voice / Image,
- * plus the hidden Mesh test source), the ring dropzone in the left-centre
- * column, Gallery / Share on the right, and the hotkey bar at the bottom.
- * The character stays live on the canvas behind all of it, which is the point
- * of the screen — you see the change as you make it.
- *
- * The photo framing is kept deliberately: that is the product's promise. What
- * this build can actually do is assign a 3D head mesh, and the copy says so
- * rather than letting an upload silently do nothing.
+ * Only an OBJ is a fitting target; photos are preview-only and glTF/GLB is
+ * rejected explicitly. Orchestration lives in `lib/smart/session.ts` (shared
+ * with the footer); this component owns only the DOM and the fit panel.
  */
 
 const PREVIEW_SIZE = 132;
@@ -54,15 +50,6 @@ function IconImage({ className }: { className?: string }) {
   );
 }
 
-function IconMesh({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden fill="none" stroke="currentColor" strokeWidth="1.2">
-      <path d="M16 4 27 10v12L16 28 5 22V10Z" strokeLinejoin="round" />
-      <path d="M16 4v24M5 10l11 6 11-6M5 22l11-6 11 6" strokeLinejoin="round" opacity="0.55" />
-    </svg>
-  );
-}
-
 function IconGallery({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden fill="none" stroke="currentColor" strokeWidth="1.3">
@@ -83,156 +70,129 @@ function IconShare({ className }: { className?: string }) {
   );
 }
 
-export function SmartCustomization({ manifest: _manifest }: { manifest: Mo2Manifest | null }) {
-  const showToast = useCharacter(s => s.showToast);
-  const setAssets = useCharacter(s => s.setAssets);
-  const selectedHeadId = useCharacter(s => s.assetSelection.headMesh ?? null);
+/** Millimetres, one decimal, for the fit readout. */
+const mm = (metres: number) => `${(metres * 1000).toFixed(1)} mm`;
+const pct = (fraction: number) => `${Math.round(fraction * 100)}%`;
 
+export function SmartCustomization() {
   const status = useSmartSession(s => s.status);
   const error = useSmartSession(s => s.error);
   const imageUrl = useSmartSession(s => s.imageUrl);
   const staged = useSmartSession(s => s.staged);
-  const setStatus = useSmartSession(s => s.setStatus);
-  const setError = useSmartSession(s => s.setError);
-  const setImageUrl = useSmartSession(s => s.setImageUrl);
+  const downloaded = useSmartSession(s => s.downloaded);
+  const showImage = useSmartSession(s => s.showImage);
+  const reject = useSmartSession(s => s.reject);
 
-  const [dev] = useState(() => meshModeEnabled());
-  /* `?smart=mesh` opens straight into the mesh test source; without it the
-     Image tile is the only source and accepts both photos and meshes. */
-  const [source, setSource] = useState<'image' | 'mesh'>(() => (meshModeEnabled() ? 'mesh' : 'image'));
+  const showToast = useCharacter(s => s.showToast);
   const [dragOver, setDragOver] = useState(false);
   const ownedImageUrl = useRef<string | null>(null);
 
-  const accept = dev && source === 'mesh' ? MESH_ACCEPT : IMAGE_ACCEPT;
-
-  /* Object URLs are owned by this component; revoke on replace and unmount, or
-     every photo pick leaks an image blob for the life of the tab. */
-  useEffect(() => () => {
+  const revokeImage = useCallback(() => {
     if (ownedImageUrl.current) URL.revokeObjectURL(ownedImageUrl.current);
     ownedImageUrl.current = null;
   }, []);
 
-  const handleFile = useCallback(async (file: File) => {
-    setError(null);
+  /* Object URLs are owned here; revoke on replace and on unmount, or every photo
+     pick leaks a blob for the life of the tab. */
+  useEffect(() => () => revokeImage(), [revokeImage]);
+
+  /* Leaving the screen — navigation or unmount — cancels any in-flight fit and
+     restores a staged preview. After Apply the session is already reset, so this
+     restores nothing. */
+  useEffect(() => () => discardPreview(), []);
+
+  const handleFile = useCallback((file: File) => {
+    /* Any new upload supersedes the current preview: restore the prior face and
+       drop the previous dynamic head before doing anything else. */
+    discardPreview();
+    revokeImage();
 
     if (isImageFile(file.name)) {
-      if (ownedImageUrl.current) URL.revokeObjectURL(ownedImageUrl.current);
       const url = URL.createObjectURL(file);
       ownedImageUrl.current = url;
-      setImageUrl(url);
-      setStatus('image');
+      showImage(url);
       return;
     }
 
-    if (!isMeshFile(file.name)) {
-      setStatus('rejected');
-      setError(`“${file.name}” is not a file this screen can use. Choose a .obj, .glb or .gltf mesh, or a .png/.jpg photo.`);
+    if (isUnsupportedMeshFile(file.name)) {
+      reject(
+        `“${file.name}” is a glTF/GLB model. Smart Customization now fits an .obj head onto the UBE base — export this model as OBJ.`,
+      );
       return;
     }
 
-    setStatus('parsing');
-    try {
-      const imported = await readHeadFile(file);
-      /* Assign on accept rather than waiting for Apply: the whole promise of
-         this screen is seeing the face change. `Space` keeps it, `Esc` puts the
-         previous head back. */
-      const previousHeadId = selectedHeadId;
-      setAssets({ headMesh: imported.option.id });
-      useSmartSession.getState().stage({
-        name: file.name,
-        verts: imported.option.shapes?.vertexCount ?? 0,
-        tris: imported.option.shapes?.triangleCount ?? 0,
-        scale: imported.mesh.scale,
-        rotatedZUp: imported.mesh.rotatedZUp,
-        previewEdges: imported.preview.edges,
-        previousHeadId,
-      });
-      useSmartSession.getState().markApplied();
-      showToast(`Applied ${file.name} to the head`);
-    } catch (caught) {
-      const message = caught instanceof MeshImportError
-        ? caught.message
-        : caught instanceof Error ? caught.message : 'this file could not be read';
-      setStatus('rejected');
-      setError(message);
+    if (!isObjFile(file.name)) {
+      reject(
+        `“${file.name}” is not a file this screen can use. Drop an isolated .obj head to fit it, or a .png/.jpg photo for a preview.`,
+      );
+      return;
     }
-  }, [selectedHeadId, setAssets, setError, setImageUrl, setStatus, showToast]);
+
+    void startConversion(file);
+  }, [reject, revokeImage, showImage]);
 
   const onDragStateChange = useCallback((over: boolean) => setDragOver(over), []);
 
   const dropState = dragOver
     ? 'drag-over'
-    : status === 'image' ? 'image'
-      : status === 'staged' ? 'staged'
+    : status === 'converting' ? 'converting'
+      : status === 'preview-ready' ? 'preview-ready'
         : status === 'rejected' ? 'rejected'
-          : status === 'parsing' ? 'parsing'
+          : status === 'image' ? 'image'
             : 'idle';
 
-  const preview = useMemo(
-    () => (staged ? { edges: staged.previewEdges, size: PREVIEW_SIZE } : null),
-    [staged],
-  );
+  const preview = staged ? { edges: staged.previewEdges, size: PREVIEW_SIZE } : null;
 
-  const detail = staged
-    ? `${staged.verts.toLocaleString()} verts · ${staged.tris.toLocaleString()} tris · ×${staged.scale.toFixed(3)}`
-    : null;
+  const detail = staged ? fitSummary(staged.metrics) : null;
 
-  const sources = useMemo(() => {
-    const list: Array<{
-      id: 'voice' | 'image' | 'mesh';
-      label: string;
-      icon: (props: { className?: string }) => React.JSX.Element;
-      disabled: boolean;
-      hint: string;
-    }> = [
-      { id: 'voice', label: 'Voice', icon: IconVoice, disabled: true, hint: 'Voice input is not part of this build' },
-      { id: 'image', label: 'Image', icon: IconImage, disabled: false, hint: 'Choose a photo or a 3D mesh' },
-    ];
-    if (dev) list.push({ id: 'mesh', label: 'Mesh', icon: IconMesh, disabled: false, hint: 'Test source — assign a mesh directly' });
-    return list;
-  }, [dev]);
+  const download = useCallback(() => {
+    const current = useSmartSession.getState().staged;
+    if (!current) return;
+    downloadJslot(current.sculpt, current.sculptName);
+    markDownloaded();
+    showToast('Downloaded the .jslot sculpt — re-import it in the preset panel to restore this face.');
+  }, [showToast]);
+
+  const discard = useCallback(() => {
+    discardPreview({ toast: 'Head restored' });
+  }, []);
+
+  const sources = [
+    { id: 'voice' as const, label: 'Voice', icon: IconVoice, disabled: true, hint: 'Voice input is not part of this build' },
+    { id: 'image' as const, label: 'Image', icon: IconImage, disabled: false, hint: 'Drop an .obj head to fit, or a photo for a preview' },
+  ];
 
   return (
     <div className="creator-smart pointer-events-none absolute inset-0 z-20">
       {/* ── Left: source rail + dropzone ─────────────────────────────── */}
       <div className="creator-smart-main">
         <nav className="creator-smart-sources" aria-label="Smart customization source">
-          {sources.map(({ id, label, icon: Icon, disabled, hint }) => {
-            const selected = id === source;
-            return (
-              <button
-                key={id}
-                type="button"
-                disabled={disabled}
-                aria-pressed={!disabled && selected}
-                title={hint}
-                onClick={() => {
-                  if (disabled) return;
-                  setSource(id === 'mesh' ? 'mesh' : 'image');
-                  if (id === 'mesh') {
-                    useSmartSession.getState().clear();
-                    if (ownedImageUrl.current) URL.revokeObjectURL(ownedImageUrl.current);
-                    ownedImageUrl.current = null;
-                    setImageUrl(null);
-                  }
-                }}
-                className={cn('creator-smart-source', selected && !disabled && 'is-selected', disabled && 'is-disabled')}
-              >
-                <span className="creator-smart-source-tile">
-                  <Icon className="h-6 w-6" />
-                  {disabled && <span aria-hidden className="creator-smart-source-soon">SOON</span>}
-                  {id === 'mesh' && <span aria-hidden className="creator-smart-source-dev">DEV</span>}
-                </span>
-                <span className="creator-smart-source-label">{label}</span>
-              </button>
-            );
-          })}
+          {sources.map(({ id, label, icon: Icon, disabled, hint }) => (
+            <button
+              key={id}
+              type="button"
+              disabled={disabled}
+              aria-pressed={!disabled}
+              title={hint}
+              className={cn(
+                'creator-smart-source',
+                !disabled && 'is-selected',
+                disabled && 'is-disabled',
+              )}
+            >
+              <span className="creator-smart-source-tile">
+                <Icon className="h-6 w-6" />
+                {disabled && <span aria-hidden className="creator-smart-source-soon">SOON</span>}
+              </span>
+              <span className="creator-smart-source-label">{label}</span>
+            </button>
+          ))}
         </nav>
 
         <div className="creator-smart-stage">
           <SmartDropZone
             state={dropState}
-            accept={accept}
+            accept={SMART_ACCEPT}
             preview={preview}
             imageUrl={imageUrl}
             fileName={staged?.name ?? null}
@@ -241,48 +201,35 @@ export function SmartCustomization({ manifest: _manifest }: { manifest: Mo2Manif
             onFile={handleFile}
             onDragStateChange={onDragStateChange}
           />
-          {/* ── DEV diagnostics ──────────────────────────────────────────── */}
-          {dev && (
-        <aside className="creator-smart-dev-panel" aria-label="Mesh import diagnostics">
-          <div className="creator-smart-dev-head">
-            <span>MESH IMPORT · DEV</span>
-            <span className="creator-smart-dev-dot" aria-hidden />
-          </div>
-          {staged ? (
-            <>
+
+          {/* ── Fit panel — always on when a preview is ready ────────────── */}
+          {staged && (
+            <aside className="creator-smart-dev-panel" aria-label="Fitted head report">
+              <div className="creator-smart-dev-head">
+                <span>FITTED UBE HEAD</span>
+                <span className="creator-smart-dev-dot" aria-hidden />
+              </div>
               <dl>
                 <div><dt>file</dt><dd title={staged.name}>{staged.name}</dd></div>
-                <div><dt>vertices</dt><dd>{staged.verts.toLocaleString()}</dd></div>
-                <div><dt>triangles</dt><dd>{staged.tris.toLocaleString()}</dd></div>
-                <div><dt>scale</dt><dd>×{staged.scale.toFixed(4)}</dd></div>
-                <div><dt>axis</dt><dd>{staged.rotatedZUp ? 'Z-up → Y-up' : 'Y-up'}</dd></div>
-                <div><dt>slot</dt><dd>headMesh</dd></div>
+                <div><dt>fit strength</dt><dd>{pct(staged.metrics.fit_strength)}</dd></div>
+                <div><dt>surface RMS</dt><dd>{mm(staged.metrics.face_surface_rms_m)}</dd></div>
+                <div><dt>coverage (15mm)</dt><dd>{pct(staged.metrics.face_coverage_15mm)}</dd></div>
+                <div><dt>collar move</dt><dd>{mm(staged.metrics.quality.collar_max_displacement_m)}</dd></div>
               </dl>
+              <p>
+                Approximate fit, not a likeness claim. Companion parts are unchanged.
+                {' '}This sculpt is session-only — download the .jslot before Apply to keep it.
+              </p>
               <div className="creator-smart-dev-actions">
-                <button type="button" onClick={() => {
-                  if (staged.previousHeadId !== null || useSmartSession.getState().applied) {
-                    setAssets({ headMesh: staged.previousHeadId });
-                  }
-                  useSmartSession.getState().markReverted();
-                  showToast('Head restored');
-                }}>
-                  Reset head
+                <button type="button" onClick={download}>
+                  {downloaded ? 'Download .jslot again' : 'Download .jslot'}
                 </button>
-                <button type="button" onClick={() => {
-                  useSmartSession.getState().clear();
-                  if (ownedImageUrl.current) URL.revokeObjectURL(ownedImageUrl.current);
-                  ownedImageUrl.current = null;
-                  setImageUrl(null);
-                }}>
-                  Clear
+                <button type="button" onClick={discard}>
+                  Discard
                 </button>
               </div>
-            </>
-          ) : (
-            <p>No mesh imported. Drop a .obj/.glb on the ring to test the head assignment.</p>
+            </aside>
           )}
-        </aside>
-      )}
         </div>
       </div>
 
@@ -305,7 +252,6 @@ export function SmartCustomization({ manifest: _manifest }: { manifest: Mo2Manif
           <span>Share</span>
         </button>
       </div>
-
     </div>
   );
 }

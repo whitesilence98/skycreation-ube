@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<SliderPresets>
+    <Preset name="UBE Necoco V2" set="UBE SE 2.0 - Necoco Body">
+        <Group name="UBE"/>
+        <Group name="UBE Female"/>
+        <Group name="UBE Male"/>
+        <Group name="UBE Outfit"/>
+        <SetSlider name="Necoco_Body_Addon_Belly" size="big" value="100"/>
+        <SetSlider name="Necoco_Body_Addon_Butt" size="big" value="100"/>
+        <SetSlider name="Necoco_Body_Addon_Leg" size="big" value="100"/>
+        <SetSlider name="Necoco_Body_Addon_Lewd_Zone" size="big" value="100"/>
+        <SetSlider name="Necoco_Body_Addon_Upper_Body_Smooth" size="big" value="100"/>
+        <SetSlider name="Necoco_Body_w|o_Boob" size="big" value="100"/>
+        <SetSlider name="Necoco_Boob_Addon_Bom39" size="big" value="65"/>
+        <SetSlider name="Necoco_Boob_Addon_MafaVam" size="big" value="100"/>
+        <SetSlider name="Necoco_Boob_Base" size="big" value="100"/>
+    </Preset>
+</SliderPresets>

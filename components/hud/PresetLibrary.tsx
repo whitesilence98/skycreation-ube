@@ -341,7 +341,7 @@ export function PresetLibrary() {
           YOUR PRESETS
         </span>
         <div className="flex items-center gap-1.5">
-          <span className="text-[9.5px] font-mono tracking-wider text-[#8f8778]">
+          <span className="text-[10px] font-mono tracking-wider text-[#8f8778]">
             {records.length}/{PRESET_LIBRARY_LIMIT}
           </span>
           <button
@@ -350,7 +350,7 @@ export function PresetLibrary() {
             disabled={busy}
             aria-label="Refresh saved presets"
             title="Refresh saved presets"
-            className="rounded-xs px-1 text-[11px] leading-none text-[#c4b595] transition-colors hover:text-[#f2dfbe] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f] disabled:opacity-40"
+            className="flex min-h-[24px] min-w-[24px] items-center justify-center rounded-xs px-1 text-[11px] leading-none text-[#c4b595] transition-colors hover:text-[#f2dfbe] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f] disabled:opacity-40"
           >
             ↻
           </button>
@@ -363,7 +363,7 @@ export function PresetLibrary() {
         disabled={!hydrated || busy || unavailable}
         title={saveTitle}
         className={cn(
-          'w-full rounded-xs border px-2.5 py-1.5 text-[10px] font-mono tracking-[0.12em] uppercase transition-colors',
+          'min-h-[28px] w-full rounded-xs border px-2.5 py-1.5 text-[10px] font-mono tracking-[0.12em] uppercase transition-colors',
           'border-[#d4b483]/35 bg-[#d4b483]/10 text-[#e8dcce]',
           'hover:border-[#d4b483]/70 hover:bg-[#d4b483]/20 hover:text-[#fff0d4]',
           'focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]',
@@ -374,12 +374,12 @@ export function PresetLibrary() {
       </button>
 
       {unavailable ? (
-        <p className="text-[9.5px] leading-relaxed text-[#b8b0a0]">
+        <p className="text-[10px] leading-relaxed text-[#b8b0a0]">
           Preset library unavailable — browser storage is blocked. Built-in presets and JSON
           import/export still work.
         </p>
       ) : records.length === 0 ? (
-        <p className="text-[9.5px] leading-relaxed text-[#8f8778]">
+        <p className="text-[10px] leading-relaxed text-[#8f8778]">
           No saved presets yet. Save the current character to build your library.
         </p>
       ) : (
@@ -396,7 +396,7 @@ export function PresetLibrary() {
                   disabled={busy}
                   aria-label={`Load preset ${record.label}`}
                   title={`Load “${record.label}”`}
-                  className="flex min-w-0 flex-1 items-center gap-2 rounded-xs border border-[#d4b483]/20 bg-black/35 p-1.5 text-left transition-colors hover:border-[#d4b483]/55 disabled:opacity-50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]"
+                  className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 rounded-xs border border-[#d4b483]/20 bg-black/35 p-1.5 text-left transition-colors hover:border-[#d4b483]/55 disabled:opacity-50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]"
                 >
                   {record.thumbnail ? (
                     <img
@@ -405,13 +405,13 @@ export function PresetLibrary() {
                       className="h-9 w-9 shrink-0 rounded-xs border border-[#d4b483]/20 object-cover"
                     />
                   ) : (
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xs border border-[#d4b483]/20 text-[9px] text-[#8f8778]">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xs border border-[#d4b483]/20 text-[10px] text-[#8f8778]">
                       —
                     </span>
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[10px] text-[#e8dcce]">{record.label}</span>
-                    <span className="block font-mono text-[9px] text-[#8f8778]">
+                    <span className="block font-mono text-[10px] text-[#8f8778]">
                       {formatRelativeDate(record.updatedAt)}
                     </span>
                   </span>
@@ -421,7 +421,7 @@ export function PresetLibrary() {
                   <summary
                     aria-label={`Actions for ${record.label}`}
                     title="Preset actions"
-                    className="flex h-full cursor-pointer list-none items-center rounded-xs border border-[#d4b483]/20 px-1.5 text-[#c4b595] transition-colors hover:border-[#d4b483]/55 hover:text-[#f2dfbe] [&::-webkit-details-marker]:hidden"
+                    className="flex min-h-[24px] min-w-[24px] cursor-pointer list-none items-center justify-center rounded-xs border border-[#d4b483]/20 px-1.5 text-[#c4b595] transition-colors hover:border-[#d4b483]/55 hover:text-[#f2dfbe] [&::-webkit-details-marker]:hidden"
                   >
                     ⋯
                   </summary>
@@ -435,7 +435,7 @@ export function PresetLibrary() {
                           setRenameValue(record.label);
                         })
                       }
-                      className="rounded-xs px-1.5 py-1 text-left text-[10px] text-[#d8c39c] hover:bg-[#d4b483]/15 hover:text-[#fff0d4] disabled:opacity-40"
+                      className="min-h-[24px] rounded-xs px-1.5 py-1 text-left text-[10px] text-[#d8c39c] hover:bg-[#d4b483]/15 hover:text-[#fff0d4] disabled:opacity-40"
                     >
                       Rename
                     </button>
@@ -443,7 +443,7 @@ export function PresetLibrary() {
                       type="button"
                       disabled={busy}
                       onClick={(e) => fromMenu(e, () => void updateRecord(record))}
-                      className="rounded-xs px-1.5 py-1 text-left text-[10px] text-[#d8c39c] hover:bg-[#d4b483]/15 hover:text-[#fff0d4] disabled:opacity-40"
+                      className="min-h-[24px] rounded-xs px-1.5 py-1 text-left text-[10px] text-[#d8c39c] hover:bg-[#d4b483]/15 hover:text-[#fff0d4] disabled:opacity-40"
                     >
                       Update from current
                     </button>
@@ -451,7 +451,7 @@ export function PresetLibrary() {
                       type="button"
                       disabled={busy}
                       onClick={(e) => fromMenu(e, () => exportRecord(record))}
-                      className="rounded-xs px-1.5 py-1 text-left text-[10px] text-[#d8c39c] hover:bg-[#d4b483]/15 hover:text-[#fff0d4] disabled:opacity-40"
+                      className="min-h-[24px] rounded-xs px-1.5 py-1 text-left text-[10px] text-[#d8c39c] hover:bg-[#d4b483]/15 hover:text-[#fff0d4] disabled:opacity-40"
                     >
                       Export JSON
                     </button>
@@ -459,7 +459,7 @@ export function PresetLibrary() {
                       type="button"
                       disabled={busy}
                       onClick={(e) => fromMenu(e, () => void deleteRecord(record))}
-                      className="rounded-xs px-1.5 py-1 text-left text-[10px] text-[#e0967c] hover:bg-[#e0967c]/15 hover:text-[#f2b8a2] disabled:opacity-40"
+                      className="min-h-[24px] rounded-xs px-1.5 py-1 text-left text-[10px] text-[#e0967c] hover:bg-[#e0967c]/15 hover:text-[#f2b8a2] disabled:opacity-40"
                     >
                       Delete
                     </button>
@@ -484,7 +484,7 @@ export function PresetLibrary() {
                   <button
                     type="submit"
                     disabled={busy}
-                    className="rounded-xs border border-[#d4b483]/35 bg-[#d4b483]/10 px-1.5 py-1 text-[9px] font-mono uppercase tracking-wider text-[#e8dcce] hover:bg-[#d4b483]/20 disabled:opacity-40"
+                    className="min-h-[24px] rounded-xs border border-[#d4b483]/35 bg-[#d4b483]/10 px-1.5 py-1 text-[10px] font-mono uppercase tracking-wider text-[#e8dcce] hover:bg-[#d4b483]/20 disabled:opacity-40"
                   >
                     Save label
                   </button>
@@ -492,7 +492,7 @@ export function PresetLibrary() {
                     type="button"
                     disabled={busy}
                     onClick={() => setRenameId(null)}
-                    className="rounded-xs px-1.5 py-1 text-[9px] font-mono uppercase tracking-wider text-[#8f8778] hover:text-[#c4b9a3] disabled:opacity-40"
+                    className="min-h-[24px] rounded-xs px-1.5 py-1 text-[10px] font-mono uppercase tracking-wider text-[#8f8778] hover:text-[#c4b9a3] disabled:opacity-40"
                   >
                     Cancel
                   </button>
@@ -503,7 +503,7 @@ export function PresetLibrary() {
         </ul>
       )}
 
-      <p className="text-[8.5px] font-mono leading-relaxed tracking-wide text-[#8b8375]/80">
+      <p className="text-[10px] font-mono leading-relaxed tracking-wide text-[#8b8375]/80">
         Stored in this browser only — export JSON for a portable backup.
       </p>
 
@@ -511,7 +511,7 @@ export function PresetLibrary() {
         <div
           role="status"
           className={cn(
-            'text-center font-mono text-[9.5px] tracking-wide uppercase',
+            'text-center font-mono text-[10px] tracking-wide uppercase',
             status.kind === 'error'
               ? 'text-[#e0967c]'
               : status.kind === 'warn'
@@ -535,7 +535,7 @@ export function PresetLibrary() {
             setDraftError(null);
           }
         }}
-        className="m-auto w-[min(92vw,320px)] max-h-[90vh] overflow-y-auto rounded-xs border border-[#d4b483]/30 bg-[#161311] p-3 text-[#e6e1d8] shadow-[0_16px_40px_rgba(0,0,0,0.85)] backdrop:bg-black/70"
+        className="m-auto w-[min(92vw,320px)] max-h-[90vh] overflow-y-auto scrollbar-none rounded-xs border border-[#d4b483]/30 bg-[#161311] p-3 text-[#e6e1d8] shadow-[0_16px_40px_rgba(0,0,0,0.85)] backdrop:bg-black/70"
       >
         {draft && (
           <form onSubmit={(e) => void submitDraft(e)} className="flex flex-col gap-2.5">
@@ -554,12 +554,12 @@ export function PresetLibrary() {
                   className="h-16 w-16 shrink-0 rounded-xs border border-[#d4b483]/25 object-cover"
                 />
               ) : (
-                <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xs border border-[#d4b483]/20 bg-black/45 text-[9px] text-[#8f8778]">
+                <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xs border border-[#d4b483]/20 bg-black/45 text-[10px] text-[#8f8778]">
                   No preview
                 </span>
               )}
               <div className="min-w-0">
-                <label className="flex flex-col gap-1 text-[9px] font-mono uppercase tracking-wider text-[#c4b595]">
+                <label className="flex flex-col gap-1 text-[10px] font-mono uppercase tracking-wider text-[#c4b595]">
                   Label
                   <input
                     ref={inputRef}
@@ -574,12 +574,12 @@ export function PresetLibrary() {
               </div>
             </div>
 
-            <p className="text-[9px] leading-relaxed text-[#8f8778]">
+            <p className="text-[10px] leading-relaxed text-[#8f8778]">
               Saved in this browser only — no cross-device backup.
             </p>
 
             {draftError && (
-              <p role="alert" className="text-[9px] leading-relaxed text-[#e0967c]">
+              <p role="alert" className="text-[10px] leading-relaxed text-[#e0967c]">
                 {draftError}
               </p>
             )}
@@ -589,14 +589,14 @@ export function PresetLibrary() {
                 type="button"
                 onClick={closeDraft}
                 disabled={busy}
-                className="rounded-xs px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-[#8f8778] transition-colors hover:text-[#c4b9a3] disabled:opacity-40"
+                className="min-h-[24px] rounded-xs px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-[#8f8778] transition-colors hover:text-[#c4b9a3] disabled:opacity-40"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={busy}
-                className="rounded-xs border border-[#d4b483]/40 bg-[#d4b483]/15 px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-[#f2dfbe] transition-colors hover:bg-[#d4b483]/25 disabled:opacity-40"
+                className="min-h-[24px] rounded-xs border border-[#d4b483]/40 bg-[#d4b483]/15 px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-[#f2dfbe] transition-colors hover:bg-[#d4b483]/25 disabled:opacity-40"
               >
                 Save preset
               </button>

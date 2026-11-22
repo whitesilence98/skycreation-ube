@@ -1,0 +1,193 @@
+{
+  "generatedAt": "2026-11-20T16:34:42.126150+00:00",
+  "schemaVersion": "1.1.0",
+  "root": "/assets",
+  "domains": {
+    "core": {
+      "available": true,
+      "subcategories": {
+        "base-mesh": {
+          "count": 0,
+          "samples": []
+        },
+        "default-textures": {
+          "count": 0,
+          "samples": []
+        },
+        "skeleton": {
+          "count": 0,
+          "samples": []
+        }
+      },
+      "itemCount": 0
+    },
+    "bodyslide": {
+      "available": true,
+      "subcategories": {
+        "_root": {
+          "count": 9,
+          "samples": [
+            "0NecocoSliders.xml",
+            "1ube.xml",
+            "neco_morphs_cache.json",
+            "UBE SE 2.0 - Necoco Body.osd",
+            "UBE SE 2.0 - Necoco Body.osp"
+          ]
+        },
+        "data": {
+          "count": 1,
+          "samples": [
+            "UBE SE 2.0 - Necoco Body.osd"
+          ]
+        },
+        "presets": {
+          "count": 3,
+          "samples": [
+            "UBE Necoco for Converting Outfits.xml",
+            "UBE Necoco V1.xml",
+            "UBE Necoco V2.xml"
+          ]
+        },
+        "ShapeData": {
+          "count": 54,
+          "samples": [
+            "Clothes Pack 6 UBE/Clothes Pack 6 Bodysuit V1 UBE.osd",
+            "Clothes Pack 6 UBE/Clothes Pack 6 Bodysuit V2 UBE.osd",
+            "Clothes Pack 6 UBE/Clothes Pack 6 Bodysuit V3 UBE.osd",
+            "Clothes Pack 6 UBE/Clothes Pack 6 Bodysuit V4 UBE.osd",
+            "Clothes Pack 6 UBE/Clothes Pack 6 Bodysuit V5 UBE.osd"
+          ]
+        },
+        "sliders": {
+          "count": 3,
+          "samples": [
+            "0NecocoSliders.xml",
+            "1ube.xml",
+            "UBE SE 2.0 - Necoco Body.osp"
+          ]
+        },
+        "SliderSets": {
+          "count": 5,
+          "samples": [
+            "Clothes Pack 6 UBE.osp",
+            "ShatteredRoyalArmor_UBE.osp",
+            "UBE SE 2.0 - Necoco Body.osp",
+            "UBE SE 2.0 - Necoco Feet.osp",
+            "UBE SE 2.0 - Necoco Hand.osp"
+          ]
+        }
+      },
+      "itemCount": 75
+    },
+    "wardrobe": {
+      "available": true,
+      "subcategories": {
+        "doneb14n-cp6": {
+          "count": 379,
+          "samples": [
+            "textures/doneb14n stuff/clothes pack 6/top/v1/top_n.dds",
+            "textures/doneb14n stuff/clothes pack 6/top/v2/top_n.dds",
+            "textures/doneb14n stuff/clothes pack 6/top/v3/top_n.dds",
+            "textures/doneb14n stuff/clothes pack 6/top/v4/top_n.dds",
+            "textures/doneb14n stuff/clothes pack 6/top/v5/top_n.dds"
+          ]
+        },
+        "meshes": {
+          "count": 0,
+          "samples": []
+        },
+        "morphs": {
+          "count": 0,
+          "samples": []
+        },
+        "textures": {
+          "count": 0,
+          "samples": []
+        }
+      },
+      "itemCount": 379
+    },
+    "salon": {
+      "available": true,
+      "subcategories": {
+        "brows": {
+          "count": 0,
+          "samples": []
+        },
+        "eyes": {
+          "count": 0,
+          "samples": []
+        },
+        "hair": {
+          "count": 0,
+          "samples": []
+        },
+        "lashes": {
+          "count": 0,
+          "samples": []
+        },
+        "thumbnails": {
+          "count": 0,
+          "samples": []
+        }
+      },
+      "itemCount": 0
+    },
+    "styling": {
+      "available": true,
+      "subcategories": {
+        "makeup": {
+          "count": 0,
+          "samples": []
+        },
+        "skin": {
+          "count": 69,
+          "samples": [
+            "diamond/body.webp",
+            "diamond/body_d.webp",
+            "diamond/body_n.png",
+            "diamond/body_rough.webp",
+            "diamond/head.webp"
+          ]
+        },
+        "tattoos": {
+          "count": 0,
+          "samples": []
+        }
+      },
+      "itemCount": 69
+    },
+    "characters": {
+      "available": true,
+      "subcategories": {
+        "presets": {
+          "count": 0,
+          "samples": []
+        },
+        "sculpts": {
+          "count": 0,
+          "samples": []
+        }
+      },
+      "itemCount": 0
+    },
+    "stage": {
+      "available": true,
+      "subcategories": {
+        "hdr": {
+          "count": 0,
+          "samples": []
+        },
+        "lighting": {
+          "count": 0,
+          "samples": []
+        },
+        "poses": {
+          "count": 0,
+          "samples": []
+        }
+      },
+      "itemCount": 0
+    }
+  }
+}

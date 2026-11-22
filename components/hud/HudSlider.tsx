@@ -12,20 +12,39 @@ interface SliderProps {
   display: string;
   onChange: (v: number) => void;
   onActiveChange?: (active: boolean) => void;
+  onDoubleClick?: () => void;
   bracketed?: boolean;
   disabled?: boolean;
+  className?: string;
 }
 
-export function HudSlider({ label, suffix, value, min, max, step, display, onChange, onActiveChange, bracketed = false, disabled = false }: SliderProps) {
+export function HudSlider({
+  label,
+  suffix,
+  value,
+  min,
+  max,
+  step,
+  display,
+  onChange,
+  onActiveChange,
+  onDoubleClick,
+  bracketed = false,
+  disabled = false,
+  className,
+}: SliderProps) {
   const pct = ((value - min) / (max - min)) * 100;
   return (
-    <div className={cn("mb-[14px] min-h-[36px]", disabled && "opacity-45")}>
+    <div
+      onDoubleClick={onDoubleClick}
+      className={cn("mb-[14px] min-h-[36px]", disabled && "opacity-45", className)}
+    >
       <div className="mb-[4px] flex min-h-[16px] items-baseline justify-between gap-2">
-        <label className="flex items-baseline gap-[4px] text-[10px] tracking-[0.09em] text-[#cec5b3]/90">
+        <label className="flex items-baseline gap-[4px] text-[10px] tracking-[0.09em] text-[#cec5b3]/90 select-none">
           <span>{label}</span>
           {suffix && <span className="text-[10px] tracking-[0.03em] text-[#c4bba8]">{suffix}</span>}
         </label>
-        <span className={cn('num text-[10px] tracking-[0.02em]', bracketed ? 'text-[#eac87f]' : 'text-[#d8c9ad]')}>{display}</span>
+        <span className={cn('num text-[10px] tracking-[0.02em] select-none', bracketed ? 'text-[#eac87f]' : 'text-[#d8c9ad]')}>{display}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value}
         disabled={disabled}

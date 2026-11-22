@@ -1,0 +1,217 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<SliderSetInfo version="1">
+    <SliderSet name="UBE SE 2.0 - Necoco Feet">
+        <DataFolder>UBE SE 2.0 - Necoco Feet</DataFolder>
+        <SourceFile>UBE SE 2.0 - Necoco Feet.nif</SourceFile>
+        <OutputPath>Meshes\!UBE\Feet</OutputPath>
+        <OutputFile GenWeights="true" PreventMorphFile="false" KeepZappedShapes="false">femalefeet_tangent</OutputFile>
+        <Shape target="Feet" DataFolder="UBE SE 2.0 Release Feet">Feet</Shape>
+        <Slider name="SquarePeg3d" invert="false" small="0" big="0">
+            <Data name="FeetSquarePeg3d" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetSquarePeg3d</Data>
+        </Slider>
+        <Slider name="Donaught" invert="false" small="0" big="0">
+            <Data name="FeetDonaught" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetDonaught</Data>
+        </Slider>
+        <Slider name="Juicy_body" invert="false" small="0" big="0">
+            <Data name="FeetJuicy_body" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetJuicy_body</Data>
+        </Slider>
+        <Slider name="Peachy" invert="false" small="0" big="0">
+            <Data name="FeetPeachy" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetPeachy</Data>
+        </Slider>
+        <Slider name="ClaviclesFront" invert="false" small="0" big="0">
+            <Data name="FeetClaviclesFront" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetClaviclesFront</Data>
+        </Slider>
+        <Slider name="HipsAndLegsDistanceApart p|n" invert="false" small="0" big="0">
+            <Data name="FeetHipsAndLegsDistanceApart p|n" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetHipsAndLegsDistanceApart p|n</Data>
+        </Slider>
+        <Slider name="ShinSize p|n" invert="false" small="0" big="0">
+            <Data name="FeetShinSize p|n" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetShinSize p|n</Data>
+        </Slider>
+        <Slider name="Shin_Forward" invert="false" small="0" big="0">
+            <Data name="FeetShin_Forward" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetShin_Forward</Data>
+        </Slider>
+        <Slider name="Bowed_Calves" invert="false" small="0" big="0">
+            <Data name="FeetBowed_Calves" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetBowed_Calves</Data>
+        </Slider>
+        <Slider name="AnkleThickness p|n" invert="false" small="0" big="0">
+            <Data name="FeetAnkleThickness p|n" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetAnkleThickness p|n</Data>
+        </Slider>
+        <Slider name="Thicc_calves" invert="false" small="0" big="0">
+            <Data name="FeetThicc_calves" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetThicc_calves</Data>
+        </Slider>
+        <Slider name="FeetSize n|p" invert="false" small="0" big="0">
+            <Data name="FeetFeetSize n|p" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetFeetSize n|p</Data>
+        </Slider>
+        <Slider name="Normals_recalc" invert="false" small="0" big="0" hidden="true">
+            <Data name="FeetNormals_recalc" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetNormals_recalc</Data>
+        </Slider>
+        <Slider name="ToeNailsZap" invert="false" small="0" big="0" zap="true">
+            <Data name="FeetToeNailsZap" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetToeNailsZap</Data>
+        </Slider>
+        <Slider name="ToeNails_Length" invert="false" small="0" big="0">
+            <Data name="FeetToeNails_Length" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetToeNails_Length</Data>
+        </Slider>
+        <Slider name="Claw_ToeNails" invert="false" small="0" big="0">
+            <Data name="FeetClaw_ToeNails" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetClaw_ToeNails</Data>
+        </Slider>
+        <Slider name="HiHeelz_CBBE" invert="false" small="0" big="0" hidden="true">
+            <Data name="FeetHiHeelz_CBBE" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetHiHeelz_CBBE</Data>
+        </Slider>
+        <Slider name="HiHeelz_CBBE_to_UBE" invert="false" small="0" big="0" hidden="true">
+            <Data name="FeetHiHeelz_CBBE_to_UBE" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetHiHeelz_CBBE_to_UBE</Data>
+        </Slider>
+        <Slider name="ToesUp+SpreadR" invert="false" small="0" big="0">
+            <Data name="FeetToesUp+SpreadR" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetToesUp+SpreadR</Data>
+        </Slider>
+        <Slider name="ToesUp+SpreadL" invert="false" small="0" big="0">
+            <Data name="FeetToesUp+SpreadL" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetToesUp+SpreadL</Data>
+        </Slider>
+        <Slider name="ToesDownL" invert="false" small="0" big="0">
+            <Data name="FeetToesDownL" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetToesDownL</Data>
+        </Slider>
+        <Slider name="ToesUpL" invert="false" small="0" big="0">
+            <Data name="FeetToesUpL" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetToesUpL</Data>
+        </Slider>
+        <Slider name="ToesRotationL" invert="false" small="0" big="0">
+            <Data name="FeetToesRotationL" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetToesRotationL</Data>
+        </Slider>
+        <Slider name="ToesUpR" invert="false" small="0" big="0">
+            <Data name="FeetToesUpR" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetToesUpR</Data>
+        </Slider>
+        <Slider name="ToesDownR" invert="false" small="0" big="0">
+            <Data name="FeetToesDownR" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetToesDownR</Data>
+        </Slider>
+        <Slider name="ToesRotationR" invert="false" small="0" big="0">
+            <Data name="FeetToesRotationR" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetToesRotationR</Data>
+        </Slider>
+        <Slider name="FeetSize" invert="false" small="0" big="0">
+            <Data name="FeetFeetSize" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetFeetSize</Data>
+        </Slider>
+        <Slider name="Arch" invert="false" small="0" big="0">
+            <Data name="FeetArch" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetArch</Data>
+        </Slider>
+        <Slider name="Heel" invert="false" small="0" big="0">
+            <Data name="FeetHeel" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetHeel</Data>
+        </Slider>
+        <Slider name="AnkleBones" invert="false" small="0" big="0">
+            <Data name="FeetAnkleBones" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetAnkleBones</Data>
+        </Slider>
+        <Slider name="Intrinsic" invert="false" small="0" big="0">
+            <Data name="FeetIntrinsic" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetIntrinsic</Data>
+        </Slider>
+        <Slider name="Ball" invert="false" small="0" big="0">
+            <Data name="FeetBall" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetBall</Data>
+        </Slider>
+        <Slider name="ToesSize" invert="false" small="0" big="0">
+            <Data name="FeetToesSize" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetToesSize</Data>
+        </Slider>
+        <Slider name="Soles" invert="false" small="0" big="0">
+            <Data name="FeetSoles" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetSoles</Data>
+        </Slider>
+        <Slider name="Dome" invert="false" small="0" big="0">
+            <Data name="FeetDome" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetDome</Data>
+        </Slider>
+        <Slider name="AchillesTendon" invert="false" small="0" big="0">
+            <Data name="FeetAchillesTendon" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetAchillesTendon</Data>
+        </Slider>
+        <Slider name="Longer" invert="false" small="0" big="0">
+            <Data name="FeetLonger" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetLonger</Data>
+        </Slider>
+        <Slider name="Larger" invert="false" small="0" big="0">
+            <Data name="FeetLarger" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetLarger</Data>
+        </Slider>
+        <Slider name="BeforeToes" invert="false" small="0" big="0">
+            <Data name="FeetBeforeToes" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetBeforeToes</Data>
+        </Slider>
+        <Slider name="SolesShorter" invert="false" small="0" big="0">
+            <Data name="FeetSolesShorter" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetSolesShorter</Data>
+        </Slider>
+        <Slider name="BigtoeLonger" invert="false" small="0" big="0">
+            <Data name="FeetBigtoeLonger" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetBigtoeLonger</Data>
+        </Slider>
+        <Slider name="ToesLonger" invert="false" small="0" big="0">
+            <Data name="FeetToesLonger" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetToesLonger</Data>
+        </Slider>
+        <Slider name="Paddings" invert="false" small="0" big="0">
+            <Data name="FeetPaddings" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetPaddings</Data>
+        </Slider>
+        <Slider name="BigtoePadding" invert="false" small="0" big="0">
+            <Data name="FeetBigtoePadding" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetBigtoePadding</Data>
+        </Slider>
+        <Slider name="AltNails" invert="false" small="0" big="0">
+            <Data name="FeetAltNails" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetAltNails</Data>
+        </Slider>
+        <Slider name="Crooked2ndToe" invert="false" small="0" big="0">
+            <Data name="FeetCrooked2ndToe" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetCrooked2ndToe</Data>
+        </Slider>
+        <Slider name="AltBigtoeNail" invert="false" small="0" big="0">
+            <Data name="FeetAltBigtoeNail" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetAltBigtoeNail</Data>
+        </Slider>
+        <Slider name="BigtoeSpread" invert="false" small="0" big="0">
+            <Data name="FeetBigtoeSpread" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetBigtoeSpread</Data>
+        </Slider>
+        <Slider name="ThightBigtoe" invert="false" small="0" big="0">
+            <Data name="FeetThightBigtoe" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetThightBigtoe</Data>
+        </Slider>
+        <Slider name="SlimBigtoe" invert="false" small="0" big="0">
+            <Data name="FeetSlimBigtoe" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetSlimBigtoe</Data>
+        </Slider>
+        <Slider name="ChubbyBigtoe" invert="false" small="0" big="0">
+            <Data name="FeetChubbyBigtoe" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetChubbyBigtoe</Data>
+        </Slider>
+        <Slider name="SharpBigtoe" invert="false" small="0" big="0">
+            <Data name="FeetSharpBigtoe" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetSharpBigtoe</Data>
+        </Slider>
+        <Slider name="ToesAlignement" invert="false" small="0" big="0">
+            <Data name="FeetToesAlignement" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetToesAlignement</Data>
+        </Slider>
+        <Slider name="SlimToes" invert="false" small="0" big="0">
+            <Data name="FeetSlimToes" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetSlimToes</Data>
+        </Slider>
+        <Slider name="ChubbyToes" invert="false" small="0" big="0">
+            <Data name="FeetChubbyToes" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetChubbyToes</Data>
+        </Slider>
+        <Slider name="ThightToes" invert="false" small="0" big="0">
+            <Data name="FeetThightToes" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetThightToes</Data>
+        </Slider>
+        <Slider name="Wakfu" invert="false" small="0" big="0">
+            <Data name="FeetWakfu" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetWakfu</Data>
+        </Slider>
+        <Slider name="BigtoeTendon" invert="false" small="0" big="0">
+            <Data name="FeetBigtoeTendon" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetBigtoeTendon</Data>
+        </Slider>
+        <Slider name="Curved Bigtoe Nail" invert="false" small="0" big="0">
+            <Data name="FeetCurved Bigtoe Nail" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetCurved Bigtoe Nail</Data>
+        </Slider>
+        <Slider name="FitnessDetails_2.0" invert="false" small="0" big="0">
+            <Data name="FeetFitnessDetails_2.0" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetFitnessDetails_2.0</Data>
+        </Slider>
+        <Slider name="Skinny2.0" invert="false" small="0" big="0">
+            <Data name="FeetSkinny2.0" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetSkinny2.0</Data>
+        </Slider>
+        <Slider name="Smol" invert="false" small="0" big="0">
+            <Data name="FeetSmol" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetSmol</Data>
+        </Slider>
+        <Slider name="Calves_Flex" invert="false" small="0" big="0">
+            <Data name="FeetCalves_Flex" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetCalves_Flex</Data>
+        </Slider>
+        <Slider name="Hip_narrow" invert="false" small="0" big="0">
+            <Data name="FeetHip_narrow" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetHip_narrow</Data>
+        </Slider>
+        <Slider name="FFXIV-like" invert="false" small="0" big="0">
+            <Data name="FeetFFXIV-like" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetFFXIV-like</Data>
+        </Slider>
+        <Slider name="Necoco_Boob_Base_For_Body_with_Boob" invert="false" small="0" big="0">
+            <Data name="FeetNecoco_Boob_Base_For_Body_with_Boob" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetNecoco_Boob_Base_For_Body_with_Boob</Data>
+        </Slider>
+        <Slider name="Necoco_Boob_Base" invert="false" small="0" big="0">
+            <Data name="FeetNecoco_Boob_Base" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetNecoco_Boob_Base</Data>
+        </Slider>
+        <Slider name="Necoco_Body_w_Boob" invert="false" small="0" big="0">
+            <Data name="FeetNecoco_Body_w_Boob" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetNecoco_Body_w_Boob</Data>
+        </Slider>
+        <Slider name="Necoco_Body_w|o_Boob" invert="false" small="0" big="0">
+            <Data name="FeetNecoco_Body_w|o_Boob" target="Feet" local="true">UBE SE 2.0 - Necoco Feet.osd\FeetNecoco_Body_w|o_Boob</Data>
+        </Slider>
+    </SliderSet>
+</SliderSetInfo>

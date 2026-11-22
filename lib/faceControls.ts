@@ -3,14 +3,14 @@ import { ANATOMY_BINDINGS } from '@/lib/anatomy/bind';
 import type { RegionId } from '@/lib/regions';
 
 export const FACE_SECTIONS = [
-  { id: 'forehead', label: 'Forehead', region: 'forehead', groups: ['face'] },
-  { id: 'eyebrows', label: 'Brows', region: 'eyebrows', groups: ['brows'] },
-  { id: 'nose', label: 'Nose', region: 'nose', groups: ['nose'] },
-  { id: 'cheeks', label: 'Cheeks', region: 'cheeks', groups: ['face'] },
-  { id: 'lips', label: 'Mouth', region: 'lips', groups: ['mouth'] },
-  { id: 'jaw', label: 'Jaw & chin', region: 'jaw', groups: ['face'] },
+  { id: 'forehead', label: 'Face Shape', region: 'forehead', groups: ['face'] },
   { id: 'eyes', label: 'Eyes', region: null, groups: ['eyes'] },
+  { id: 'nose', label: 'Nose', region: 'nose', groups: ['nose'] },
+  { id: 'lips', label: 'Lips', region: 'lips', groups: ['mouth'] },
   { id: 'ears', label: 'Ears', region: null, groups: ['ears'] },
+  { id: 'eyebrows', label: 'Brows', region: 'eyebrows', groups: ['brows'] },
+  { id: 'cheeks', label: 'Cheeks', region: 'cheeks', groups: ['face'] },
+  { id: 'jaw', label: 'Jaw & chin', region: 'jaw', groups: ['face'] },
 ] as const;
 export type FaceSectionId = (typeof FACE_SECTIONS)[number]['id'];
 export const EDITOR_CATEGORIES = ['preset', 'face', 'hair', 'body', 'outfit', 'styling'] as const;

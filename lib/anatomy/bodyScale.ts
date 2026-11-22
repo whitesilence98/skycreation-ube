@@ -62,14 +62,17 @@ export type BodyScaleParamId =
   | 'body.legLength'
   | 'body.buttSize'
   | 'body.thighWidth'
-  | 'body.belly';
+  | 'body.belly'
+  | 'body.handSize'
+  | 'body.fingerLength'
+  | 'body.footSize';
 
 /**
  * The anatomy slice this module reads. Structural, so `AnatomyValues` (a
  * superset) satisfies it without this file importing from `params.ts` — that
  * import would close a type cycle, since `params.ts` calls `hasBodyScale`.
  */
-export type BodyScaleAnatomies = Readonly<Record<BodyScaleParamId, number>>;
+export type BodyScaleAnatomies = Readonly<Partial<Record<BodyScaleParamId, number>>>;
 
 /** The anatomy values this module implements. `body.muscleDefinition` is
  *  a material stub, not a scale, and deliberately stays out. */
@@ -86,6 +89,9 @@ const BODY_SCALE_PARAM_IDS: readonly BodyScaleParamId[] = [
   'body.buttSize',
   'body.thighWidth',
   'body.belly',
+  'body.handSize',
+  'body.fingerLength',
+  'body.footSize',
 ];
 
 export function hasBodyScale(id: string): id is BodyScaleParamId {
@@ -123,6 +129,19 @@ interface ScaleRule {
  *   torso rules touch Z.
  * - The pelvis widens along local X (Pelvis→Thigh ±6.6).
  */
+const FINGER_BONES: readonly string[] = [
+  'NPC L Finger00 [LF00]', 'NPC L Finger01 [LF01]', 'NPC L Finger02 [LF02]',
+  'NPC L Finger10 [LF10]', 'NPC L Finger11 [LF11]', 'NPC L Finger12 [LF12]',
+  'NPC L Finger20 [LF20]', 'NPC L Finger21 [LF21]', 'NPC L Finger22 [LF22]',
+  'NPC L Finger30 [LF30]', 'NPC L Finger31 [LF31]', 'NPC L Finger32 [LF32]',
+  'NPC L Finger40 [LF40]', 'NPC L Finger41 [LF41]', 'NPC L Finger42 [LF42]',
+  'NPC R Finger00 [RF00]', 'NPC R Finger01 [RF01]', 'NPC R Finger02 [RF02]',
+  'NPC R Finger10 [RF10]', 'NPC R Finger11 [RF11]', 'NPC R Finger12 [RF12]',
+  'NPC R Finger20 [RF20]', 'NPC R Finger21 [RF21]', 'NPC R Finger22 [RF22]',
+  'NPC R Finger30 [RF30]', 'NPC R Finger31 [RF31]', 'NPC R Finger32 [RF32]',
+  'NPC R Finger40 [RF40]', 'NPC R Finger41 [RF41]', 'NPC R Finger42 [RF42]',
+];
+
 export const BODY_SCALE_RULES: readonly ScaleRule[] = [
   // Head size: uniform on the head bone. The facial parts ride `rig.root`,
   // driven from the head's world matrix, so they inherit it automatically.
@@ -176,6 +195,22 @@ export const BODY_SCALE_RULES: readonly ScaleRule[] = [
 
   // Belly softness (radial X/Y)
   { param: 'body.belly', bone: 'Belly', axes: ['x', 'y'], perUnit: 0.0035 },
+
+  // Hand size: uniform X/Y/Z on hand bones
+  { param: 'body.handSize', bone: 'NPC L Hand [LHnd]', axes: ['x', 'y', 'z'], perUnit: 0.004 },
+  { param: 'body.handSize', bone: 'NPC R Hand [RHnd]', axes: ['x', 'y', 'z'], perUnit: 0.004 },
+
+  // Finger length: scales all finger phalanges along local Z
+  ...FINGER_BONES.map((bone) => ({
+    param: 'body.fingerLength' as const,
+    bone,
+    axes: ['z'] as const,
+    perUnit: 0.0035,
+  })),
+
+  // Foot size: uniform X/Y/Z on foot bones
+  { param: 'body.footSize', bone: 'NPC L Foot [Lft ]', axes: ['x', 'y', 'z'], perUnit: 0.004 },
+  { param: 'body.footSize', bone: 'NPC R Foot [Rft ]', axes: ['x', 'y', 'z'], perUnit: 0.004 },
 ];
 
 /** Every bone this module writes, for contract tests. */
@@ -201,7 +236,7 @@ export function bodyScaleFactors(anatomy: BodyScaleAnatomies): BodyScale {
 
   for (const rule of BODY_SCALE_RULES) {
     const value = anatomy[rule.param];
-    if (!Number.isFinite(value)) continue;
+    if (value === undefined || !Number.isFinite(value)) continue;
     let gain = 1 + (value - 50) * rule.perUnit;
     if (rule.exponent !== undefined) gain = Math.pow(Math.max(0, gain), rule.exponent);
     /* Neutral rules contribute nothing, so neutral anatomy yields exactly an
@@ -220,7 +255,7 @@ export function bodyScaleFactors(anatomy: BodyScaleAnatomies): BodyScale {
   }
 
   const heightCm = anatomy['body.heightCm'];
-  const rootScale = Number.isFinite(heightCm)
+  const rootScale = (heightCm !== undefined && Number.isFinite(heightCm))
     ? clamp(heightCm / BODY_SCALE_REFERENCE_HEIGHT_CM)
     : 1;
   return { bones, rootScale };

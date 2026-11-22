@@ -1,210 +1,86 @@
-// Run: node scripts/check_smart_import.cjs
-//
-// Exercises the Smart Customization head-import maths without a browser:
-// axis normalisation, scaling, the MeshData contract the renderer validates,
-// and the fact that a registered import is actually resolvable as the head.
+// Run: node scripts/check_smart_import.cjs (no Python / browser required).
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
-const THREE = require('three');
-
+const { webcrypto } = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 const cache = new Map();
-
+const stored = new Map();
 function load(name) {
   const file = path.join(root, name + '.ts');
   if (cache.has(file)) return cache.get(file).exports;
   const module = { exports: {} };
   cache.set(file, module);
-  vm.runInNewContext(
-    ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
-    }).outputText,
-    {
-      module,
-      exports: module.exports,
-      console,
-      process,
-      URLSearchParams,
-      THREE,
-      Float32Array,
-      Float64Array,
-      Set,
-      Map,
-      Math,
-      Number,
-      Infinity,
-      require: (id) => {
-        if (id === 'three') return THREE;
-        if (id.startsWith('@/')) return load(id.slice(2));
-        if (id.startsWith('.')) {
-          const rel = path.relative(root, path.resolve(path.dirname(file), id)).split(path.sep).join('/');
-          return load(rel);
-        }
-        return require(id);
-      },
-    },
-    { filename: file },
-  );
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText, {
+    module, exports: module.exports, console, crypto: webcrypto, Float32Array, Uint16Array, window: {},
+    localStorage: { getItem: key => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value) },
+    require: id => id.startsWith('@/') ? load(id.slice(2)) : require(id),
+  }, { filename: file });
   return module.exports;
 }
-
-const {
-  MeshImportError, mergeSceneMeshes, normaliseHead, toMeshData, boundsOf,
-} = load('lib/smart/headMesh');
-
-/* Deliberately a literal, not the exported constant: asserting the export
-   against itself would pass no matter what the implementation did. 0.27 m is
-   the shipped UBE head's measured height (y ∈ [−0.130, 0.138]). */
-const EXPECTED_HEAD_HEIGHT = 0.27;
-
-/** A box mesh, axis-aligned, as a THREE.Mesh so `mergeSceneMeshes` can walk it. */
-function boxMesh(sizeX, sizeY, sizeZ) {
-  const geometry = new THREE.BoxGeometry(sizeX, sizeY, sizeZ);
-  return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+const { validateSculptPayload, validateFitMetrics, CANONICAL_HEAD_URL } = load('lib/head/sculptPayload');
+const payload = () => ({ name: 'fixture', morphs: { custom: [], sculptDivisor: 10000,
+  sculpt: [{ host: '!UBE\\Head\\femaleHeadCharGen.tri', vertices: 11498, data: [[100, 1, 2, 3]] }] } });
+assert.equal(validateSculptPayload(payload()).ok, true);
+for (const mutate of [
+  p => { p.morphs.sculpt[0].host = 'Vanilla.tri'; },
+  p => { p.morphs.sculpt[0].vertices = 996; },
+  p => { p.morphs.sculptDivisor = 0; },
+  p => { p.morphs.sculptDivisor = Infinity; },
+  p => { p.morphs.sculpt[0].data[0][0] = 11498; },
+  p => { p.morphs.sculpt[0].data[0][0] = -1; },
+  p => { p.morphs.sculpt[0].data[0][1] = NaN; },
+  p => { p.morphs.sculpt[0].data[0][1] = 0.5; },
+  p => { p.morphs.sculpt[0].data[0][1] = 100000; },
+  p => { p.morphs.sculpt[0].data.push([100, 0, 0, 0]); },
+]) {
+  const p = payload(); mutate(p);
+  assert.equal(validateSculptPayload(p).ok, false);
 }
+const metrics = { approximate: true, alignment_rms_m: 0.002, fit_strength: 0.5,
+  face_surface_rms_m: 0.001, face_coverage_15mm: 1, max_displacement_m: 0.003,
+  quality: { collar_max_displacement_m: 0, protected_max_displacement_m: 0, likeness_approved: false } };
+assert.equal(validateFitMetrics({ ...metrics, output: 'private/path' }).output, undefined);
+assert.throws(() => validateFitMetrics({ ...metrics, face_coverage_15mm: 0.5 }));
+assert.throws(() => validateFitMetrics({ ...metrics, quality: { ...metrics.quality, collar_max_displacement_m: 0.001 } }));
 
-function meshFrom(positions, indices) {
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
-  geometry.setIndex(indices);
-  return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
-}
-
-let failures = 0;
-function check(name, fn) {
-  try {
-    fn();
-    console.log(`  ok  ${name}`);
-  } catch (error) {
-    failures += 1;
-    console.error(`FAIL  ${name}\n      ${error.message}`);
-  }
-}
-
-console.log('--- Smart Customization: head import ---');
-
-check('a Y-up box is scaled to head height and centred', () => {
-  const scene = new THREE.Group();
-  scene.add(boxMesh(0.5, 1.6, 0.4));
-  const merged = mergeSceneMeshes(scene);
-  const head = normaliseHead(merged);
-  const bounds = boundsOf(head.positions);
-  const height = bounds.max[1] - bounds.min[1];
-
-  assert.ok(Math.abs(height - EXPECTED_HEAD_HEIGHT) < 1e-4,
-    `height should be ${EXPECTED_HEAD_HEIGHT}, got ${height}`);
-  assert.ok(!head.rotatedZUp, 'a tall Y-up box must not be rotated');
-  for (let axis = 0; axis < 3; axis++) {
-    const centre = (bounds.min[axis] + bounds.max[axis]) / 2;
-    assert.ok(Math.abs(centre) < 1e-5, `axis ${axis} should centre on 0, got ${centre}`);
-  }
-  assert.ok(Math.abs(head.scale - EXPECTED_HEAD_HEIGHT / 1.6) < 1e-6,
-    `scale should be ${EXPECTED_HEAD_HEIGHT / 1.6}, got ${head.scale}`);
-});
-
-check('a Z-up model (deeper than tall) is rotated into Y-up', () => {
-  /* 0.4 tall but 1.6 deep: the shape of a Blender export lying on its back. */
-  const scene = new THREE.Group();
-  scene.add(boxMesh(0.5, 0.4, 1.6));
-  const head = normaliseHead(mergeSceneMeshes(scene));
-  assert.ok(head.rotatedZUp, 'a deep model must be detected as Z-up');
-  const bounds = boundsOf(head.positions);
-  const height = bounds.max[1] - bounds.min[1];
-  assert.ok(Math.abs(height - EXPECTED_HEAD_HEIGHT) < 1e-4,
-    `rotated height should be ${EXPECTED_HEAD_HEIGHT}, got ${height}`);
-});
-
-check('a node transform is applied before normalisation', () => {
-  /* A GLB often carries its scale on a parent node. Merging must bake it in,
-     or the head arrives 1000x too small. */
-  const outer = new THREE.Group();
-  outer.scale.setScalar(1000);
-  outer.add(boxMesh(0.5, 0.268, 0.4));
-  const merged = mergeSceneMeshes(outer);
-  const raw = boundsOf(merged.positions);
-  assert.ok(Math.abs((raw.max[1] - raw.min[1]) - 268) < 1e-3,
-    `world-space height should be 268, got ${raw.max[1] - raw.min[1]}`);
-  const head = normaliseHead(merged);
-  assert.ok(Math.abs(head.heightMetres - EXPECTED_HEAD_HEIGHT) < 1e-6);
-});
-
-check('multiple meshes merge into one triangle list', () => {
-  const scene = new THREE.Group();
-  scene.add(boxMesh(0.2, 0.2, 0.2));
-  scene.add(boxMesh(0.2, 0.2, 0.2));
-  const merged = mergeSceneMeshes(scene);
-  assert.equal(merged.sourceMeshes, 2);
-  assert.equal(merged.indices.length, 72, 'two 12-triangle boxes are 72 indices');
-});
-
-check('a mesh with no faces is rejected with a named reason', () => {
-  const scene = new THREE.Group();
-  scene.add(meshFrom([0, 0, 0, 1, 0, 0, 0, 1, 0], []));
-  assert.throws(() => mergeSceneMeshes(scene), (error) => {
-    assert.ok(error instanceof MeshImportError, 'must be a MeshImportError');
-    assert.match(error.message, /no triangles/i);
-    return true;
-  });
-});
-
-check('a scene with no meshes is rejected', () => {
-  assert.throws(() => mergeSceneMeshes(new THREE.Group()), /no mesh geometry/i);
-});
-
-check('normals are unit length and match the position count', () => {
-  const scene = new THREE.Group();
-  scene.add(boxMesh(0.5, 0.268, 0.4));
-  const head = normaliseHead(mergeSceneMeshes(scene));
-  assert.equal(head.normals.length, head.positions.length);
-  for (let i = 0; i < head.normals.length; i += 3) {
-    const length = Math.hypot(head.normals[i], head.normals[i + 1], head.normals[i + 2]);
-    assert.ok(Math.abs(length - 1) < 1e-4, `normal ${i / 3} has length ${length}`);
-  }
-});
-
-check('MeshData satisfies the renderer contract and loads it unchanged', () => {
-  const scene = new THREE.Group();
-  scene.add(boxMesh(0.5, 0.268, 0.4));
-  const data = toMeshData(normaliseHead(mergeSceneMeshes(scene)));
-
-  /* A box ships no UVs; the imported-head path fills them with zeros rather
-     than failing `meshDataToGeometry`'s two-per-vertex check. */
-  assert.equal(data.uvs.length, (data.positions.length / 3) * 2);
-  assert.equal(data.normals.length, data.positions.length);
-  assert.equal(data.indices.length % 3, 0);
-
-  const { meshDataToGeometry } = load('components/scene/useMeshGeometry');
-  const loaded = meshDataToGeometry(data);
-  assert.ok(loaded.geometry, 'geometry should be built');
-  assert.ok(Math.abs(loaded.geometry.getAttribute('position').count - data.positions.length / 3) < 1e-9);
-  assert.ok(loaded.positions.length === data.positions.length, 'positions survive the round trip');
-});
-
-check('a malformed MeshData is still rejected by the renderer', () => {
-  const { meshDataToGeometry } = load('components/scene/useMeshGeometry');
-  assert.throws(() => meshDataToGeometry({
-    positions: new Float32Array([0, 0, 0]), normals: new Float32Array([]),
-    uvs: new Float32Array([]), indices: [],
-  }), /malformed/);
-});
-
-check('the flag reads the query string and the env var', () => {
-  const { meshModeEnabled, isMeshFile, isImageFile } = load('lib/smart/smartMode');
-  assert.equal(meshModeEnabled('?smart=mesh'), true);
-  assert.equal(meshModeEnabled('?smart='), false);
-  assert.equal(meshModeEnabled(''), false);
-  assert.equal(isMeshFile('head.OBJ'), true);
-  assert.equal(isMeshFile('head.glb'), true);
-  assert.equal(isMeshFile('face.png'), false);
+async function run() {
+  const { SMART_ACCEPT, isObjFile, isImageFile, isUnsupportedMeshFile } = load('lib/smart/smartMode');
+  assert.ok(SMART_ACCEPT.includes('.obj') && !SMART_ACCEPT.includes('.glb'));
+  assert.equal(isObjFile('head.OBJ'), true);
+  assert.equal(isObjFile('head.glb'), false);
+  assert.equal(isUnsupportedMeshFile('head.gltf'), true);
   assert.equal(isImageFile('face.JPG'), true);
-  assert.equal(isImageFile('head.obj'), false);
-});
+  const { frontEdges } = load('lib/smart/retarget');
+  const edges = frontEdges(new Float32Array([-1, -1, 0, 1, -1, 0, 0, 1, 0]), [0, 1, 2], 132);
+  assert.ok(edges.length > 0 && edges.every(value => Number.isFinite(value) && value >= 0 && value <= 132));
 
-if (failures) {
-  console.error(`\n${failures} check(s) failed`);
-  process.exit(1);
+  const base = JSON.parse(fs.readFileSync(path.join(root, 'public', CANONICAL_HEAD_URL), 'utf8'));
+  const pristine = JSON.stringify(base);
+  const sculpt = load('lib/head/dynamicSculpt');
+  sculpt.registerBaseMesh(CANONICAL_HEAD_URL, base);
+  const neutral = payload(); neutral.morphs.sculpt[0].data = [];
+  const option = await sculpt.replaySculptPayload(neutral, 'neutral.jslot');
+  assert.equal(option.origin, 'sculpt-replay');
+  assert.equal(option.shapes.vertexCount, 11498);
+  assert.equal(JSON.stringify(base), pristine, 'Replay must not mutate the base');
+  assert.ok(sculpt.getDynamicSculptHeads().some(head => head.id === option.id));
+  sculpt.addDynamicHeadOption({ ...option, id: 'unrelated-persisted-head' });
+  assert.ok(!stored.get('lyra.dynamic-head-options').includes(option.id), 'Smart preview must not persist');
+  sculpt.removeDynamicHeadOption(option.id);
+  assert.ok(!sculpt.getDynamicSculptHeads().some(head => head.id === option.id));
+  assert.equal(sculpt.getDynamicMesh(option.meshUrl), undefined);
+  const { NECK_SEAM_HEAD_INDICES } = load('lib/head/neckDeltas');
+  const moved = payload(); moved.morphs.sculpt[0].data = [[NECK_SEAM_HEAD_INDICES[0], 100, 0, 0]];
+  await assert.rejects(sculpt.replaySculptPayload(moved, 'bad.jslot'), /protected neck/);
+  const badBase = { ...base, indices: [...base.indices] };
+  [badBase.indices[0], badBase.indices[1]] = [badBase.indices[1], badBase.indices[0]];
+  sculpt.registerBaseMesh(CANONICAL_HEAD_URL, badBase);
+  await assert.rejects(sculpt.replaySculptPayload(neutral, 'bad-base.jslot'), /topology/);
+  console.log('Smart OBJ guards, metrics, strict replay, rollback cleanup and transient storage checks passed.');
 }
-console.log('\nAll Smart Customization import checks passed.');
+run().catch(error => { console.error(error); process.exitCode = 1; });

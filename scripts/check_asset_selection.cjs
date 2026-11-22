@@ -25,6 +25,7 @@ vm.runInNewContext(ts.transpileModule(source, {
     if (id === '@/lib/equipment') return equipmentModule.exports;
     if (id === '@/lib/hair') return hairModule.exports;
     if (id === '@/lib/head/dynamicSculpt') return { getDynamicSculptHeads: () => [] };
+    if (id === '@/lib/hairGlbRegistry') return { findCuratedGlbHair: () => null };
     assert.equal(id, '@/lib/mo2/client');
     return { convertUrl: (options) => `/api/mo2/convert?${new URLSearchParams(options)}` };
   },

@@ -43,6 +43,7 @@ import { type EnvMode } from '@/lib/envModes';
 import { type BackgroundMode } from '@/lib/backgrounds';
 import { type CameraFraming, type CameraPoseRequest, CAMERA_FOV_DEFAULT, CAMERA_FOV_MIN, CAMERA_FOV_MAX, CAMERA_ROTATE_SPEED_DEFAULT, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPEED_MAX } from '@/lib/camera';
 import { LIGHTING_DEFAULTS, coerceLighting, bounded, wrapDegrees, type LightingSettings } from '@/lib/lighting';
+import { useBodySlideStore, LEGACY_SILHOUETTE_MAPPING } from '@/lib/bodyslide/store';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -52,7 +53,7 @@ import { LIGHTING_DEFAULTS, coerceLighting, bounded, wrapDegrees, type LightingS
  * Set to `false` to disable changing body weight and lock to 0% (default slim _0 mesh).
  * ─────────────────────────────────────────────────────────────────────────────
  */
-export const BODY_WEIGHT_ENABLED = false;
+export const BODY_WEIGHT_ENABLED = true;
 
 /** How a tint layer combines with the atlas beneath it. `normal` is the
  *  historical source-over draw and the value an absent `blend` means. */
@@ -297,6 +298,27 @@ export interface CharacterState extends AnatomySnapshot {
   /** Impulse nonce bumped by "Jiggle Test" button to trigger a dynamic bounce. */
   physicsImpulseNonce: number;
   triggerPhysicsImpulse: () => void;
+  /** Universal secondary spring physics enabled (Hair, Outfits, Accessories). */
+  secondaryPhysicsEnabled: boolean;
+  setSecondaryPhysicsEnabled: (v: boolean) => void;
+  /** Hair-specific secondary physics enabled. */
+  hairPhysicsEnabled: boolean;
+  setHairPhysicsEnabled: (v: boolean) => void;
+  /** Clothing / outfit-specific secondary physics enabled. */
+  clothPhysicsEnabled: boolean;
+  setClothPhysicsEnabled: (v: boolean) => void;
+  /** Secondary physics stiffness factor [0..1] (0 = soft/flowy, 1 = stiff/controlled). */
+  secondaryStiffness: number;
+  setSecondaryStiffness: (v: number) => void;
+  /** Secondary physics damping / drag factor [0..1]. */
+  secondaryDamping: number;
+  setSecondaryDamping: (v: number) => void;
+  /** Secondary physics wind / ambient breeze factor [0..1]. */
+  secondaryWindIntensity: number;
+  setSecondaryWindIntensity: (v: number) => void;
+  /** Impulse nonce bumped by "Test Secondary Dynamics" button. */
+  secondaryImpulseNonce: number;
+  triggerSecondaryImpulse: () => void;
   /** Active asset source identity, so a source switch can drop stale picks. */
   assetSourceId: string | null;
   setAssetSource: (id: string | null) => void;
@@ -831,8 +853,13 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
     ...(s.faceEditStart ? {} : { faceEditStart: faceSnapshot(s) }),
   }),
   endAnatomyEdit: () => set(s => commitEdit(s)),
-  setAnatomy: (id, value) => set(s => !Object.hasOwn(ANATOMY_BY_ID, id) || !Number.isFinite(value) ? {} :
-    faceAnatomyPatch(s, { anatomy: coerceAnatomy({ ...s.anatomy, [id]: value }) })),
+  setAnatomy: (id, value) => {
+    if (Object.hasOwn(LEGACY_SILHOUETTE_MAPPING, id) && Number.isFinite(value)) {
+      useBodySlideStore.getState().setSlider(LEGACY_SILHOUETTE_MAPPING[id], value);
+    }
+    set(s => !Object.hasOwn(ANATOMY_BY_ID, id) || !Number.isFinite(value) ? {} :
+      faceAnatomyPatch(s, { anatomy: coerceAnatomy({ ...s.anatomy, [id]: value }) }));
+  },
   setAnatomyAsymmetry: (id, value) => set(s => !Object.hasOwn(ANATOMY_BY_ID, id) || !ANATOMY_BY_ID[id].bilateral || !Number.isFinite(value) ? {} :
     faceAnatomyPatch(s, { anatomyAsymmetry: coerceAsymmetry({ ...s.anatomyAsymmetry, [id]: value }) })),
   setAnatomyColor: (id, value) => set(s => !ANATOMY_COLOR_DEFS.some(p => p.id === id) || !/^#[0-9a-f]{6}$/i.test(value) ? {} :
@@ -924,8 +951,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         ? s.favoritePoses.filter((p) => p !== id)
         : [...s.favoritePoses, id],
     })),
-  /* Default weight is locked to 0 (slim _0 mesh) when BODY_WEIGHT_ENABLED is false. */
-  weight: BODY_WEIGHT_ENABLED ? 1 : 0,
+  /* Default weight is 0 (slim _0 mesh) matching Skyrim Creation Engine base. */
+  weight: 0,
   setWeight: (weight) => {
     if (!BODY_WEIGHT_ENABLED) return;
     set({ weight: Math.min(1, Math.max(0, weight)) });
@@ -940,6 +967,20 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   setBodyPhysicsBounciness: (bodyPhysicsBounciness) => set({ bodyPhysicsBounciness }),
   setBodyCollisionsEnabled: (bodyCollisionsEnabled) => set({ bodyCollisionsEnabled }),
   triggerPhysicsImpulse: () => set((s) => ({ physicsImpulseNonce: s.physicsImpulseNonce + 1 })),
+  secondaryPhysicsEnabled: true,
+  hairPhysicsEnabled: true,
+  clothPhysicsEnabled: true,
+  secondaryStiffness: 0.55,
+  secondaryDamping: 0.50,
+  secondaryWindIntensity: 0.0,
+  secondaryImpulseNonce: 0,
+  setSecondaryPhysicsEnabled: (secondaryPhysicsEnabled) => set({ secondaryPhysicsEnabled }),
+  setHairPhysicsEnabled: (hairPhysicsEnabled) => set({ hairPhysicsEnabled }),
+  setClothPhysicsEnabled: (clothPhysicsEnabled) => set({ clothPhysicsEnabled }),
+  setSecondaryStiffness: (secondaryStiffness) => set({ secondaryStiffness }),
+  setSecondaryDamping: (secondaryDamping) => set({ secondaryDamping }),
+  setSecondaryWindIntensity: (secondaryWindIntensity) => set({ secondaryWindIntensity }),
+  triggerSecondaryImpulse: () => set((s) => ({ secondaryImpulseNonce: s.secondaryImpulseNonce + 1 })),
   assetSourceId: null,
   /* A different source has different catalogue ids: every pick, cached list
      and overlay tintmask from the previous one is unresolvable and must not
@@ -1333,8 +1374,13 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
      when the region is already at its defaults. */
   resetRegion: () => get().resetFaceRegion(),
 
-  loadPreset: (payload, sculptHeadId) =>
-    set((s) => {
+  loadPreset: (payload, sculptHeadId) => {
+    if (payload.bodySlide) {
+      useBodySlideStore.getState().setSliders(payload.bodySlide);
+    } else if (payload.anatomy) {
+      useBodySlideStore.getState().applyLegacySilhouette(payload.anatomy);
+    }
+    return set((s) => {
       const sliders = { ...s.sliders };
       const poses = { ...s.poses };
       for (const region of REGIONS) {
@@ -1375,8 +1421,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
            view fields above — a `.jslot` has no notion of the paper-doll. */
         equipment: payload.equipment ?? s.equipment,
         /* A `.jslot` records `actor.weight` as 0–100; `parsePreset` divides it.
-           When BODY_WEIGHT_ENABLED is false, weight is locked at 0. */
-        weight: BODY_WEIGHT_ENABLED ? (payload.weight ?? s.weight) : 0,
+           When BODY_WEIGHT_ENABLED is false, weight is locked at 0. Defaults to 0 (_0 body). */
+        weight: BODY_WEIGHT_ENABLED ? (payload.weight ?? 0) : 0,
         linkFaceToWeight: (payload as { linkFaceToWeight?: boolean }).linkFaceToWeight ?? s.linkFaceToWeight,
         linkBrowToHair: (payload as { linkBrowToHair?: boolean }).linkBrowToHair ?? s.linkBrowToHair,
         lashesColor: payload.lashesColor ?? s.lashesColor,
@@ -1394,7 +1440,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         activeOverlay: payload.overlays ? null : s.activeOverlay,
         presetNonce: s.presetNonce + 1,
       };
-    }),
+    });
+  },
 
   snapshotPreset: () => {
     /* While a hold-compare is up the live fields hold the baseline; a save or
@@ -1424,6 +1471,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
       lashesColor: s.lashesColor,
       lashesOpacity: s.lashesOpacity,
       overlays: s.overlayLayers,
+      bodySlide: useBodySlideStore.getState().sliders,
       anatomyMode: s.anatomyMode,
       ...anatomySnapshot(s),
     });
