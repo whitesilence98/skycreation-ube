@@ -1073,6 +1073,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   }, [skinSrc, detailFit?.cx, detailFit?.cy, detailFit?.kx, detailFit?.ky]);
   const hairSettings = useCharacter((s) => s.hair);
   const hair = hairSettings;
+  const showScalp = useCharacter((s) => s.showScalp);
   const skinGloss = useCharacter((s) => s.skinGloss);
   const skinSss = useCharacter((s) => s.skinSss);
   const skinDetail = useCharacter((s) => s.skinDetail);
@@ -1855,7 +1856,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           renderOrder={0}
         />
       ))}
-      <HairlineUnderlay rigRoot={rig?.root} hair={hair} renderOrder={5} />
+      {showScalp && <HairlineUnderlay rigRoot={rig?.root} hair={hair} renderOrder={5} />}
       {hairParts.map((part, index) => {
         if (part.meshUrl?.endsWith('.glb')) {
           return (
@@ -1864,6 +1865,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
               url={part.meshUrl}
               rigRoot={rig?.root}
               hair={hairSettings}
+              showScalp={showScalp}
               renderOrder={6 + index}
             />
           );

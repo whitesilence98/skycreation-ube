@@ -53,7 +53,7 @@ import { useBodySlideStore, LEGACY_SILHOUETTE_MAPPING } from '@/lib/bodyslide/st
  * Set to `false` to disable changing body weight and lock to 0% (default slim _0 mesh).
  * ─────────────────────────────────────────────────────────────────────────────
  */
-export const BODY_WEIGHT_ENABLED = true;
+export const BODY_WEIGHT_ENABLED = false;
 
 /** How a tint layer combines with the atlas beneath it. `normal` is the
  *  historical source-over draw and the value an absent `blend` means. */
@@ -381,6 +381,9 @@ export interface CharacterState extends AnatomySnapshot {
   /** Whether eyebrow color synchronizes with hair color by default (Skyrim RaceMenu parity). */
   linkBrowToHair: boolean;
   setLinkBrowToHair: (link: boolean) => void;
+  /** Whether the scalp cap and hairline underlay are visible (default: true). */
+  showScalp: boolean;
+  setShowScalp: (showScalp: boolean) => void;
   /** Eyebrow opacity [0..1]. Default 1.0 (100%). */
   browOpacity: number;
   setBrowOpacity: (v: number) => void;
@@ -1069,6 +1072,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
       ? s.hair.tone
       : (linkBrowToHair && (!s.hair.tone || s.hair.tone.toLowerCase() === '#ffffff') ? '#2B1A0A' : s.browColor),
   })),
+  showScalp: true,
+  setShowScalp: (showScalp) => set({ showScalp }),
   browOpacity: PRESETS[0].browOpacity ?? 1.0,
   setBrowOpacity: (browOpacity) => set({ browOpacity: Math.min(1, Math.max(0, browOpacity)) }),
   browGloss: PRESETS[0].browGloss ?? 0.15,

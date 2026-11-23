@@ -31,6 +31,8 @@ export function HairProperties() {
   const setHair = useCharacter((s) => s.setHair);
   const linkBrowToHair = useCharacter((s) => s.linkBrowToHair);
   const setLinkBrowToHair = useCharacter((s) => s.setLinkBrowToHair);
+  const showScalp = useCharacter((s) => s.showScalp);
+  const setShowScalp = useCharacter((s) => s.setShowScalp);
   const showToast = useCharacter((s) => s.showToast);
 
   const hairTone = hair.tone || '#b5834f';
@@ -129,6 +131,33 @@ export function HairProperties() {
           step={0.01}
           onChange={(v) => setHair({ gloss: v })}
         />
+        <button
+          type="button"
+          onClick={() => {
+            const next = !showScalp;
+            setShowScalp(next);
+            showToast?.(next ? 'Hairline & scalp cap visible' : 'Hairline & scalp cap hidden');
+          }}
+          className={cn(
+            'mt-1 flex w-full items-center justify-between border px-2.5 py-1.5 rounded-sm text-[11px] font-mono tracking-wider transition-colors',
+            showScalp
+              ? 'border-[#eac87f] bg-[#d4b483]/15 text-[#f2dfbe]'
+              : 'border-white/10 bg-black/30 text-[#8a8793] hover:border-white/30 hover:text-white'
+          )}
+        >
+          <span className="flex items-center gap-2">
+            <span
+              className={cn(
+                'h-2 w-2 rounded-full transition-colors',
+                showScalp ? 'bg-[#eac87f] shadow-[0_0_5px_#eac87f]' : 'bg-neutral-600'
+              )}
+            />
+            SCALP CAP
+          </span>
+          <span className="text-[10px] font-semibold uppercase text-[#dfba73]">
+            {showScalp ? 'VISIBLE' : 'HIDDEN'}
+          </span>
+        </button>
       </div>
     </div>
   );

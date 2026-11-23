@@ -12,6 +12,7 @@ export interface GlbHairPartProps {
   url: string;
   rigRoot?: THREE.Object3D | null;
   hair?: HairSettings;
+  showScalp?: boolean;
   renderOrder?: number;
 }
 
@@ -54,6 +55,7 @@ export function GlbHairPart({
   url,
   rigRoot,
   hair,
+  showScalp = true,
   renderOrder = 6,
 }: GlbHairPartProps) {
   const { scene } = useGLTF(url);
@@ -120,6 +122,23 @@ ${shader.vertexShader}`;
 
     cloned.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return;
+      const isCapOrScalp =
+        child.name.toLowerCase().includes('cap') ||
+        child.name.toLowerCase().includes('scalp') ||
+        (Array.isArray(child.material)
+          ? child.material.some(
+              (m) =>
+                m?.name?.toLowerCase().includes('cap') ||
+                m?.name?.toLowerCase().includes('scalp')
+            )
+          : child.material?.name?.toLowerCase().includes('cap') ||
+            child.material?.name?.toLowerCase().includes('scalp'));
+
+      if (isCapOrScalp) {
+        child.visible = showScalp;
+        if (!showScalp) return;
+      }
+
       child.frustumCulled = false;
       // Distinct render orders keep the transparent pass deterministic; in the
       // opaque pass depth sorting already does the job.
@@ -168,7 +187,7 @@ ${shader.vertexShader}`;
         }
       }
     });
-  }, [cloned, applySway, hair, renderOrder]);
+  }, [cloned, applySway, hair, showScalp, renderOrder]);
 
   const physics = useCharacter((s) => s.hairPhysicsEnabled);
   const stiffness = useCharacter((s) => s.secondaryStiffness);
