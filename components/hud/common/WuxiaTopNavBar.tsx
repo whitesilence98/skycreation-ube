@@ -47,6 +47,10 @@ export interface WuxiaTopNavBarProps {
   rightSlot?: React.ReactNode;
   /** Additional CSS class names for the outer header */
   className?: string;
+  /** Whether to show the navigation arrows (default true) */
+  showArrows?: boolean;
+  /** Whether to show the previous hotkey badge (e.g. [Q]) directly before the tabs (default false) */
+  showPrevKeycap?: boolean;
 }
 
 /**
@@ -67,6 +71,8 @@ export function WuxiaTopNavBar({
   leftSlot,
   rightSlot,
   className,
+  showArrows = true,
+  showPrevKeycap = false,
 }: WuxiaTopNavBarProps) {
   const [internalTab, setInternalTab] = useState(defaultTab);
   const currentTab = controlledTab !== undefined ? controlledTab : internalTab;
@@ -134,7 +140,9 @@ export function WuxiaTopNavBar({
     >
       {/* Left Slot: Search Button or Custom Content */}
       <div className="flex items-center gap-2">
-        {leftSlot ?? (
+        {leftSlot !== undefined ? (
+          leftSlot
+        ) : (
           <button
             type="button"
             onClick={onSearch}
@@ -153,14 +161,26 @@ export function WuxiaTopNavBar({
       {/* Center: Navigation Carousel */}
       <nav className="flex items-center gap-2 sm:gap-4 text-sm font-sans" aria-label="Category Carousel">
         {/* Left Arrow */}
-        <button
-          type="button"
-          onClick={() => cycleTab('prev')}
-          aria-label="Previous category"
-          className="flex h-6 w-6 items-center justify-center text-[#93828c] transition-colors hover:text-[#e4cca8] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]"
-        >
-          ◄
-        </button>
+        {showArrows && (
+          <button
+            type="button"
+            onClick={() => cycleTab('prev')}
+            aria-label="Previous category"
+            className="flex h-6 w-6 items-center justify-center text-[#93828c] transition-colors hover:text-[#e4cca8] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]"
+          >
+            ◄
+          </button>
+        )}
+
+        {/* Previous Category Keycap Hint (e.g. [Q]) */}
+        {showPrevKeycap && (
+          <span
+            className="flex h-[18px] items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 px-1 font-mono text-[10px] font-medium text-[#eae5dc]"
+            aria-hidden
+          >
+            {navHotkeys.prev.toUpperCase()}
+          </span>
+        )}
 
         {/* Tab Items */}
         <div className="flex items-center gap-3 sm:gap-5 overflow-x-auto max-w-[calc(100vw-130px)] sm:max-w-none">
@@ -204,14 +224,16 @@ export function WuxiaTopNavBar({
         </div>
 
         {/* Right Arrow */}
-        <button
-          type="button"
-          onClick={() => cycleTab('next')}
-          aria-label="Next category"
-          className="flex h-6 w-6 items-center justify-center text-[#93828c] transition-colors hover:text-[#e4cca8] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]"
-        >
-          ►
-        </button>
+        {showArrows && (
+          <button
+            type="button"
+            onClick={() => cycleTab('next')}
+            aria-label="Next category"
+            className="flex h-6 w-6 items-center justify-center text-[#93828c] transition-colors hover:text-[#e4cca8] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]"
+          >
+            ►
+          </button>
+        )}
 
         {/* Next Category Keycap Hint */}
         <span

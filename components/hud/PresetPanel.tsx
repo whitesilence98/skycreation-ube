@@ -2,20 +2,14 @@
 
 import { useState } from 'react';
 import { PresetLibrary } from '@/components/hud/PresetLibrary';
-import { useCharacter } from '@/lib/store';
 import { useBodySlideStore } from '@/lib/bodyslide/store';
 import { WuxiaSubCategoryRail } from '@/components/hud/common/WuxiaSubCategoryRail';
+import { usePresetUiStore, type PresetSlot } from '@/lib/presets/presetUiStore';
 import { cn } from '@/lib/cn';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
 interface PresetPanelProps {
   manifest?: Mo2Manifest | null;
-}
-
-interface PresetCard {
-  id: string;
-  label: string;
-  thumb: string;
 }
 
 interface BodyPresetCard {
@@ -24,13 +18,6 @@ interface BodyPresetCard {
   subtitle: string;
   description: string;
 }
-
-const PRESET_CARDS: PresetCard[] = [
-  { id: 'lyra', label: 'Default', thumb: '/assets/preset-pack/textures/presets/lyra.webp?v=20261117' },
-  { id: 'seraphine', label: 'Frau', thumb: '/assets/preset-pack/textures/presets/seraphine.webp' },
-  { id: 'isolde', label: 'Iced Coffee', thumb: '/assets/preset-pack/textures/presets/isolde.webp?v=20261117' },
-  { id: 'miren', label: 'Lan Xin', thumb: '/assets/preset-pack/textures/presets/miren.webp' },
-];
 
 const BODY_PRESET_CARDS: BodyPresetCard[] = [
   {
@@ -55,6 +42,22 @@ const BODY_PRESET_CARDS: BodyPresetCard[] = [
 
 type Status = { kind: 'ok' | 'warn' | 'error'; text: string } | null;
 
+/** Traditional topknot bun character bust silhouette SVG matching target Image 2 */
+export function IconWuxiaBustSilhouette({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 100 120" fill="currentColor" className={className} aria-hidden="true">
+      {/* Topknot bun */}
+      <ellipse cx="50" cy="18" rx="9" ry="8" />
+      {/* Hair knot cinch */}
+      <rect x="46" y="24" width="8" height="3" rx="1.5" />
+      {/* Head & Hair */}
+      <path d="M50 26 C36 26 31 36 31 48 C31 60 41 71 50 74 C59 71 69 60 69 48 C69 36 64 26 50 26 Z" />
+      {/* Slender neck & sweeping shoulders */}
+      <path d="M44 72 L44 82 C32 86 18 92 12 102 C10 105 10 110 10 114 L90 114 C90 110 90 105 88 102 C82 92 68 86 56 82 L56 72 Z" />
+    </svg>
+  );
+}
+
 /** Athletic silhouette icon for Body presets */
 function IconBodySilhouette({ className }: { className?: string }) {
   return (
@@ -72,33 +75,33 @@ function IconBodySilhouette({ className }: { className?: string }) {
 export function PresetPanel({ manifest: _manifest }: PresetPanelProps) {
   const [activeTab, setActiveTab] = useState<'face' | 'body'>('face');
 
-  // Face preset state
-  const currentPreset = useCharacter((s) => s.preset);
-  const applyPreset = useCharacter((s) => s.applyPreset);
-  const setName = useCharacter((s) => s.setName);
-  const setAssets = useCharacter((s) => s.setAssets);
+  // Shared Wuxia Preset UI Store
+  const selectedIndex = usePresetUiStore((s) => s.selectedIndex);
+  const slots = usePresetUiStore((s) => s.slots);
+  const isRenaming = usePresetUiStore((s) => s.isRenaming);
+  const renameValue = usePresetUiStore((s) => s.renameValue);
+  const statusMessage = usePresetUiStore((s) => s.statusMessage);
+  const selectSlot = usePresetUiStore((s) => s.selectSlot);
+  const setRenameValue = usePresetUiStore((s) => s.setRenameValue);
+  const confirmRename = usePresetUiStore((s) => s.confirmRename);
+  const cancelRename = usePresetUiStore((s) => s.cancelRename);
+  const applySelectedSlot = usePresetUiStore((s) => s.applySelectedSlot);
 
   // Body preset state
   const activeBodyPresetId = useBodySlideStore((s) => s.activePresetId);
-
   const [status, setStatus] = useState<Status>(null);
-  const [missingThumbs, setMissingThumbs] = useState<Record<string, boolean>>({});
+  const [showAdvancedLibrary, setShowAdvancedLibrary] = useState(false);
 
   const flash = (s: Status) => {
     setStatus(s);
     window.setTimeout(() => setStatus(null), 3500);
   };
 
-  const handleSelectPreset = (card: PresetCard) => {
-    if (currentPreset === card.id) return;
-    /* Applying a preset replaces every face value and clears its history, so a
-       stray click is unrecoverable. Ask once, and only when there is something
-       to lose: a fresh visit to the same preset stays a single click. */
-    if (!window.confirm(`Apply “${card.label}”? This replaces the current face and clears undo history.`)) return;
-    applyPreset(card.id as any);
-    setName(card.label.toUpperCase());
-    setAssets({ preset: undefined });
-    flash({ kind: 'ok', text: `APPLIED ${card.label}` });
+  const handleSelectSlot = (slot: PresetSlot, index: number) => {
+    selectSlot(index);
+    if (selectedIndex === index && !slot.isEmpty) {
+      applySelectedSlot();
+    }
   };
 
   const handleSelectBodyPreset = async (card: BodyPresetCard) => {
@@ -116,15 +119,15 @@ export function PresetPanel({ manifest: _manifest }: PresetPanelProps) {
       <WuxiaSubCategoryRail activeTab="preset" />
 
       {/* 2. Main Preset Content Area */}
-      <div className="flex flex-col w-[300px] md:w-[330px] max-h-[calc(100vh-160px)] overflow-y-auto scrollbar-none pr-1">
-        <div className="flex flex-col gap-3">
+      <div className="flex flex-col w-[275px] md:w-[285px] max-h-[calc(100vh-160px)] overflow-y-auto scrollbar-none pr-1">
+        <div className="flex flex-col gap-2.5">
           {/* Top Header: PRESETS */}
           <div className="flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
             <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#efece6]">
               PRESETS
             </span>
             <span className="font-mono text-[10px] text-[#a49a88]">
-              {activeTab === 'face' ? '4 BUILT-IN' : '3 CANONICAL'}
+              {activeTab === 'face' ? `${slots.length} SLOTS` : '3 CANONICAL'}
             </span>
           </div>
 
@@ -162,64 +165,120 @@ export function PresetPanel({ manifest: _manifest }: PresetPanelProps) {
 
           {activeTab === 'face' ? (
             <>
-              {/* ── CHARACTER PRESETS (4 Portrait Cards) ─────────────────────────── */}
-              <div className="flex flex-col gap-2 pt-0.5">
-                <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#c4b595]">
-                  CHARACTER PRESETS
-                </span>
+              {/* ── SINGLE-COLUMN VERTICAL STACK OF WIDE BANNER CARDS (~260px wide, ~64px tall, ~4:1 ratio) ── */}
+              <div className="flex flex-col gap-2 w-full max-w-[260px]" role="listbox" aria-label="Face Presets">
+                {slots.map((slot, index) => {
+                  const isSelected = selectedIndex === index;
+                  const isPopulated = !slot.isEmpty && Boolean(slot.thumb);
 
-                {/* 2×2 Grid of 4 Character Cards */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  {PRESET_CARDS.map((card) => {
-                    const isSelected = currentPreset === card.id;
-                    return (
+                  return (
+                    <div
+                      key={slot.id}
+                      className="relative w-full"
+                    >
                       <button
-                        key={card.id}
                         type="button"
-                        onClick={() => handleSelectPreset(card)}
-                        aria-label={`Select face preset ${card.label}`}
-                        aria-pressed={isSelected}
-                        className="group flex flex-col items-center gap-1.5 text-center min-h-[24px]"
+                        onClick={() => handleSelectSlot(slot, index)}
+                        aria-label={`Select ${slot.label}`}
+                        aria-selected={isSelected}
+                        className={cn(
+                          'group relative flex h-[64px] w-full items-center overflow-hidden rounded-[2px] transition-all duration-150 text-left',
+                          // Active selection: crisp solid 2px white border matching Image 2
+                          isSelected
+                            ? 'border-2 border-white shadow-[0_0_10px_rgba(255,255,255,0.25)] z-10'
+                            : 'border border-[#23252d] bg-[#15161b] hover:border-white/70',
+                        )}
                       >
-                        <div
-                          className={cn(
-                            'relative aspect-square w-full overflow-hidden rounded-xs border transition-all duration-150',
-                            isSelected
-                              ? 'border-2 border-[#eac87f] shadow-[0_0_12px_rgba(234,200,127,0.45)] ring-1 ring-[#eac87f]/60'
-                              : 'border-[#d4b483]/25 bg-black/50 hover:border-[#d4b483]/60 hover:scale-[1.03]',
-                          )}
-                        >
-                          {missingThumbs[card.id] ? (
-                            <span className="flex h-full items-center justify-center p-3 text-[12px] text-[#b8b0a0]">
-                              Preview unavailable
-                            </span>
-                          ) : (
+                        {isPopulated ? (
+                          /* Populated preset cards (1..5): Wide banner thumbnails with bottom-left overlay */
+                          <>
                             <img
-                              src={card.thumb}
-                              alt={card.label}
-                              onError={() => setMissingThumbs((previous) => ({ ...previous, [card.id]: true }))}
-                              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                              src={slot.thumb!}
+                              alt={slot.label}
+                              className="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-200 group-hover:scale-105"
                             />
-                          )}
-                          <span className="pointer-events-none absolute inset-0 border border-black/25" />
-                        </div>
+                            {/* Dark gradient overlay for typography readability */}
+                            <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+                          </>
+                        ) : (
+                          /* Empty/unassigned slots (6..8): Dark slate background (#15161b) + centered white bust silhouette SVG */
+                          <div className="absolute inset-0 flex items-center justify-center bg-[#15161b]">
+                            <IconWuxiaBustSilhouette className="h-[42px] w-auto text-white opacity-95 transition-transform duration-150 group-hover:scale-105" />
+                          </div>
+                        )}
+
+                        {/* Bottom-left overlay label ('Face Preset N') matching Image 2 */}
                         <span
                           className={cn(
-                            'text-[10px] font-mono tracking-wider transition-colors',
-                            isSelected
-                              ? 'font-bold text-[#f2dfbe] drop-shadow-[0_0_6px_rgba(234,200,127,0.5)]'
-                              : 'text-[#8f8778] group-hover:text-[#c4b9a3]',
+                            'absolute bottom-2 left-2.5 text-[12px] font-sans font-medium text-white tracking-wide truncate max-w-[220px]',
+                            isPopulated && 'drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]',
                           )}
                         >
-                          {card.label}
+                          {slot.label}
                         </span>
                       </button>
-                    );
-                  })}
-                </div>
+
+                      {/* Inline Rename Form on Active Card */}
+                      {isSelected && isRenaming && (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            confirmRename();
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute inset-x-1 bottom-1 z-20 flex items-center gap-1 rounded-[2px] border border-white/40 bg-[#16171d]/95 p-1 shadow-lg backdrop-blur-md"
+                        >
+                          <input
+                            type="text"
+                            value={renameValue}
+                            autoFocus
+                            maxLength={32}
+                            aria-label="Preset name"
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') {
+                                e.stopPropagation();
+                                cancelRename();
+                              }
+                            }}
+                            className="min-w-0 flex-1 rounded-[1px] border border-white/20 bg-black/60 px-1.5 py-0.5 text-[11px] text-white outline-none focus:border-[#dfba73]"
+                          />
+                          <button
+                            type="submit"
+                            className="rounded-[2px] bg-[#dfba73] px-2 py-0.5 text-[10px] font-semibold text-black hover:bg-[#eac87f]"
+                          >
+                            OK
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => cancelRename()}
+                            className="rounded-[2px] px-1 py-0.5 text-[11px] text-[#a49a88] hover:text-white"
+                          >
+                            ✕
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
-              <PresetLibrary />
+              {/* Collapsible Storage & Library */}
+              <div className="mt-1 border-t border-[#d4b483]/14 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedLibrary(!showAdvancedLibrary)}
+                  className="flex items-center justify-between w-full text-[10px] font-mono tracking-wider text-[#a49a88] hover:text-[#d4b483] py-1 transition-colors"
+                >
+                  <span>STORAGE & EXPORT OPTIONS</span>
+                  <span>{showAdvancedLibrary ? '▲' : '▼'}</span>
+                </button>
+                {showAdvancedLibrary && (
+                  <div className="mt-1.5">
+                    <PresetLibrary />
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             /* ── BODY PRESETS (Canonical 0Necoco / BodySlide Presets) ─────────────── */
@@ -305,20 +364,20 @@ export function PresetPanel({ manifest: _manifest }: PresetPanelProps) {
             </div>
           )}
 
-          {/* Status Message Toast */}
-          {status && (
+          {/* Toast / Status messages */}
+          {(status || statusMessage) && (
             <div
               role="status"
               className={cn(
                 'mt-1 text-center font-mono text-[10px] tracking-wide',
-                status.kind === 'error'
+                status?.kind === 'error'
                   ? 'text-[#e0967c]'
-                  : status.kind === 'warn'
+                  : status?.kind === 'warn'
                     ? 'text-[#e0c48d]'
                     : 'text-[#a9c9b6]',
               )}
             >
-              {status.text}
+              {status?.text ?? statusMessage}
             </div>
           )}
         </div>

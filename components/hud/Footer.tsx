@@ -17,6 +17,7 @@ import { exitWardrobe } from '@/lib/editorNav';
 import { SmartFooter } from '@/components/hud/smart/SmartFooter';
 import { notifyOutfitsChanged, requestOutfitSave } from '@/lib/outfits/saveRequest';
 import { useCharacter } from '@/lib/store';
+import { usePresetUiStore } from '@/lib/presets/presetUiStore';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
 function Key({ children }: { children: React.ReactNode }) {
@@ -41,6 +42,7 @@ export function Footer({
   const isHair = useCharacter(s => s.primaryTab === 'HAIR');
   const isMakeup = useCharacter(s => s.primaryTab === 'FACE');
   const isFace = useCharacter(s => s.primaryTab === 'FACE SHAPE');
+  const isPreset = useCharacter(s => s.primaryTab === 'PRESET');
   const smart = useCharacter(s => s.studioPage === 'smart');
   const past = useCharacter(s => s.facePast.length);
   const future = useCharacter(s => s.faceFuture.length);
@@ -53,6 +55,7 @@ export function Footer({
   if (isHair) return <HairFooter onToggleImport={onToggleCustomizationDrawer} />;
   if (isMakeup) return <MakeupFooter onToggleImport={onToggleCustomizationDrawer} />;
   if (isFace) return <FeaturesFooter onToggleImport={onToggleCustomizationDrawer} />;
+  if (isPreset) return <PresetFooter />;
 
   return (
     <footer className="creator-footer">
@@ -730,6 +733,142 @@ function MakeupFooter({ onToggleImport }: { onToggleImport?: () => void }) {
         >
           <span className="font-mono text-[10px] bg-black/20 px-1 rounded-[2px] text-black">Space</span>
           <span>Preview</span>
+        </button>
+      </div>
+    </footer>
+  );
+}
+
+function IconHelper({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M12 2 C8 2 4.5 4.5 3 6.5 C2.5 7.2 3 8 4 8 L20 8 C21 8 21.5 7.2 21 6.5 C19.5 4.5 16 2 12 2 Z" />
+      <circle cx="12" cy="13" r="5" />
+      <circle cx="10" cy="12" r="1.2" fill="#15161b" />
+      <circle cx="14" cy="12" r="1.2" fill="#15161b" />
+      <path d="M10.5 15 C11.2 15.8 12.8 15.8 13.5 15" stroke="#15161b" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function PresetFooter() {
+  const state = useCharacter.getState;
+  const deleteSelectedSlot = usePresetUiStore((s) => s.deleteSelectedSlot);
+  const startRename = usePresetUiStore((s) => s.startRename);
+  const retakeCoverImage = usePresetUiStore((s) => s.retakeCoverImage);
+  const applySelectedSlot = usePresetUiStore((s) => s.applySelectedSlot);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest('button, summary, a, input, textarea, select, [role="button"], [role="slider"], [contenteditable="true"]')
+      ) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      if (key === 'x') {
+        event.preventDefault();
+        deleteSelectedSlot();
+      } else if (key === 'r') {
+        event.preventDefault();
+        startRename();
+      } else if (key === 'f') {
+        event.preventDefault();
+        void retakeCoverImage();
+      } else if (event.code === 'Space') {
+        event.preventDefault();
+        applySelectedSlot();
+        state().setPrimaryTab('FACE SHAPE');
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [deleteSelectedSlot, startRename, retakeCoverImage, applySelectedSlot, state]);
+
+  const handleEditFace = () => {
+    applySelectedSlot();
+    state().setPrimaryTab('FACE SHAPE');
+  };
+
+  return (
+    <footer className="pointer-events-auto absolute inset-x-0 bottom-0 z-20 flex min-h-[54px] flex-wrap md:flex-nowrap items-center justify-between gap-3 px-4 sm:px-8 py-2 md:py-0 select-none bg-gradient-to-t from-black/80 to-transparent">
+      {/* ── Left Actions (Helper + Return + Watermark ID: 1007029704) ── */}
+      <div className="flex flex-col gap-0.5">
+        <div className="flex items-center gap-3 sm:gap-5 text-xs text-[#cfcacf] flex-wrap">
+          {/* Helper button */}
+          <button
+            type="button"
+            onClick={() => state().showToast('Character Creator Guide & Assistant')}
+            className="flex items-center gap-1.5 transition-colors hover:text-white"
+          >
+            <IconHelper className="h-4 w-4 text-[#dfba73]" />
+            <span>Helper</span>
+          </button>
+
+          {/* Return */}
+          <button
+            type="button"
+            onClick={() => state().setWorkspace('edit')}
+            className="flex items-center gap-1.5 transition-colors hover:text-white"
+          >
+            <span className="flex h-4 w-4 items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 font-mono text-[10px] font-medium text-[#eae5dc]">
+              ↵
+            </span>
+            <span>Return</span>
+          </button>
+        </div>
+
+        {/* Watermark matching target Image 2 */}
+        <span className="font-mono text-[10px] tracking-wide text-[#7a7882]/80 select-none">
+          ID: 1007029704
+        </span>
+      </div>
+
+      {/* ── Center-Right & Far-Right Actions ── */}
+      <div className="flex items-center gap-4 sm:gap-6 text-xs text-[#cfcacf]">
+        {/* [X] Delete */}
+        <button
+          type="button"
+          onClick={() => deleteSelectedSlot()}
+          className="flex items-center gap-1.5 transition-colors hover:text-white"
+        >
+          <Key>X</Key>
+          <span>Delete</span>
+        </button>
+
+        {/* [R] Rename */}
+        <button
+          type="button"
+          onClick={() => startRename()}
+          className="flex items-center gap-1.5 transition-colors hover:text-white"
+        >
+          <Key>R</Key>
+          <span>Rename</span>
+        </button>
+
+        {/* [F] Retake Cover Image */}
+        <button
+          type="button"
+          onClick={() => void retakeCoverImage()}
+          className="flex items-center gap-1.5 transition-colors hover:text-white"
+        >
+          <Key>F</Key>
+          <span>Retake Cover Image</span>
+        </button>
+
+        {/* Far-Right Primary CTA: [Space] Edit Face */}
+        <button
+          type="button"
+          onClick={handleEditFace}
+          className="flex items-center gap-2 rounded-sm bg-[#dfba73] px-3.5 py-1.5 text-xs font-semibold text-black shadow-md transition-all hover:bg-[#eac87f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+        >
+          <span className="font-mono text-[10px] bg-black/20 px-1 rounded-[2px] text-black">Space</span>
+          <span>Edit Face</span>
         </button>
       </div>
     </footer>

@@ -18,8 +18,45 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
   const setPreviewMode = useCharacter((s) => s.setPreviewMode);
   const showToast = useCharacter((s) => s.showToast);
 
-  // If in Hairstyle, Makeup, Features, Physique, or Preset mode:
-  if (isHair || isMakeup || isFace || isBody || isPreset) {
+  // If in Preset mode:
+  if (isPreset) {
+    return (
+      <WuxiaTopNavBar
+        tabs={[
+          { id: 'customization', label: 'Customization' },
+          { id: 'makeup', label: 'Makeup' },
+        ]}
+        activeTab="customization"
+        onTabChange={(tabId) => {
+          if (tabId === 'makeup') {
+            useCharacter.getState().setPrimaryTab('FACE');
+          } else {
+            useCharacter.getState().setPrimaryTab('PRESET');
+          }
+        }}
+        showArrows={false}
+        showPrevKeycap={true}
+        searchHotkey=""
+        leftSlot={<div className="w-8" />}
+        isCollapsed={preview}
+        onToggleCollapse={() => setPreviewMode(!preview)}
+        rightSlot={
+          <a
+            href="/rigger"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Auto-Rigger Studio (opens in a new tab)"
+            className="pointer-events-auto ml-2 px-2.5 py-0.5 rounded-[2px] text-[10px] font-mono tracking-widest text-[#d4b483] bg-[#d4b483]/10 hover:bg-[#d4b483]/20 border border-[#d4b483]/30 transition-all flex items-center gap-1.5 uppercase"
+          >
+            <span>⚡</span> Auto-Rigger
+          </a>
+        }
+      />
+    );
+  }
+
+  // If in Hairstyle, Makeup, Features, or Physique mode:
+  if (isHair || isMakeup || isFace || isBody) {
     const hasSmart = isHair || isMakeup;
     return (
       <WuxiaTopNavBar
@@ -46,9 +83,7 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
                 ? 'Search hairstyles (Q)'
                 : isFace
                   ? 'Search facial features (Q)'
-                  : isBody
-                    ? 'Search body morphs (Q)'
-                    : 'Search presets (Q)'
+                  : 'Search body morphs (Q)'
           )}
         rightSlot={
           <a
