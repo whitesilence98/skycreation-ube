@@ -21,6 +21,7 @@
  *
  * Options:
  *   --out <path>         Output .glb path (default: public/assets/hair/<name>.glb)
+ *   --scale <float>      Scale factor multiplier (e.g. 0.80 for 20% smaller)
  *   --deltaY <float>     Manual vertical offset in metres (e.g. -1.138)
  *   --targetCrown <fl>   Target crown height in metres (default: 0.150)
  *   --name <string>      Mesh node name
@@ -42,6 +43,7 @@ Usage: node scripts/import_external_hair_glb.cjs <inputGlbPath> [options]
 
 Options:
   --out <path>         Output file path (default: public/assets/hair/<name>.glb)
+  --scale <float>      Scale factor multiplier (default: 1.0, e.g. 0.80 for 20% smaller)
   --deltaY <float>     Explicit vertical offset in metres (overrides --targetCrown)
   --targetCrown <fl>   Target crown top height (default: ${DEFAULT_TARGET_CROWN}m)
   --name <string>      Node name in glTF scene (default: auto from filename)
@@ -52,6 +54,7 @@ Options:
 
   const inputPath = path.resolve(args[0]);
   let outPath = null;
+  let scale = 1.0;
   let manualDeltaY = null;
   let targetCrown = DEFAULT_TARGET_CROWN;
   let meshName = null;
@@ -60,6 +63,8 @@ Options:
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--out' && args[i + 1]) {
       outPath = path.resolve(args[++i]);
+    } else if (args[i] === '--scale' && args[i + 1]) {
+      scale = parseFloat(args[++i]);
     } else if (args[i] === '--deltaY' && args[i + 1]) {
       manualDeltaY = parseFloat(args[++i]);
     } else if (args[i] === '--targetCrown' && args[i + 1]) {
@@ -71,11 +76,11 @@ Options:
     }
   }
 
-  return { inputPath, outPath, manualDeltaY, targetCrown, meshName, dryRun };
+  return { inputPath, outPath, scale, manualDeltaY, targetCrown, meshName, dryRun };
 }
 
 function normalizeHairGlb(options) {
-  const { inputPath, manualDeltaY, targetCrown, dryRun } = options;
+  const { inputPath, scale = 1.0, manualDeltaY, targetCrown, dryRun } = options;
 
   if (!fs.existsSync(inputPath)) {
     console.error(`Error: Input file does not exist: ${inputPath}`);
@@ -155,37 +160,67 @@ function normalizeHairGlb(options) {
   console.log(`  Y (Height): ${rawGlobalMinY.toFixed(4)} to ${rawGlobalMaxY.toFixed(4)} (dy: ${(rawGlobalMaxY - rawGlobalMinY).toFixed(4)}m)`);
   console.log(`  Z (Depth):  ${rawMinZ.toFixed(4)} to ${rawMaxZ.toFixed(4)} (dz: ${(rawMaxZ - rawMinZ).toFixed(4)}m)`);
 
-  // 2. Compute deltaY
+  // 2. Compute scale and deltaY
+  const centerX = (rawMinX + rawMaxX) / 2;
+  const centerZ = (rawMinZ + rawMaxZ) / 2;
+  const scaledMaxY = rawGlobalMaxY * scale;
+
   let deltaY;
   if (manualDeltaY !== null) {
     deltaY = manualDeltaY;
-    console.log(`\nUsing manual deltaY: ${deltaY.toFixed(4)}m`);
+    console.log(`\nUsing scale: ${scale.toFixed(2)}x, manual deltaY: ${deltaY.toFixed(4)}m`);
   } else {
-    deltaY = targetCrown - rawGlobalMaxY;
-    console.log(`\nAuto-computed deltaY (target crown ${targetCrown.toFixed(4)}m - source max ${rawGlobalMaxY.toFixed(4)}m): ${deltaY.toFixed(4)}m`);
+    deltaY = targetCrown - scaledMaxY;
+    console.log(`\nUsing scale: ${scale.toFixed(2)}x`);
+    console.log(`Auto-computed deltaY (target crown ${targetCrown.toFixed(4)}m - scaled max ${scaledMaxY.toFixed(4)}m): ${deltaY.toFixed(4)}m`);
   }
 
+  const projMinX = (rawMinX - centerX) * scale + centerX;
+  const projMaxX = (rawMaxX - centerX) * scale + centerX;
+  const projMinY = rawGlobalMinY * scale + deltaY;
+  const projMaxY = rawGlobalMaxY * scale + deltaY;
+  const projMinZ = (rawMinZ - centerZ) * scale + centerZ;
+  const projMaxZ = (rawMaxZ - centerZ) * scale + centerZ;
+
   if (dryRun) {
-    console.log(`\n[DRY RUN] Projected normalized bounds:`);
-    console.log(`  Y (Height): ${(rawGlobalMinY + deltaY).toFixed(4)} to ${(rawGlobalMaxY + deltaY).toFixed(4)}`);
+    console.log(`\n[DRY RUN] Projected normalized bounds (scale ${scale.toFixed(2)}x):`);
+    console.log(`  X (Width):  ${projMinX.toFixed(4)} to ${projMaxX.toFixed(4)} (dx: ${(projMaxX - projMinX).toFixed(4)}m)`);
+    console.log(`  Y (Height): ${projMinY.toFixed(4)} to ${projMaxY.toFixed(4)} (dy: ${(projMaxY - projMinY).toFixed(4)}m)`);
+    console.log(`  Z (Depth):  ${projMinZ.toFixed(4)} to ${projMaxZ.toFixed(4)} (dz: ${(projMaxZ - projMinZ).toFixed(4)}m)`);
     console.log(`  Done.`);
     return;
   }
 
-  // 3. Shift all Y coordinates in the binary buffer
+  // 3. Scale and translate coordinates in the binary buffer
   for (const accIndex of positionAccessorIndices) {
     const acc = gltf.accessors[accIndex];
     const bv = gltf.bufferViews[acc.bufferView];
     const baseOffset = (bv.byteOffset || 0) + (acc.byteOffset || 0);
 
     for (let i = 0; i < acc.count; i++) {
-      const yOffset = baseOffset + i * 12 + 4; // float32 at index 1 (Y)
-      const currentY = binData.readFloatLE(yOffset);
-      binData.writeFloatLE(currentY + deltaY, yOffset);
+      const xOff = baseOffset + i * 12;
+      const yOff = baseOffset + i * 12 + 4;
+      const zOff = baseOffset + i * 12 + 8;
+
+      const origX = binData.readFloatLE(xOff);
+      const origY = binData.readFloatLE(yOff);
+      const origZ = binData.readFloatLE(zOff);
+
+      const newX = (origX - centerX) * scale + centerX;
+      const newY = origY * scale + deltaY;
+      const newZ = (origZ - centerZ) * scale + centerZ;
+
+      binData.writeFloatLE(newX, xOff);
+      binData.writeFloatLE(newY, yOff);
+      binData.writeFloatLE(newZ, zOff);
     }
 
-    acc.min[1] += deltaY;
-    acc.max[1] += deltaY;
+    acc.min[0] = (acc.min[0] - centerX) * scale + centerX;
+    acc.max[0] = (acc.max[0] - centerX) * scale + centerX;
+    acc.min[1] = acc.min[1] * scale + deltaY;
+    acc.max[1] = acc.max[1] * scale + deltaY;
+    acc.min[2] = (acc.min[2] - centerZ) * scale + centerZ;
+    acc.max[2] = (acc.max[2] - centerZ) * scale + centerZ;
   }
 
   // 4. Strip foreign armature skinning, bones, and nested FBX transform nodes
@@ -237,10 +272,10 @@ function normalizeHairGlb(options) {
 
   console.log(`\nSuccessfully normalized and exported:`);
   console.log(`  File: ${outPath} (${(outBuf.length / 1024).toFixed(1)} KB)`);
-  console.log(`  Normalized Extents:`);
-  console.log(`    X: ${rawMinX.toFixed(4)} to ${rawMaxX.toFixed(4)} (dx: ${(rawMaxX - rawMinX).toFixed(4)}m)`);
-  console.log(`    Y: ${(rawGlobalMinY + deltaY).toFixed(4)} to ${(rawGlobalMaxY + deltaY).toFixed(4)} (dy: ${(rawGlobalMaxY - rawGlobalMinY).toFixed(4)}m)`);
-  console.log(`    Z: ${rawMinZ.toFixed(4)} to ${rawMaxZ.toFixed(4)} (dz: ${(rawMaxZ - rawMinZ).toFixed(4)}m)`);
+  console.log(`  Normalized Extents (scale: ${scale.toFixed(2)}x, deltaY: ${deltaY.toFixed(4)}m):`);
+  console.log(`    X: ${projMinX.toFixed(4)} to ${projMaxX.toFixed(4)} (dx: ${(projMaxX - projMinX).toFixed(4)}m)`);
+  console.log(`    Y: ${projMinY.toFixed(4)} to ${projMaxY.toFixed(4)} (dy: ${(projMaxY - projMinY).toFixed(4)}m)`);
+  console.log(`    Z: ${projMinZ.toFixed(4)} to ${projMaxZ.toFixed(4)} (dz: ${(projMaxZ - projMinZ).toFixed(4)}m)`);
   console.log(`\nTo register this hair in the Character Creator, add to lib/hairGlbRegistry.ts:`);
   console.log(`{`);
   console.log(`  id: '${baseName}',`);

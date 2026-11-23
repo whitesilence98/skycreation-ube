@@ -48,6 +48,17 @@ export const CURATED_GLB_HAIRS: CuratedGlbHair[] = [
     description: 'High-poly braided twin tail with ribbons and multi-layer alpha hair cards.',
     partCount: 21,
   },
+  {
+    id: 'wolf_haircut',
+    label: 'Wolf Haircut (Fitted)',
+    file: 'wolf_haircut.glb',
+    meshUrl: '/assets/hair/wolf_haircut.glb',
+    badge: 'GLB',
+    author: 'Community',
+    mod: 'Custom',
+    description: 'Layered wolf haircut scaled to 80% natural head proportions.',
+    partCount: 1,
+  },
 ];
 
 /**
