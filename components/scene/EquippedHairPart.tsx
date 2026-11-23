@@ -9,7 +9,7 @@ import { useMeshResource } from '@/components/scene/useMeshGeometry';
 import { SkinnedPart } from '@/components/scene/SkinnedPart';
 import { AuthoredPart } from '@/components/scene/AuthoredPart';
 import type { SkeletonRegistry } from '@/lib/character/skeleton';
-import { hairOffsetMetres } from '@/lib/hair/settings';
+import { hairOffsetMetres, type HairSettings } from '@/lib/hair/settings';
 
 export interface EquippedHairPartProps {
   /** One resolved companion hair part from `manifest.parts.hairParts` */
@@ -21,7 +21,8 @@ export interface EquippedHairPartProps {
   defaultRole?: MaterialRole;
   fallbackTexture?: string;
   fallbackNormalByRole?: Partial<Record<MaterialRole, string>>;
-  hair?: { tone: string; gloss: number; alpha?: number; hairOffset?: number };
+  /** Hair dye/gloss/alpha plus the ADVANCED TUNING thresholds. */
+  hair?: HairSettings;
   renderOrder?: number;
 }
 

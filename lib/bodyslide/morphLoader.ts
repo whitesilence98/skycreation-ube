@@ -14,7 +14,20 @@ import {
   type OsdData,
   type SliderOspMapping,
 } from './osdParser';
-import { NECOCO_CATEGORIES, type BodySlideCategory } from './categories';
+import {
+  UBE_BODY_CATEGORIES,
+  NECOCO_CATEGORIES,
+  type BodySlideCategory,
+} from './categories';
+
+export { UBE_BODY_CATEGORIES, NECOCO_CATEGORIES, type BodySlideCategory };
+
+/**
+ * Synchronous getter for active BodySlide categories (UBE_BODY_CATEGORIES).
+ */
+export function getActiveBodyCategories(): BodySlideCategory[] {
+  return UBE_BODY_CATEGORIES ?? NECOCO_CATEGORIES;
+}
 
 export interface BodySlideDataBundle {
   categories: BodySlideCategory[];
@@ -87,7 +100,7 @@ export async function loadAllBodySlideData(
 
       const mappings = parseOspXml(ospRes);
       cachedBundle = {
-        categories: NECOCO_CATEGORIES,
+        categories: getActiveBodyCategories(),
         mappings,
         osdData,
       };
@@ -189,22 +202,41 @@ export function applyBodySlideMorphs(
   const vertCount = basePositions.length / 3;
 
   for (const [sliderName, weight] of Object.entries(sliders)) {
-    if (!weight || Math.abs(weight) < 0.0001) continue;
-
-    const mapping = mappings[sliderName];
-    if (!mapping) continue;
+    if (!weight || Math.abs(weight) < 0.0001 || !Number.isFinite(weight)) continue;
 
     // BodySlide percentage weight (100% = 1.0 multiplier)
     const factor = (weight / 100.0) * scale;
 
-    // Multi-shape targets (e.g. Clothes Pack 6) vs single shape
+    // Resolve OSP mapping with full aliasing support:
+    // 1. Direct name (e.g. "BreastsBigger")
+    // 2. Clean name without BaseShape (e.g. "BaseShapeBreastsBigger" -> "BreastsBigger")
+    // 3. Raw name with BaseShape (e.g. "BreastsBigger" -> "BaseShapeBreastsBigger")
+    // 4. XML escaped/unescaped variants (e.g. NeckSize__HEAD> <-> NeckSize__HEAD&gt;)
+    let mapping: SliderOspMapping | undefined = undefined;
+    if (mappings) {
+      mapping =
+        mappings[sliderName] ??
+        mappings[sliderName.replace(/^BaseShape/i, '')] ??
+        mappings[`BaseShape${sliderName}`] ??
+        mappings[sliderName.replace(/&gt;/g, '>').replace(/&lt;/g, '<')] ??
+        mappings[sliderName.replace(/>/g, '&gt;').replace(/</g, '&lt;')];
+    }
+
+    // Fallback: If no OSP mapping exists, resolve directly against osdData!
     const targets =
-      mapping.targets && mapping.targets.length > 0
+      mapping && mapping.targets && mapping.targets.length > 0
         ? mapping.targets
-        : [{ dataTarget: mapping.dataTarget || sliderName, shapeTarget: '' }];
+        : [{ dataTarget: mapping?.dataTarget || sliderName, shapeTarget: '' }];
+
+    let appliedForSlider = false;
 
     for (const target of targets) {
-      const block = osdData.getBlock(target.dataTarget) || osdData.getBlock(sliderName);
+      const block =
+        osdData.getBlock(target.dataTarget) ||
+        osdData.getBlock(sliderName) ||
+        osdData.getBlock(target.dataTarget.replace(/&gt;/g, '>').replace(/&lt;/g, '<')) ||
+        osdData.getBlock(sliderName.replace(/&gt;/g, '>').replace(/&lt;/g, '<'));
+
       if (!block || block.diffCount === 0) continue;
 
       let shapeOffset = 0;
@@ -218,22 +250,40 @@ export function applyBodySlideMorphs(
 
       const { diffCount, indices, deltas } = block;
 
-      for (let d = 0; d < diffCount; d++) {
-        const vIdx = indices[d] + shapeOffset;
-        if (vIdx >= vertCount) continue;
-
-        const pIdx = vIdx * 3;
-        const inBase = d * 3;
-
-        // Coordinate transformation from Skyrim NIF to Three.js:
-        // render_X = nif_dx * scale
-        // render_Y = nif_dz * scale (Skyrim Z-up -> Three.js Y-up)
-        // render_Z = nif_dy * scale (Skyrim Y-forward -> Three.js Z-forward)
-        targetPositions[pIdx] += deltas[inBase] * factor;
-        targetPositions[pIdx + 1] += deltas[inBase + 2] * factor;
-        targetPositions[pIdx + 2] += deltas[inBase + 1] * factor;
+      // Coordinate transformation from Skyrim NIF to Three.js:
+      // render_X = nif_dx * scale
+      // render_Y = nif_dz * scale (Skyrim Z-up -> Three.js Y-up)
+      // render_Z = nif_dy * scale (Skyrim Y-forward -> Three.js Z-forward)
+      if (shapeOffset === 0) {
+        let inBase = 0;
+        for (let d = 0; d < diffCount; d++) {
+          const vIdx = indices[d];
+          if (vIdx < vertCount) {
+            const pIdx = vIdx * 3;
+            targetPositions[pIdx] += deltas[inBase] * factor;
+            targetPositions[pIdx + 1] += deltas[inBase + 2] * factor;
+            targetPositions[pIdx + 2] += deltas[inBase + 1] * factor;
+          }
+          inBase += 3;
+        }
+      } else {
+        let inBase = 0;
+        for (let d = 0; d < diffCount; d++) {
+          const vIdx = indices[d] + shapeOffset;
+          if (vIdx < vertCount) {
+            const pIdx = vIdx * 3;
+            targetPositions[pIdx] += deltas[inBase] * factor;
+            targetPositions[pIdx + 1] += deltas[inBase + 2] * factor;
+            targetPositions[pIdx + 2] += deltas[inBase + 1] * factor;
+          }
+          inBase += 3;
+        }
       }
 
+      appliedForSlider = true;
+    }
+
+    if (appliedForSlider) {
       appliedCount++;
     }
   }

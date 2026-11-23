@@ -62,8 +62,8 @@ export function BodySlidePanel({ categoryFilter, hideSkeletonHeader }: BodySlide
     const initial: Record<string, boolean> = {};
     for (const cat of NECOCO_CATEGORIES) {
       if (cat.defaultHidden) continue;
-      // Keep first 2 open by default, collapse others for cleanliness
-      initial[cat.name] = cat.name.startsWith('1 -') || cat.name.startsWith('2 -');
+      // When categoryFilter is active, expand all filtered categories by default for instant access
+      initial[cat.name] = categoryFilter ? true : (cat.name.startsWith('1 -') || cat.name.startsWith('2 -') || cat.name.includes('Boob'));
     }
     return initial;
   });
@@ -156,7 +156,7 @@ export function BodySlidePanel({ categoryFilter, hideSkeletonHeader }: BodySlide
             <span className="text-[#eac87f]">✦</span>
             <span>SAVE BODY CONFIG</span>
           </div>
-          <span className="text-[9.5px] text-[#d4b483]/80 tracking-normal font-sans">
+          <span className="text-[10px] text-[#d4b483]/80 tracking-normal font-sans">
             Fits femalebody + 51 wardrobe outfits
           </span>
         </button>
@@ -195,7 +195,7 @@ export function BodySlidePanel({ categoryFilter, hideSkeletonHeader }: BodySlide
             <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[#d4b483]">
               PROPORTIONS & STATURE
             </span>
-            <span className="font-mono text-[9px] text-[#8f8778]">SKELETON SCALE</span>
+            <span className="font-mono text-[10px] text-[#8f8778]">SKELETON SCALE</span>
           </div>
           <div className="flex flex-col gap-1">
             {SKELETON_PROPORTIONS.map((p) => (
@@ -214,7 +214,7 @@ export function BodySlidePanel({ categoryFilter, hideSkeletonHeader }: BodySlide
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search 150+ body morphs..."
+              placeholder="Search 220+ body morphs..."
               className="w-full rounded-[2px] border border-[#d4b483]/20 bg-black/40 px-2 py-1 pl-6 font-mono text-[10px] text-[#efece6] placeholder:text-[#8f8778] transition-all focus:border-[#d4b483]/60 focus:bg-black/60 focus:outline-none min-h-[26px]"
             />
             <span className="absolute left-2 top-1.5 text-[10px] text-[#8f8778]">⌕</span>
@@ -222,14 +222,14 @@ export function BodySlidePanel({ categoryFilter, hideSkeletonHeader }: BodySlide
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1 text-[11px] text-[#8f8778] hover:text-[#efece6]"
+                className="absolute right-1 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center text-[12px] text-[#8f8778] hover:text-[#efece6] transition-colors"
                 title="Clear search"
               >
                 ×
               </button>
             )}
           </div>
-          <div className="flex items-center gap-1 font-mono text-[9px]">
+          <div className="flex items-center gap-1 font-mono text-[10px]">
             <button
               type="button"
               onClick={expandAll}
@@ -257,7 +257,7 @@ export function BodySlidePanel({ categoryFilter, hideSkeletonHeader }: BodySlide
             </div>
           ) : (
             filteredCategories.map((cat) => {
-              const isExpanded = expandedCats[cat.name] ?? false;
+              const isExpanded = expandedCats[cat.name] ?? (categoryFilter ? true : false);
               // Check how many sliders in this category are non-zero
               const catActiveCount = cat.sliders.filter(
                 (s) => Math.abs(sliders[s.name] ?? 0) > 0.001,
@@ -271,21 +271,21 @@ export function BodySlidePanel({ categoryFilter, hideSkeletonHeader }: BodySlide
                   {/* Category Header */}
                   <div
                     onClick={() => toggleCategory(cat.name)}
-                    className="flex cursor-pointer items-center justify-between px-2.5 py-1.5 font-mono text-[10px] transition-all hover:bg-[#d4b483]/10 select-none min-h-[28px]"
+                    className="flex cursor-pointer items-center justify-between px-2.5 py-1.5 font-mono text-[10px] transition-all hover:bg-[#d4b483]/10 select-none min-h-[30px]"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-[8px] text-[#d4b483] transition-transform">
+                      <span className="text-[10px] text-[#d4b483] transition-transform">
                         {isExpanded ? '▼' : '▶'}
                       </span>
                       <span className="font-semibold uppercase tracking-wider text-[#e6decb]">
                         {formatCategoryName(cat.name)}
                       </span>
-                      <span className="text-[9px] text-[#8f8778]">({cat.sliders.length})</span>
+                      <span className="text-[10px] text-[#8f8778]">({cat.sliders.length})</span>
                     </div>
 
                     <div className="flex items-center gap-2">
                       {catActiveCount > 0 && (
-                        <span className="rounded-[2px] bg-[#d4b483]/20 px-1 py-0.2 text-[9px] font-bold text-[#eac87f]">
+                        <span className="rounded-[2px] bg-[#d4b483]/20 px-1.5 py-0.5 text-[10px] font-bold text-[#eac87f]">
                           {catActiveCount} active
                         </span>
                       )}
@@ -295,7 +295,7 @@ export function BodySlidePanel({ categoryFilter, hideSkeletonHeader }: BodySlide
                           e.stopPropagation();
                           resetCategorySliders(cat);
                         }}
-                        className="text-[9px] text-[#8f8778] transition-colors hover:text-[#d09e88]"
+                        className="min-h-[24px] px-1 text-[10px] text-[#8f8778] transition-colors hover:text-[#d09e88]"
                         title={`Reset ${cat.name} sliders`}
                       >
                         RESET

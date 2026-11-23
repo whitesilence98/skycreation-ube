@@ -16,6 +16,12 @@ import {
   type PresetMeta,
 } from './presetLoader';
 import CONVERTING_OUTFITS_SLIDERS from './convertingOutfitsPreset.json';
+import { UBE_BODY_CATEGORIES, type BodySlideCategory } from './categories';
+
+/** All canonical body slider names extracted from UBE_BODY_CATEGORIES */
+export const ALL_UBE_BODY_SLIDER_NAMES: readonly string[] = Object.freeze(
+  Array.from(new Set(UBE_BODY_CATEGORIES.flatMap((cat: BodySlideCategory) => cat.sliders.map((s) => s.name))))
+);
 
 /** Canonical base sliders for UBE Necoco Body (Baked into newbody baseline) */
 export const DEFAULT_NECOCO_SLIDERS: Readonly<Record<string, number>> = Object.freeze({});
@@ -213,7 +219,7 @@ export const createBodySlideSlice: StateCreator<BodySlideState> = (set, get) => 
   sliders: initialSliders,
   activePresetId: 'necoco-converting-outfits',
   searchQuery: '',
-  activeCategory: '1 - Necoco Boob',
+  activeCategory: '1. Necoco Boob',
   activeSubTab: 'bodyslide',
   isLoadingPreset: false,
   presetError: null,

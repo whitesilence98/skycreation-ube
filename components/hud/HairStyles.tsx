@@ -11,7 +11,7 @@ import { WuxiaBreadcrumbs } from '@/components/hud/common/WuxiaBreadcrumbs';
 import { WuxiaRibbonPill } from '@/components/hud/common/WuxiaRibbonPill';
 import { WuxiaColorPicker2D } from '@/components/hud/hair/WuxiaColorPicker2D';
 import { BracketSlider } from '@/components/hud/common/BracketSlider';
-import { HAIR_LIMITS, HAIR_OFFSET_METRES } from '@/lib/hair/settings';
+import { DEFAULT_HAIR, HAIR_LIMITS, HAIR_OFFSET_METRES, type HairSettings } from '@/lib/hair/settings';
 import { HAIR_PALETTE_SWATCHES } from '@/components/hud/HairProperties';
 import { cn } from '@/lib/cn';
 
@@ -22,6 +22,66 @@ interface SectionConfig {
   label: string;
   badge?: string;
 }
+
+type TuningField = keyof typeof HAIR_LIMITS;
+
+/**
+ * ADVANCED TUNING sliders, grouped. These are the constants the hair renderer
+ * ships with, exposed so a creator can dial them without a rebuild. Every key
+ * is a real `HairSettings` field clamped by `coerceHair`.
+ */
+const TUNING_GROUPS: ReadonlyArray<{
+  id: string;
+  label: string;
+  rows: ReadonlyArray<{ key: TuningField & keyof HairSettings; label: string; scale?: number; unit?: string }>;
+}> = [
+  {
+    id: 'material',
+    label: 'MATERIAL & MASK',
+    rows: [
+      { key: 'matCutoff', label: 'HAIR CUTOUT', scale: 100, unit: '%' },
+      { key: 'matCutoffFaded', label: 'FADED CUTOUT', scale: 100, unit: '%' },
+      { key: 'matBlendThreshold', label: 'BLEND THRESHOLD', scale: 100, unit: '%' },
+      { key: 'matSheenFloor', label: 'SHEEN FLOOR', scale: 100, unit: '%' },
+      { key: 'matSheenBase', label: 'SHEEN BASE', scale: 100, unit: '%' },
+      { key: 'matSheenSlope', label: 'SHEEN SLOPE', scale: 100, unit: '%' },
+      { key: 'matNormalFade', label: 'FADED NORMAL DEPTH', scale: 100, unit: '%' },
+    ],
+  },
+  {
+    id: 'sway',
+    label: 'SWAY SHADER',
+    rows: [
+      { key: 'swayAmpX', label: 'AMPLITUDE · SIDE', scale: 1000, unit: 'mm' },
+      { key: 'swayAmpZ', label: 'AMPLITUDE · DEPTH', scale: 1000, unit: 'mm' },
+      { key: 'swaySpeedX', label: 'SPEED · SIDE', unit: '×' },
+      { key: 'swaySpeedZ', label: 'SPEED · DEPTH', unit: '×' },
+      { key: 'swayFreqX', label: 'STRAND FREQ · SIDE', unit: '' },
+      { key: 'swayFreqZ', label: 'STRAND FREQ · DEPTH', unit: '' },
+      { key: 'swayPhaseZ', label: 'DEPTH PHASE', unit: '×' },
+      { key: 'swayCrownY', label: 'FALLOFF ORIGIN Y', unit: 'm' },
+      { key: 'swayFalloff', label: 'FALLOFF SLOPE', unit: '×' },
+      { key: 'swayBase', label: 'IDLE SWAY', scale: 100, unit: '%' },
+      { key: 'swayStiffGain', label: 'BOUNCE RESPONSE', unit: '×' },
+      { key: 'swayWindGain', label: 'WIND RESPONSE', unit: '×' },
+      { key: 'swayImpulseGain', label: 'IMPULSE RESPONSE', unit: '×' },
+      { key: 'swayImpulseDecay', label: 'IMPULSE DECAY', unit: '×' },
+    ],
+  },
+  {
+    id: 'scalp',
+    label: 'SCALP FILLER',
+    rows: [
+      { key: 'scalpCutoff', label: 'SCALP CUTOUT', scale: 100, unit: '%' },
+      { key: 'scalpRoughness', label: 'SCALP ROUGHNESS', scale: 100, unit: '%' },
+      { key: 'scalpMetalness', label: 'SCALP METALNESS', scale: 100, unit: '%' },
+      { key: 'scalpPolyFactor', label: 'POLYGON OFFSET · FACTOR', unit: '' },
+      { key: 'scalpPolyUnits', label: 'POLYGON OFFSET · UNITS', unit: '' },
+    ],
+  },
+];
+
+const TUNING_COUNT = TUNING_GROUPS.reduce((n, g) => n + g.rows.length, 0);
 
 export function HairStyles({ manifest: _manifest }: { manifest: Mo2Manifest | null }) {
   const selection = useCharacter((s) => s.assetSelection);
@@ -514,6 +574,47 @@ export function HairStyles({ manifest: _manifest }: { manifest: Mo2Manifest | nu
                       </div>
                     )}
                   </div>
+
+                  {/* ── ADVANCED TUNING ───────────────────────────────
+                      Every renderer constant, live. Nested <details> keeps the
+                      block one line tall until opened. */}
+                  <details className="group mt-3 border-t border-white/10 pt-3">
+                    <summary className="flex cursor-pointer select-none list-none items-center justify-between font-mono text-[10px] uppercase tracking-wider text-[#9f9da6] transition-colors group-hover:text-[#d4d3d9]">
+                      <span>Advanced Tuning ({TUNING_COUNT})</span>
+                      <span className="text-[10px] text-[#55535c] transition-transform group-open:rotate-90">›</span>
+                    </summary>
+
+                    <div className="flex flex-col gap-2 pt-2.5">
+                      {TUNING_GROUPS.map((group) => (
+                        <details key={group.id} className="group/sub border border-white/5 bg-black/20 px-2 py-1.5 rounded-sm">
+                          <summary className="flex cursor-pointer select-none list-none items-center justify-between text-[10px] font-mono uppercase tracking-wider text-[#75737d] transition-colors group-hover/sub:text-[#a8a5b0]">
+                            <span>{group.label}</span>
+                            <span className="text-[10px] text-[#55535c] transition-transform group-open/sub:rotate-90">›</span>
+                          </summary>
+                          <div className="flex flex-col gap-2 pt-2">
+                            {group.rows.map(({ key, label, scale, unit }) => {
+                              const [min, max] = HAIR_LIMITS[key];
+                              const raw = (hair[key] as number | undefined) ?? (DEFAULT_HAIR[key] as number);
+                              const k = scale ?? 1;
+                              const shown = Math.round(raw * k * 100) / 100;
+                              return (
+                                <BracketSlider
+                                  key={key}
+                                  label={label}
+                                  value={shown}
+                                  min={Math.round(min * k * 100) / 100}
+                                  max={Math.round(max * k * 100) / 100}
+                                  step={k === 1 ? 0.01 : k === 100 ? 1 : 0.5}
+                                  display={`${shown}${unit ?? ''}`}
+                                  onChange={(v) => setHair({ [key]: v / k })}
+                                />
+                              );
+                            })}
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  </details>
                 </div>
               )}
             </div>

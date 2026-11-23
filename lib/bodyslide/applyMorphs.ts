@@ -178,10 +178,14 @@ export function updateMorphInfluences(
     const rawVal = sliderValues[key];
     if (typeof rawVal !== 'number' || !Number.isFinite(rawVal)) continue;
 
+    const unescapedKey = key.replace(/&gt;/g, '>').replace(/&lt;/g, '<');
     const idx =
       dict[key] ??
+      dict[unescapedKey] ??
       dict[`BaseShape${key}`] ??
-      (key.startsWith('BaseShape') ? dict[key.slice(9)] : undefined);
+      dict[`BaseShape${unescapedKey}`] ??
+      (key.startsWith('BaseShape') ? dict[key.slice(9)] : undefined) ??
+      (unescapedKey.startsWith('BaseShape') ? dict[unescapedKey.slice(9)] : undefined);
     if (idx !== undefined && idx < influences.length) {
       let val = rawVal;
       if (normalizeMode === true || (normalizeMode === undefined && Math.abs(rawVal) > 1.05)) {
@@ -222,33 +226,44 @@ export function applyMorphsToPositions(
       weight = rawVal * 0.01;
     }
 
-    const block = 'getBlock' in osd ? osd.getBlock(key) : (osd.get(key) ?? osd.get(`BaseShape${key}`));
+    const unescapedKey = key.replace(/&gt;/g, '>').replace(/&lt;/g, '<');
+    const block =
+      'getBlock' in osd
+        ? (osd.getBlock(key) ?? osd.getBlock(unescapedKey))
+        : (osd.get(key) ??
+           osd.get(unescapedKey) ??
+           osd.get(`BaseShape${key}`) ??
+           osd.get(`BaseShape${unescapedKey}`) ??
+           osd.get(key.replace(/^BaseShape/i, '')) ??
+           osd.get(unescapedKey.replace(/^BaseShape/i, '')));
     if (!block || block.diffCount === 0) continue;
 
     const { diffCount, indices, deltas } = block;
 
     if (frame === 'render') {
       const s = scale * weight;
+      let inBase = 0;
       for (let i = 0; i < diffCount; i++) {
         const vIdx = indices[i];
         if (vIdx < totalVertices) {
           const outBase = vIdx * 3;
-          const inBase = i * 3;
           targetPositions[outBase]     += deltas[inBase] * s;
           targetPositions[outBase + 1] += deltas[inBase + 2] * s; // NIF Z -> Three.js Y
           targetPositions[outBase + 2] += deltas[inBase + 1] * s; // NIF Y -> Three.js Z
         }
+        inBase += 3;
       }
     } else {
+      let inBase = 0;
       for (let i = 0; i < diffCount; i++) {
         const vIdx = indices[i];
         if (vIdx < totalVertices) {
           const outBase = vIdx * 3;
-          const inBase = i * 3;
           targetPositions[outBase]     += deltas[inBase] * weight;
           targetPositions[outBase + 1] += deltas[inBase + 1] * weight;
           targetPositions[outBase + 2] += deltas[inBase + 2] * weight;
         }
+        inBase += 3;
       }
     }
   }

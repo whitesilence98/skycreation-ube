@@ -11,6 +11,8 @@ import {
   updateSkinGloss,
 } from '@/components/scene/SkinShader';
 import { useCharacter } from '@/lib/store';
+import { HAIR_ALPHA_CUTOFF, hairMaterialState, hairRoughness } from '@/lib/hair/material';
+import type { HairSettings } from '@/lib/hair/settings';
 
 /**
  * Renders one authored hair/outfit mesh with its per-shape materials.
@@ -42,8 +44,8 @@ export interface AuthoredPartProps {
   /** Per-role roughness map, e.g. the body's `_n.dds` alpha as a gloss mask. */
   fallbackRoughnessByRole?: Partial<Record<MaterialRole, string>>;
   hiddenRoles?: MaterialRole[];
-  /** Hair dye/gloss/alpha; only applied to `hair` materials. */
-  hair?: { tone: string; gloss: number; alpha?: number };
+  /** Hair dye/gloss/alpha plus the ADVANCED TUNING thresholds. */
+  hair?: HairSettings;
   /** Skin tone color tint `#rrggbb` applied to `skin` materials. */
   skinColor?: string;
   /** Shared pore/relief tile owned by `HeadModel`, applied to `skin` slots. */
@@ -129,15 +131,15 @@ export function AuthoredPart({
         color: skin && skinColor ? skinColor : (isHair && hair ? hair.tone : '#ffffff'),
         roughness: skin
           ? skinRoughnessFromGloss(skinGloss)
-          : isHair && hair ? Math.max(0.12, 0.62 - hair.gloss * 0.46) : 0.55,
+          : isHair && hair ? hairRoughness(hair.gloss, hair) : 0.55,
         metalness: isHair ? 0.05 : 0.0,
         opacity: isHair ? hairAlpha : 1.0,
-        transparent: isHair,
+        transparent: isHair ? hairMaterialState(hairAlpha, hair).transparent : false,
         /* The producer decodes the shader's authored cutout/2-sided flags;
            only fall back to the role defaults when it did not. */
-        alphaTest: spec.alphaTest ?? (isHair ? (hairAlpha < 0.95 ? 0.08 : 0.35) : 0),
-        alphaToCoverage: isHair && hairAlpha >= 0.99,
-        depthWrite: isHair ? (hairAlpha > 0.85) : true,
+        alphaTest: spec.alphaTest ?? (isHair ? HAIR_ALPHA_CUTOFF : 0),
+        alphaToCoverage: false,
+        depthWrite: isHair ? hairMaterialState(hairAlpha, hair).depthWrite : true,
         side: (spec.doubleSided ?? isHair) ? THREE.DoubleSide : THREE.FrontSide,
         visible: true,
       });
@@ -190,12 +192,12 @@ export function AuthoredPart({
       const material = standardMaterials[i];
       if (material) {
         material.color.set(hair.tone);
-        material.roughness = Math.max(0.12, 0.62 - hair.gloss * 0.46);
-        const alpha = hair.alpha !== undefined ? hair.alpha : 1.0;
-        material.opacity = alpha;
-        material.depthWrite = alpha > 0.85;
-        material.alphaTest = alpha < 0.95 ? 0.08 : (slot.spec.alphaTest ?? 0.35);
-        material.alphaToCoverage = alpha >= 0.99;
+        material.roughness = hairRoughness(hair.gloss, hair);
+        const state = hairMaterialState(hair.alpha !== undefined ? hair.alpha : 1.0, hair);
+        material.opacity = state.opacity;
+        material.transparent = state.transparent;
+        material.depthWrite = state.depthWrite;
+        material.alphaTest = state.transparent ? state.alphaTest : (slot.spec.alphaTest ?? HAIR_ALPHA_CUTOFF);
         material.needsUpdate = true;
       }
     });

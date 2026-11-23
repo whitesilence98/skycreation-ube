@@ -4,16 +4,13 @@ import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { createPortal } from '@react-three/fiber';
 import { useMeshGeometry, useMaterialTexture } from '@/components/scene/useMeshGeometry';
-import { hairOffsetMetres } from '@/lib/hair/settings';
+import { DEFAULT_HAIR, hairOffsetMetres, type HairSettings } from '@/lib/hair/settings';
+import { hairMaterialState } from '@/lib/hair/material';
 
 export interface HairlineUnderlayProps {
   rigRoot?: THREE.Object3D | null;
-  hair?: {
-    tone: string;
-    gloss?: number;
-    alpha?: number;
-    hairOffset?: number;
-  };
+  /** Tone, alpha and the ADVANCED TUNING thresholds for the scalp filler. */
+  hair?: HairSettings;
   renderOrder?: number;
 }
 
@@ -33,16 +30,19 @@ export function HairlineUnderlay({
   const material = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        transparent: true,
-        alphaTest: 0.02,
-        depthWrite: false,
+        /* Opaque: blending the cap into the transparent pass made it show the
+           crown through itself. The scalp is a filler, so it keeps a near-zero
+           cutout — dropping its faint texels would open bald patches. */
+        transparent: false,
+        alphaTest: DEFAULT_HAIR.scalpCutoff,
+        depthWrite: true,
         polygonOffset: true,
-        polygonOffsetFactor: -2,
-        polygonOffsetUnits: -4,
+        polygonOffsetFactor: DEFAULT_HAIR.scalpPolyFactor,
+        polygonOffsetUnits: DEFAULT_HAIR.scalpPolyUnits,
         side: THREE.DoubleSide,
         color: new THREE.Color(hair?.tone ?? '#1a1412'),
-        roughness: 0.85,
-        metalness: 0.05,
+        roughness: DEFAULT_HAIR.scalpRoughness,
+        metalness: DEFAULT_HAIR.scalpMetalness,
       }),
     [],
   );
@@ -50,10 +50,19 @@ export function HairlineUnderlay({
   useEffect(() => {
     material.color.set(hair?.tone ?? '#1a1412');
     const alpha = hair?.alpha !== undefined ? Math.max(0.0, Math.min(1.0, hair.alpha)) : 1.0;
-    material.opacity = alpha;
-    material.alphaTest = 0.02 * alpha;
+    const state = hairMaterialState(alpha, hair);
+    material.opacity = state.opacity;
+    material.transparent = state.transparent;
+    material.depthWrite = state.depthWrite;
+    /* The scalp is a filler: even opaque it keeps a near-zero cutout, because
+       dropping its faint texels would open bald patches. */
+    material.alphaTest = state.transparent ? state.alphaTest : (hair?.scalpCutoff ?? DEFAULT_HAIR.scalpCutoff);
+    material.roughness = hair?.scalpRoughness ?? DEFAULT_HAIR.scalpRoughness;
+    material.metalness = hair?.scalpMetalness ?? DEFAULT_HAIR.scalpMetalness;
+    material.polygonOffsetFactor = hair?.scalpPolyFactor ?? DEFAULT_HAIR.scalpPolyFactor;
+    material.polygonOffsetUnits = hair?.scalpPolyUnits ?? DEFAULT_HAIR.scalpPolyUnits;
     material.needsUpdate = true;
-  }, [material, hair?.tone, hair?.alpha]);
+  }, [material, hair]);
 
   useMaterialTexture(material, 'map', '/assets/hair/hairline01.png', {
     colorSpace: THREE.SRGBColorSpace,

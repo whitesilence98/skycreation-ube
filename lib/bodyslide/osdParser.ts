@@ -163,12 +163,22 @@ export function parseOsd(buffer: ArrayBuffer | Uint8Array): OsdData {
   }
 
   const getBlock = (name: string): OsdDiffBlock | undefined => {
+    const clean = name.replace(/^(BaseShape|Baseshape|Hands|Feet)/i, '');
+    const unescapedName = name.replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
+    const unescapedClean = clean.replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
     return (
       blocks.get(name) ??
+      blocks.get(unescapedName) ??
+      blocks.get(clean) ??
+      blocks.get(unescapedClean) ??
       blocks.get(`BaseShape${name}`) ??
+      blocks.get(`BaseShape${unescapedName}`) ??
+      blocks.get(`BaseShape${clean}`) ??
+      blocks.get(`BaseShape${unescapedClean}`) ??
       blocks.get(`Hands${name}`) ??
+      blocks.get(`Hands${unescapedName}`) ??
       blocks.get(`Feet${name}`) ??
-      blocks.get(name.replace(/^(BaseShape|Baseshape|Hands|Feet)/i, ''))
+      blocks.get(`Feet${unescapedName}`)
     );
   };
 
@@ -307,6 +317,15 @@ export interface SliderOspMapping {
   hidden: boolean;
 }
 
+function unescapeXml(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
+
 export function parseOspXml(xmlString: string): Record<string, SliderOspMapping> {
   const mappings: Record<string, SliderOspMapping> = {};
   const cleanXml = xmlString.replace(/<!--[\s\S]*?-->/g, '');
@@ -320,7 +339,8 @@ export function parseOspXml(xmlString: string): Record<string, SliderOspMapping>
     const nameMatch = /name\s*=\s*["']([^"']+)["']/i.exec(attrString);
     if (!nameMatch) continue;
 
-    const sliderName = nameMatch[1];
+    const rawSliderName = nameMatch[1];
+    const sliderName = unescapeXml(rawSliderName);
     const invert = /invert\s*=\s*["']true["']/i.test(attrString);
     const hidden = /hidden\s*=\s*["']true["']/i.test(attrString);
 
@@ -341,13 +361,13 @@ export function parseOspXml(xmlString: string): Record<string, SliderOspMapping>
 
       let dataTargetName = '';
       if (nameAttrMatch) {
-        dataTargetName = nameAttrMatch[1];
+        dataTargetName = unescapeXml(nameAttrMatch[1]);
       } else if (dataText) {
         const parts = dataText.split(/[\\/]/);
-        dataTargetName = parts[parts.length - 1];
+        dataTargetName = unescapeXml(parts[parts.length - 1]);
       }
 
-      const shapeTarget = targetAttrMatch ? targetAttrMatch[1] : '';
+      const shapeTarget = targetAttrMatch ? unescapeXml(targetAttrMatch[1]) : '';
 
       if (dataTargetName) {
         targets.push({
@@ -359,7 +379,7 @@ export function parseOspXml(xmlString: string): Record<string, SliderOspMapping>
 
     const primaryTarget = targets.length > 0 ? targets[0].dataTarget : `BaseShape${sliderName}`;
 
-    mappings[sliderName] = {
+    const mapping: SliderOspMapping = {
       sliderName,
       dataTarget: primaryTarget,
       targets: targets.length > 0 ? targets : [{ dataTarget: primaryTarget, shapeTarget: '' }],
@@ -368,6 +388,11 @@ export function parseOspXml(xmlString: string): Record<string, SliderOspMapping>
       big,
       hidden,
     };
+
+    mappings[sliderName] = mapping;
+    if (rawSliderName !== sliderName) {
+      mappings[rawSliderName] = mapping;
+    }
   }
 
   return mappings;

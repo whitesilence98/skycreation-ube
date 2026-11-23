@@ -59,9 +59,14 @@ function BodyShapeSlider({ id, customLabel }: { id: AnatomyParamId; customLabel?
 
 export type PhysiqueSectionId =
   | 'weight_build'
-  | 'torso_chest'
-  | 'waist_hips'
-  | 'legs_butt'
+  | 'boobs_breasts'
+  | 'nipples'
+  | 'upper_torso'
+  | 'lower_torso'
+  | 'hips_glutes'
+  | 'legs_calves'
+  | 'back_shoulders'
+  | 'necoco_specials'
   | 'hands_arms'
   | 'feet'
   | 'skeleton_scale';
@@ -77,32 +82,65 @@ const PHYSIQUE_SECTIONS: SectionConfig[] = [
   {
     id: 'weight_build',
     label: 'Weight & Base Build',
-    badge: 'WEIGHT / HEIGHT',
+    badge: 'WEIGHT / CBPC',
   },
   {
-    id: 'torso_chest',
-    label: 'Torso & Chest (0Necoco)',
-    badge: 'CHEST & BUST',
+    id: 'boobs_breasts',
+    label: 'Breasts & Boobs (UBE)',
+    badge: 'BREASTS',
+    count: '21',
   },
   {
-    id: 'waist_hips',
-    label: 'Waist & Hips (0Necoco)',
-    badge: 'WAIST & BELLY',
+    id: 'nipples',
+    label: 'Nipples & Areolae (UBE)',
+    badge: 'NIPPLES',
+    count: '26',
   },
   {
-    id: 'legs_butt',
-    label: 'Legs & Butt (0Necoco)',
-    badge: 'BUTT & THIGHS',
+    id: 'upper_torso',
+    label: 'Upper Torso & Chest (UBE)',
+    badge: 'CHEST',
+    count: '12',
+  },
+  {
+    id: 'lower_torso',
+    label: 'Lower Torso & Belly (UBE)',
+    badge: 'BELLY',
+    count: '26',
+  },
+  {
+    id: 'hips_glutes',
+    label: 'Hips & Glutes (UBE)',
+    badge: 'HIPS / BUTT',
+    count: '30',
+  },
+  {
+    id: 'legs_calves',
+    label: 'Legs & Calves (UBE)',
+    badge: 'LEGS / FEET',
+    count: '30',
+  },
+  {
+    id: 'back_shoulders',
+    label: 'Back & Shoulders (UBE)',
+    badge: 'BACK / ARMS',
+    count: '23',
+  },
+  {
+    id: 'necoco_specials',
+    label: 'Necoco & Lewd Specials',
+    badge: 'SPECIALS',
+    count: '47',
   },
   {
     id: 'hands_arms',
-    label: 'Hands & Arms (0Necoco)',
+    label: 'Hands & Fingers (UBE)',
     badge: 'HANDS',
     count: '43',
   },
   {
     id: 'feet',
-    label: 'Feet (0Necoco)',
+    label: 'Feet & Toes (UBE)',
     badge: 'FEET',
     count: '69',
   },
@@ -132,20 +170,38 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
   const triggerPhysicsImpulse = useCharacter((s) => s.triggerPhysicsImpulse);
   const workspace = useCharacter((s) => s.workspace);
   const setWorkspace = useCharacter((s) => s.setWorkspace);
+  const setCameraFraming = useCharacter((s) => s.setCameraFraming);
 
   const [activeSection, setActiveSection] = useState<PhysiqueSectionId | null>(null);
+
+  const handleSelectSection = (sectionId: PhysiqueSectionId) => {
+    setActiveSection(sectionId);
+    // Connect section transitions to camera framing
+    if (['boobs_breasts', 'nipples', 'upper_torso'].includes(sectionId)) {
+      setCameraFraming('bust');
+    } else if (['lower_torso', 'hips_glutes', 'back_shoulders', 'necoco_specials', 'hands_arms'].includes(sectionId)) {
+      setCameraFraming('mid');
+    } else if (['legs_calves', 'feet', 'weight_build', 'skeleton_scale'].includes(sectionId)) {
+      setCameraFraming('body');
+    }
+  };
+
+  const handleBack = () => {
+    setActiveSection(null);
+    setCameraFraming('mid');
+  };
 
   // Global Escape key listener to return to View 1
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && activeSection !== null) {
         e.preventDefault();
-        setActiveSection(null);
+        handleBack();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeSection]);
+  }, [activeSection, setCameraFraming]);
 
   const hasBodyPair = Boolean(
     (manifest?.assets?.bodyMesh as Array<{ weightVariants?: unknown }> | undefined)
@@ -161,7 +217,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
       {/* 1. Left Sub-Category Rail (72px) */}
       <WuxiaSubCategoryRail
         activeTab="physique"
-        onSelectTab={() => setActiveSection(null)}
+        onSelectTab={handleBack}
       />
 
       {/* ─────────────────────────────────────────────────────────────────────────────
@@ -197,7 +253,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
             </div>
 
             <div
-              className="flex flex-col gap-1.5"
+              className="flex flex-col gap-1.5 max-h-[calc(100vh-170px)] overflow-y-auto scrollbar-none pr-1"
               role="menu"
               aria-label="Physique Sub-categories"
             >
@@ -205,8 +261,8 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
                 <button
                   key={sec.id}
                   type="button"
-                  onClick={() => setActiveSection(sec.id)}
-                  className="group flex h-11 w-full items-center justify-between rounded-sm border border-white/5 bg-[#1f2026]/75 px-3.5 text-left transition-all hover:border-[#dfba73]/40 hover:bg-[#272830] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#dfba73]"
+                  onClick={() => handleSelectSection(sec.id)}
+                  className="group flex h-11 w-full items-center justify-between rounded-sm border border-white/5 bg-[#1f2026]/75 px-3.5 text-left transition-all hover:border-[#dfba73]/40 hover:bg-[#272830] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#dfba73] min-h-[44px]"
                   role="menuitem"
                 >
                   <span className="text-xs tracking-wide text-[#d4d3d9] transition-colors group-hover:text-white truncate">
@@ -218,7 +274,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
                       <span className="font-mono text-[10px] text-[#8a8793]">{sec.count}</span>
                     )}
                     {sec.badge && (
-                      <span className="rounded bg-[#dfba73]/15 px-1.5 py-0.5 text-[9px] font-mono text-[#dfba73]">
+                      <span className="rounded bg-[#dfba73]/15 px-1.5 py-0.5 text-[10px] font-mono text-[#dfba73]">
                         {sec.badge}
                       </span>
                     )}
@@ -242,7 +298,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
             <WuxiaBreadcrumbs
               category="Physique"
               subCategory={currentSection?.label}
-              onBack={() => setActiveSection(null)}
+              onBack={handleBack}
             />
 
             {/* Sub-Category Ribbon Pill & Quick Garment Toggle */}
@@ -465,7 +521,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
                         type="button"
                         onClick={triggerPhysicsImpulse}
                         title="Trigger a momentary impulse to preview physics bounce"
-                        className="flex-1 rounded-[2px] border border-[#d4b483]/30 bg-black/40 py-1.5 font-mono text-[10px] tracking-wider leading-tight text-[#d8c9ad] transition-all hover:border-[#eac87f] hover:text-[#fff0d4]"
+                        className="flex-1 rounded-[2px] border border-[#d4b483]/30 bg-black/40 py-1.5 font-mono text-[10px] tracking-wider leading-tight text-[#d8c9ad] transition-all hover:border-[#eac87f] hover:text-[#fff0d4] min-h-[26px]"
                       >
                         TEST BOUNCE
                       </button>
@@ -474,7 +530,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
                         type="button"
                         onClick={() => setWorkspace(workspace === 'physics' ? 'edit' : 'physics')}
                         className={cn(
-                          'flex-1 rounded-[2px] border py-1.5 font-mono text-[10px] tracking-wider leading-tight transition-all',
+                          'flex-1 rounded-[2px] border py-1.5 font-mono text-[10px] tracking-wider leading-tight transition-all min-h-[26px]',
                           workspace === 'physics'
                             ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_8px_rgba(234,200,127,0.35)]'
                             : 'border-[#d4b483]/35 bg-[#d4b483]/12 text-[#e8c98e] hover:border-[#eac87f] hover:bg-[#d4b483]/22 hover:text-[#fff0d4]',
@@ -488,56 +544,123 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
               )}
 
               {/* ───────────────────────────────────────────────────────────
-                  SUB-SECTION 2: TORSO & CHEST (0Necoco)
+                  SUB-SECTION 2: BREASTS & BOOBS (UBE) (21 Morphs)
                   ─────────────────────────────────────────────────────────── */}
-              {activeSection === 'torso_chest' && (
+              {activeSection === 'boobs_breasts' && (
                 <div className="flex flex-col gap-2">
                   <BodySlidePanel
                     hideSkeletonHeader
                     categoryFilter={(cat) =>
-                      cat.name.includes('Boob') ||
-                      cat.name.includes('Overall') ||
-                      cat.name.includes('Customizing')
+                      cat.name.toLowerCase().includes('boobs') ||
+                      (cat.name.toLowerCase().includes('boob') && !cat.name.toLowerCase().includes('necoco'))
                     }
                   />
                 </div>
               )}
 
               {/* ───────────────────────────────────────────────────────────
-                  SUB-SECTION 3: WAIST & HIPS (0Necoco)
+                  SUB-SECTION 3: NIPPLES & AREOLAE (UBE) (26 Morphs)
                   ─────────────────────────────────────────────────────────── */}
-              {activeSection === 'waist_hips' && (
+              {activeSection === 'nipples' && (
+                <div className="flex flex-col gap-2">
+                  <BodySlidePanel
+                    hideSkeletonHeader
+                    categoryFilter={(cat) => cat.name.toLowerCase().includes('nipple')}
+                  />
+                </div>
+              )}
+
+              {/* ───────────────────────────────────────────────────────────
+                  SUB-SECTION 4: UPPER TORSO & CHEST (UBE) (12 Morphs)
+                  ─────────────────────────────────────────────────────────── */}
+              {activeSection === 'upper_torso' && (
+                <div className="flex flex-col gap-2">
+                  <BodySlidePanel
+                    hideSkeletonHeader
+                    categoryFilter={(cat) => cat.name.toLowerCase().includes('upper torso')}
+                  />
+                </div>
+              )}
+
+              {/* ───────────────────────────────────────────────────────────
+                  SUB-SECTION 5: LOWER TORSO & BELLY (UBE) (26 Morphs)
+                  ─────────────────────────────────────────────────────────── */}
+              {activeSection === 'lower_torso' && (
+                <div className="flex flex-col gap-2">
+                  <BodySlidePanel
+                    hideSkeletonHeader
+                    categoryFilter={(cat) => cat.name.toLowerCase().includes('lower torso')}
+                  />
+                </div>
+              )}
+
+              {/* ───────────────────────────────────────────────────────────
+                  SUB-SECTION 6: HIPS & GLUTES (UBE) (30 Morphs)
+                  ─────────────────────────────────────────────────────────── */}
+              {activeSection === 'hips_glutes' && (
                 <div className="flex flex-col gap-2">
                   <BodySlidePanel
                     hideSkeletonHeader
                     categoryFilter={(cat) =>
-                      cat.name.includes('Addons') ||
-                      cat.name.includes('Other') ||
-                      cat.name.includes('Xtrem')
+                      cat.name.toLowerCase().includes('hips') ||
+                      cat.name.toLowerCase().includes('glutes')
                     }
                   />
                 </div>
               )}
 
               {/* ───────────────────────────────────────────────────────────
-                  SUB-SECTION 4: LEGS & BUTT (0Necoco)
+                  SUB-SECTION 7: LEGS & CALVES (UBE) (30 Morphs)
                   ─────────────────────────────────────────────────────────── */}
-              {activeSection === 'legs_butt' && (
+              {activeSection === 'legs_calves' && (
                 <div className="flex flex-col gap-2">
                   <BodySlidePanel
                     hideSkeletonHeader
                     categoryFilter={(cat) =>
-                      cat.name.includes('Addons') ||
-                      cat.name.includes('Burger') ||
-                      cat.name.includes('Other') ||
-                      cat.name.includes('Hide Thigh')
+                      cat.name.toLowerCase().includes('legs') ||
+                      (cat.name.toLowerCase().includes('feet') && !cat.name.toLowerCase().includes('hands'))
                     }
                   />
                 </div>
               )}
 
               {/* ───────────────────────────────────────────────────────────
-                  SUB-SECTION 5: HANDS & ARMS (43 Morphs)
+                  SUB-SECTION 8: BACK & SHOULDERS (UBE) (23 Morphs)
+                  ─────────────────────────────────────────────────────────── */}
+              {activeSection === 'back_shoulders' && (
+                <div className="flex flex-col gap-2">
+                  <BodySlidePanel
+                    hideSkeletonHeader
+                    categoryFilter={(cat) =>
+                      cat.name.toLowerCase().includes('back') ||
+                      cat.name.toLowerCase().includes('shoulders') ||
+                      cat.name.toLowerCase().includes('arms')
+                    }
+                  />
+                </div>
+              )}
+
+              {/* ───────────────────────────────────────────────────────────
+                  SUB-SECTION 9: NECOCO & LEWD SPECIALS (47 Morphs)
+                  ─────────────────────────────────────────────────────────── */}
+              {activeSection === 'necoco_specials' && (
+                <div className="flex flex-col gap-2">
+                  <BodySlidePanel
+                    hideSkeletonHeader
+                    categoryFilter={(cat) =>
+                      cat.name.toLowerCase().includes('necoco') ||
+                      cat.name.toLowerCase().includes('lewd') ||
+                      cat.name.toLowerCase().includes('presets') ||
+                      cat.name.toLowerCase().includes('xtrem') ||
+                      cat.name.toLowerCase().includes('burger') ||
+                      cat.name.toLowerCase().includes('outfit zip')
+                    }
+                  />
+                </div>
+              )}
+
+              {/* ───────────────────────────────────────────────────────────
+                  SUB-SECTION 10: HANDS & FINGERS (UBE) (43 Morphs)
                   ─────────────────────────────────────────────────────────── */}
               {activeSection === 'hands_arms' && (
                 <div className="flex flex-col gap-2">
@@ -546,7 +669,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
               )}
 
               {/* ───────────────────────────────────────────────────────────
-                  SUB-SECTION 6: FEET (69 Morphs)
+                  SUB-SECTION 11: FEET & TOES (UBE) (69 Morphs)
                   ─────────────────────────────────────────────────────────── */}
               {activeSection === 'feet' && (
                 <div className="flex flex-col gap-2">
