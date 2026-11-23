@@ -36,9 +36,10 @@ export function GlbHairPart({
   // Clone scene so multiple mounts or instances don't collide
   const cloned = useMemo(() => scene.clone(true), [scene]);
 
-  // Adjust material properties: double-sided hair cards, alpha masking, render order, color tint
+  // Adjust material properties: double-sided hair cards, alpha masking, render order, color tint, opacity
   useEffect(() => {
     const toneColor = hair?.tone ? new THREE.Color(hair.tone) : null;
+    const alpha = hair?.alpha !== undefined ? Math.max(0.0, Math.min(1.0, hair.alpha)) : 1.0;
 
     cloned.traverse((child) => {
       if (child instanceof THREE.Mesh) {
@@ -49,8 +50,7 @@ export function GlbHairPart({
         for (const mat of mats) {
           if (mat instanceof THREE.MeshStandardMaterial) {
             mat.transparent = true;
-            mat.alphaTest = 0.45;
-            mat.depthWrite = true;
+            mat.depthWrite = alpha > 0.85;
             mat.side = THREE.DoubleSide;
 
             if (toneColor && mat.name !== 'Mat_Hl') {
@@ -60,12 +60,17 @@ export function GlbHairPart({
             if (hair?.gloss !== undefined) {
               mat.roughness = Math.max(0.1, 1.0 - hair.gloss);
             }
+
+            // Real-time hair opacity (alpha) scaling
+            mat.opacity = alpha;
+            mat.alphaTest = Math.max(0.005, 0.45 * alpha);
+
             mat.needsUpdate = true;
           }
         }
       }
     });
-  }, [cloned, hair?.tone, hair?.gloss, renderOrder]);
+  }, [cloned, hair?.tone, hair?.gloss, hair?.alpha, renderOrder]);
 
   const offset = hairOffsetMetres(hair?.hairOffset ?? 0);
 

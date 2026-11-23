@@ -14,13 +14,13 @@ export function OutfitSideActions() {
   return (
     <aside
       className="pointer-events-auto absolute right-8 top-16 z-20 hidden md:flex flex-col items-end gap-6 select-none"
-      aria-label="Side actions and status"
+      aria-label="Side actions"
     >
       {/* ─────────────────────────────────────────────────────────────────────────────
           Quick Action Buttons (Collection & Gallery for Outfit)
           ───────────────────────────────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-4">
-        {/* CALLOUT 7: Collection for Outfit */}
+        {/* Collection for Outfit */}
         <div className="flex flex-col items-center">
           <button
             type="button"
@@ -39,7 +39,7 @@ export function OutfitSideActions() {
           <span className="mt-1 text-[10px] tracking-wide text-[#9f9da6] group-hover:text-white">Collection</span>
         </div>
 
-        {/* CALLOUT 8: Gallery for Outfit */}
+        {/* Gallery for Outfit */}
         <div className="flex flex-col items-center">
           <button
             type="button"
@@ -53,47 +53,6 @@ export function OutfitSideActions() {
           <span className="mt-1 text-[10px] tracking-wide text-[#9f9da6] group-hover:text-white">Gallery</span>
         </div>
       </div>
-
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          CALLOUT 9: Disguised Status Card (Outfit Only)
-          ───────────────────────────────────────────────────────────────────────────── */}
-      {isOutfit && (
-        <div className="mt-28 flex flex-col items-end">
-          <div
-            role="region"
-            aria-label="Character disguise status"
-            className="relative flex w-[215px] items-start gap-2.5 rounded-[2px] border border-white/10 bg-[#1e1e23]/92 p-2.5 shadow-2xl backdrop-blur-md"
-          >
-            <div className="flex-1">
-              <div className="text-xs font-medium text-[#da5c58]">Disguised</div>
-              <p className="mt-0.5 text-[10px] leading-[1.35] text-[#9a98a0]">
-                Currently disguised. Appearance will revert after the disguise is removed.
-              </p>
-            </div>
-
-            {/* Red Silhouette Circular Portrait */}
-            <div
-              aria-hidden
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#da5c58]/40 bg-[#3a2022] overflow-hidden"
-            >
-              <svg viewBox="0 0 24 24" className="h-6 w-6 text-[#da5c58]" fill="currentColor">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M12 14 C7.5 14 4 17 4 21 L20 21 C20 17 16.5 14 12 14 Z" />
-              </svg>
-            </div>
-          </div>
-
-          {/* Debug Link */}
-          <button
-            type="button"
-            onClick={() => showToast('Debug info: Character disguise active')}
-            className="mt-1.5 flex items-center gap-1 font-mono text-[11px] text-[#8a8793] transition-colors hover:text-[#d4c8cf]"
-          >
-            <span>Debug</span>
-            <span aria-hidden>›</span>
-          </button>
-        </div>
-      )}
     </aside>
   );
 }

@@ -11,6 +11,7 @@ export interface HairlineUnderlayProps {
   hair?: {
     tone: string;
     gloss?: number;
+    alpha?: number;
     hairOffset?: number;
   };
   renderOrder?: number;
@@ -48,8 +49,11 @@ export function HairlineUnderlay({
 
   useEffect(() => {
     material.color.set(hair?.tone ?? '#1a1412');
+    const alpha = hair?.alpha !== undefined ? Math.max(0.0, Math.min(1.0, hair.alpha)) : 1.0;
+    material.opacity = alpha;
+    material.alphaTest = 0.02 * alpha;
     material.needsUpdate = true;
-  }, [material, hair?.tone]);
+  }, [material, hair?.tone, hair?.alpha]);
 
   useMaterialTexture(material, 'map', '/assets/hair/hairline01.png', {
     colorSpace: THREE.SRGBColorSpace,
