@@ -105,16 +105,19 @@ export function CameraPanel({ onClose }: CameraPanelProps = {}) {
 
   const FRAMING_OPTIONS: Array<{ id: CameraFraming; label: string; desc: string }> = [
     { id: 'auto', label: 'AUTO', desc: 'Tab-driven' },
-    { id: 'face', label: 'FACE', desc: '0.75 m' },
+    { id: 'macro', label: 'MACRO', desc: '0.52 m' },
+    { id: 'face', label: 'FACE', desc: '0.72 m' },
+    { id: 'hair', label: 'HAIR', desc: '1.05 m' },
     { id: 'bust', label: 'BUST', desc: '1.25 m' },
-    { id: 'body', label: 'BODY', desc: '3.80 m' },
+    { id: 'mid', label: 'MID', desc: '2.10 m' },
+    { id: 'body', label: 'BODY', desc: '3.50 m' },
   ];
 
   const FOV_QUICK_PRESETS = [
     { fov: 17, label: '17° Tele', skyrim: 30 },
-    { fov: 27, label: '27° Portrait', skyrim: 46 },
-    { fov: 36, label: '36° Bust', skyrim: 60 },
-    { fov: 47, label: '47° World', skyrim: 75 },
+    { fov: 22, label: '22° Portrait', skyrim: 38 },
+    { fov: 26, label: '26° Bust', skyrim: 45 },
+    { fov: 36, label: '36° World', skyrim: 60 },
   ];
 
   const isRigActive = (preset: (typeof LIGHT_RIGS)[number]['preset']) =>

@@ -272,6 +272,7 @@ export function resolveManifest(
         const entry = catalogues[meshKind as AssetKind]?.find((e) => e.id === id && e.mapRole === 'mesh');
         if (entry) return entry;
       }
+      if (meshKind === 'clothingMesh' && !id) return undefined;
       return defaultRowFor(meshKind as string, assetOptions(manifest, meshKind as AssetKind) as PartOption[]) as PartOption | undefined;
     })();
     const weightVariants = weightVariantsFor(meshKind as string, selectedMeshRow);
@@ -372,7 +373,7 @@ export function resolveManifest(
     ) as PartOption[]),
   ];
   const hairGroups = buildHairGroups(allHairMeshes);
-  const activeHairId = selection.hairMesh ?? parts.hair?.id;
+  const activeHairId = selection.hairMesh ?? (parts.hair?.id && !parts.hair.id.startsWith('hairMesh-') ? parts.hair.id : undefined) ?? 'wolf_haircut';
   const activeHairGroup = findHairGroupForPartId(hairGroups, activeHairId);
 
   const resolvedHairParts: Mo2PartOption[] = [];

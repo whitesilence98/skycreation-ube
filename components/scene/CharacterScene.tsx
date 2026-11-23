@@ -27,7 +27,13 @@ import { inspectHdrHeader, checkHdrDimensions } from '@/lib/hdr';
 import { ExposureEffect } from '@/components/scene/ExposureEffect';
 import { StatsProbe } from '@/components/scene/StatsProbe';
 import { isGradeNeutral } from '@/lib/graphics';
-import { cameraSpherical, FRAMING_SPECS } from '@/lib/camera';
+import {
+  cameraSpherical,
+  FRAMING_SPECS,
+  goldenRatioOffset,
+  CAMERA_FOV_DEFAULT,
+  type CameraFraming,
+} from '@/lib/camera';
 import { rigDirections } from '@/lib/lighting';
 import { useViewState } from '@/lib/viewState';
 import { useCharacter, type ToneMappingId } from '@/lib/store';
@@ -43,16 +49,8 @@ interface CharacterSceneProps {
   onIssue?: (issue: string | null) => void;
 }
 
-/** Camera distance and target height, shared by the rig, the controls and
- *  the depth-of-field focus so the three can never drift apart.
- *
- *  Measured against the reference at the same 16:9 aspect: there the head
- *  spans ~80% of the frame height and ~29% of its width. At fov 27° a 0.75 m
- *  standoff gives 2·0.75·tan(13.5°) ≈ 0.360 m of visible height, so the
- *  0.281 m head lands at ~78%. The look-at sits below the head's centre
- *  (y ≈ −0.0116) so the hair keeps a little headroom and the neck gets a
- *  sliver of frame at the bottom, as in the reference. */
-const CAM = { y: -0.036, z: 0.75 } as const;
+/** Camera distance and target height, calibrated for AAA portrait telephoto framing (85mm equivalent). */
+const CAM = { y: -0.008, z: 0.72 } as const;
 const ORBIT_MOUSE_BUTTONS = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
 
 /** The store's display-transform vocabulary → the composer's enum. Typed as a
@@ -66,20 +64,33 @@ const TONE_MAPPING_MODE: Record<ToneMappingId, ToneMappingMode> = {
 
 function ViewControls() {
   const rotateSpeed = useCharacter((s) => s.cameraRotateSpeed);
-  return <OrbitControls makeDefault enablePan={false} enableDamping dampingFactor={0.06}
-    mouseButtons={ORBIT_MOUSE_BUTTONS} rotateSpeed={rotateSpeed} zoomSpeed={0.55}
-    minDistance={0.35} maxDistance={5} minPolarAngle={Math.PI * 0.15}
-    maxPolarAngle={Math.PI * 0.85} target={[0, CAM.y, 0]} />;
+  return (
+    <OrbitControls
+      makeDefault
+      enablePan={false}
+      enableDamping
+      dampingFactor={0.06}
+      mouseButtons={ORBIT_MOUSE_BUTTONS}
+      rotateSpeed={rotateSpeed}
+      zoomSpeed={0.55}
+      minDistance={0.30}
+      maxDistance={6.0}
+      minPolarAngle={Math.PI * 0.10}
+      maxPolarAngle={Math.PI * 0.90}
+      target={[0, CAM.y, 0]}
+    />
+  );
 }
 
 /**
- * Frames the head the way the reference does — the head filling most of the
- * viewport height with the top of the neck below it. On the pack's BODY tab it
- * pulls back to the full outfit instead: the authored outfit runs to y ≈ −1.4,
- * which the head framing can never reach.
+ * Frames the character using AAA cinematic principles:
+ * - Dynamic Bone Tracking: Anchors to `NPC Head [Head]` so poses/height never detach focus.
+ * - Golden Ratio: Eye line locked at 62% viewport height (Upper Third).
+ * - 85mm portrait telephoto compression (22° FOV).
+ * - 330px HUD drawer compensation via camera.setViewOffset.
  */
 function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
-  const { camera, controls, gl } = useThree();
+  const { camera, controls, gl, scene, size } = useThree();
   const hair = useCharacter((s) => s.primaryTab === 'HAIR');
   const cameraFov = useCharacter((s) => s.cameraFov);
   const characterHeight = useCharacter((s) => s.characterHeight);
@@ -90,11 +101,9 @@ function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
   const goal = useRef(new THREE.Vector3());
   const target = useRef(new THREE.Vector3());
   const lastNonce = useRef<number | null>(null);
-  // Publishing a settled pose has to bypass the throttle: the final snap moves
-  // the camera without emitting an orbit `change`, so a throttled readout would
-  // otherwise stay on a mid-animation value (0.74 m for a 0.75 m reset).
   const publishNow = useRef<(() => void) | null>(null);
 
+  // Sync camera FOV
   useEffect(() => {
     if (camera instanceof THREE.PerspectiveCamera) {
       if (camera.fov !== cameraFov) {
@@ -104,27 +113,80 @@ function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
     }
   }, [camera, cameraFov]);
 
+  // Viewport Offset for 330px Left HUD Panel
   useEffect(() => {
-    let baseStandoff: number = CAM.z;
-    let baseTargetY: number = CAM.y;
+    if (camera instanceof THREE.PerspectiveCamera) {
+      const isDesktop = size.width >= 1024;
+      const panelWidth = isDesktop ? 330 : 0;
+      if (panelWidth > 0) {
+        camera.setViewOffset(size.width, size.height, -panelWidth / 2, 0, size.width, size.height);
+      } else {
+        camera.clearViewOffset();
+      }
+    }
+  }, [camera, size.width, size.height]);
+
+  // Dynamic bone anchor resolution
+  const getAnchorWorldY = useCallback((): { headY: number; eyesY: number; bodyMidY: number } => {
+    const headBone = scene.getObjectByName('NPC Head [Head]');
+    const pelvisBone = scene.getObjectByName('NPC Pelvis [Pelv]');
+    let headY: number = CAM.y;
+    let eyesY: number = CAM.y + 0.025;
+    let bodyMidY: number = -0.65;
+
+    if (headBone) {
+      const headPos = new THREE.Vector3();
+      headBone.getWorldPosition(headPos);
+      headY = headPos.y;
+      eyesY = headPos.y + 0.025;
+    }
+
+    if (pelvisBone) {
+      const pelvisPos = new THREE.Vector3();
+      pelvisBone.getWorldPosition(pelvisPos);
+      bodyMidY = (headY + pelvisPos.y) / 2;
+    } else {
+      bodyMidY = headY - 0.65;
+    }
+
+    return { headY, eyesY, bodyMidY };
+  }, [scene]);
+
+  useEffect(() => {
+    const anchors = getAnchorWorldY();
+    let baseStandoff: number = FRAMING_SPECS.face.standoff;
+    let baseTargetY: number = anchors.eyesY - goldenRatioOffset(baseStandoff, cameraFov);
 
     if (cameraFraming === 'auto') {
       if (bodyFraming) {
-        baseStandoff = 3.8;
-        baseTargetY = -0.65;
+        baseStandoff = FRAMING_SPECS.body.standoff * (characterHeight / 1.554);
+        baseTargetY = anchors.bodyMidY;
       } else if (hair) {
-        baseStandoff = 1.0;
-        baseTargetY = -0.10;
+        baseStandoff = FRAMING_SPECS.hair.standoff;
+        baseTargetY = anchors.headY;
+      } else {
+        baseStandoff = FRAMING_SPECS.face.standoff;
+        baseTargetY = anchors.eyesY - goldenRatioOffset(baseStandoff, cameraFov);
       }
     } else {
-      baseStandoff = FRAMING_SPECS[cameraFraming].standoff;
-      baseTargetY = FRAMING_SPECS[cameraFraming].targetY;
-    }
-
-    if ((cameraFraming === 'auto' && bodyFraming) || cameraFraming === 'body') {
-      const ratio = characterHeight / 1.554;
-      baseStandoff *= ratio;
-      baseTargetY = -1.476 + (baseTargetY + 1.476) * ratio;
+      const spec = (FRAMING_SPECS as any)[cameraFraming] ?? FRAMING_SPECS.face;
+      baseStandoff = spec.standoff;
+      if (cameraFraming === 'macro') {
+        baseTargetY = anchors.eyesY - goldenRatioOffset(baseStandoff, cameraFov);
+      } else if (cameraFraming === 'face') {
+        baseTargetY = anchors.eyesY - goldenRatioOffset(baseStandoff, cameraFov);
+      } else if (cameraFraming === 'hair') {
+        baseTargetY = anchors.headY;
+      } else if (cameraFraming === 'bust') {
+        baseTargetY = anchors.headY - 0.12;
+      } else if (cameraFraming === 'mid') {
+        baseTargetY = anchors.bodyMidY + 0.15;
+      } else if (cameraFraming === 'body') {
+        baseStandoff *= characterHeight / 1.554;
+        baseTargetY = anchors.bodyMidY;
+      } else {
+        baseTargetY = spec.targetY;
+      }
     }
 
     const orbit = controls as OrbitControlsImpl | null;
@@ -136,8 +198,8 @@ function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
       // Changing only yaw or pitch must not reset the other angle or wheel zoom.
       const dist = req.distance ?? (req.reset ? baseStandoff : current.distance);
       const tY = req.targetY ?? (req.reset ? baseTargetY : orbit?.target.y ?? baseTargetY);
-      const yaw = req.yaw ?? current.yawDeg * Math.PI / 180;
-      const pitch = req.pitch ?? current.pitchDeg * Math.PI / 180;
+      const yaw = req.yaw ?? (current.yawDeg * Math.PI) / 180;
+      const pitch = req.pitch ?? (current.pitchDeg * Math.PI) / 180;
 
       const r = dist;
       const cosPitch = Math.cos(pitch);
@@ -156,7 +218,7 @@ function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
     }
 
     moving.current = true;
-  }, [hair, bodyFraming, characterHeight, cameraFraming, cameraPoseRequest, controls, camera]);
+  }, [hair, bodyFraming, characterHeight, cameraFraming, cameraPoseRequest, controls, camera, cameraFov, getAnchorWorldY]);
 
   useEffect(() => {
     const orbit = controls as OrbitControlsImpl | null;
@@ -494,7 +556,7 @@ export function CharacterScene({ manifest, onAssetsReady, onIssue }: CharacterSc
          shadows are the default type and are enough at this map size. */
       shadows
       gl={(defaults) => createCustomRenderer(defaults.canvas as HTMLCanvasElement)}
-      camera={{ fov: 27, near: 0.1, far: 8, position: [0, CAM.y, CAM.z] }}
+      camera={{ fov: CAMERA_FOV_DEFAULT, near: 0.1, far: 8, position: [0, CAM.y, CAM.z] }}
       onCreated={({ gl }) => {
         gl.outputColorSpace = THREE.SRGBColorSpace;
         /* Matches the studio pool's outer edge, so a frame cleared before the

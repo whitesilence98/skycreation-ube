@@ -5,7 +5,14 @@
  * `scripts/check_hair.cjs` can evaluate the store in bare Node `vm` contexts.
  */
 
-export type CameraFraming = 'auto' | 'face' | 'bust' | 'body';
+export type CameraFraming = 'auto' | 'macro' | 'face' | 'hair' | 'bust' | 'mid' | 'body';
+
+export interface FramingSpec {
+  standoff: number;
+  targetY: number;
+  fov: number;
+  label: string;
+}
 
 export interface CameraPoseRequest {
   /** Azimuth angle in radians around the Y axis (0 = facing character front). */
@@ -27,24 +34,43 @@ export const CAMERA_ROTATE_SPEED_MIN = 0.15;
 export const CAMERA_ROTATE_SPEED_MAX = 1.2;
 
 /** Inverse of CameraRig's spherical pose; positive pitch means a low camera. */
-export function cameraSpherical(position: { x: number; y: number; z: number }, target: { x: number; y: number; z: number }) {
-  const x = position.x - target.x, y = position.y - target.y, z = position.z - target.z;
+export function cameraSpherical(
+  position: { x: number; y: number; z: number },
+  target: { x: number; y: number; z: number }
+) {
+  const x = position.x - target.x,
+    y = position.y - target.y,
+    z = position.z - target.z;
   const distance = Math.hypot(x, y, z);
   return {
-    yawDeg: Math.atan2(x, z) * 180 / Math.PI,
-    pitchDeg: distance ? -Math.asin(Math.max(-1, Math.min(1, y / distance))) * 180 / Math.PI : 0,
+    yawDeg: (Math.atan2(x, z) * 180) / Math.PI,
+    pitchDeg: distance ? (-Math.asin(Math.max(-1, Math.min(1, y / distance))) * 180) / Math.PI : 0,
     distance,
   };
 }
 
-export const CAMERA_FOV_DEFAULT = 27;
+/** 85mm portrait telephoto equivalent default (22°) eliminates wide-angle facial distortion. */
+export const CAMERA_FOV_DEFAULT = 22;
 export const CAMERA_FOV_MIN = 15;
 export const CAMERA_FOV_MAX = 60;
 
-export const FRAMING_SPECS: Record<'face' | 'bust' | 'body', { standoff: number; targetY: number; label: string }> = {
-  face: { standoff: 0.75, targetY: -0.036, label: 'FACE' },
-  bust: { standoff: 1.25, targetY: -0.150, label: 'BUST' },
-  body: { standoff: 3.80, targetY: -0.650, label: 'BODY' },
+/**
+ * Computes the vertical look-at offset to place the eye line at the Golden Ratio (62% of viewport height).
+ */
+export function goldenRatioOffset(distance: number, fovDeg: number): number {
+  return 0.236 * distance * Math.tan(((fovDeg / 2) * Math.PI) / 180);
+}
+
+/**
+ * AAA Framing presets across facial, hair, and body customization regions.
+ */
+export const FRAMING_SPECS: Record<'macro' | 'face' | 'hair' | 'bust' | 'mid' | 'body', FramingSpec> = {
+  macro: { standoff: 0.52, targetY: 0.020, fov: 20, label: 'MACRO' },
+  face: { standoff: 0.72, targetY: -0.008, fov: 22, label: 'FACE' },
+  hair: { standoff: 1.05, targetY: 0.000, fov: 25, label: 'HAIR' },
+  bust: { standoff: 1.25, targetY: -0.120, fov: 24, label: 'BUST' },
+  mid: { standoff: 2.10, targetY: -0.450, fov: 26, label: 'MID' },
+  body: { standoff: 3.50, targetY: -0.750, fov: 28, label: 'BODY' },
 };
 
 /** Convert Three.js vertical FOV (degrees) into Skyrim Creation Engine horizontal FOV (degrees) at 16:9. */

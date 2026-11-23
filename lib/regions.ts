@@ -328,19 +328,14 @@ export const PRESETS: PresetDef[] = [
     headMeshId: 'preset-279bbfa8f35ce962-face',
     weight: 0.0,
     assets: {
-      hairMesh: 'hairMesh-81fd9665619193d4',
-      hair: 'hair-91a00facdc8ba472',
+      hairMesh: 'wolf_haircut',
       skin: 'skin-zhizhen-ube',
       headMesh: 'preset-279bbfa8f35ce962-face',
       preset: 'preset-279bbfa8f35ce962',
       eyes: 'eyes-8439fa932deee6f8',
-      clothingMesh: 'clothingMesh-dc2ea353a9a15d15',
       brows: 'brows-3bf459e8e9b3fcc9',
     },
-    equipment: {
-      outfit: 'clothingMesh-dc2ea353a9a15d15',
-      bottom: 'clothingMesh-129ec05e6dd3c4e2',
-    },
+    equipment: {},
     hair: {
       style: 'asymmetrical-bob',
       lengthCm: 28,
@@ -427,18 +422,13 @@ export const PRESETS: PresetDef[] = [
     headMeshId: 'headMesh-52e201357614eaf7-face',
     weight: 0.0,
     assets: {
-      hairMesh: 'hairMesh-81fd9665619193d4',
-      hair: 'hair-91a00facdc8ba472',
+      hairMesh: 'wolf_haircut',
       skin: 'skin-zhizhen-ube',
       headMesh: 'headMesh-52e201357614eaf7-face',
       eyes: 'eyes-8439fa932deee6f8',
-      clothingMesh: 'clothingMesh-dc2ea353a9a15d15',
       brows: 'brows-3bf459e8e9b3fcc9',
     },
-    equipment: {
-      outfit: 'clothingMesh-dc2ea353a9a15d15',
-      bottom: 'clothingMesh-129ec05e6dd3c4e2',
-    },
+    equipment: {},
     hair: {
       style: 'asymmetrical-bob',
       lengthCm: 28,
