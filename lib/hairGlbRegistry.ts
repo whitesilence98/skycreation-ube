@@ -38,6 +38,17 @@ export interface CuratedGlbHair {
 
 export const CURATED_GLB_HAIRS: CuratedGlbHair[] = [
   {
+    id: 'freya_test',
+    label: 'Freya_TEST',
+    file: 'freya_test.glb',
+    meshUrl: '/assets/hair/freya_test.glb',
+    badge: 'GLB',
+    author: 'Blender',
+    mod: 'Freya',
+    description: 'High-poly anime long hairstyle with hair cards and scalp cap.',
+    partCount: 2,
+  },
+  {
     id: 'wolf_haircut',
     label: 'Wolf Haircut (Fitted)',
     file: 'wolf_haircut.glb',
