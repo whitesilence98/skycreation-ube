@@ -28,6 +28,7 @@ from sync_mo2_assets import (
     analyze_skin,
     gloss_mask_from_normal,
     open_dds,
+    specular_to_roughness,
     to_srgb_rgb,
     to_tangent_normal,
 )
@@ -68,27 +69,6 @@ SKIN_MOD_SPECS = [
         "body_n": r"textures\!UBE\Body\femalebody_1_n.dds",
     },
     {
-        "id": "skin-dragokini-ube",
-        "slug": "dragokini",
-        "label": "Dragokini Skin (UBE)",
-        "mod": "Dragokini Skin",
-        "head_d": r"textures\!UBE\Head\femaleHead_d.dds",
-        "head_n": r"textures\!UBE\Head\femaleHead_n.dds",
-        "body_d": r"textures\!UBE\Body\femalebody_1_d.dds",
-        "body_n": r"textures\!UBE\Body\femalebody_1_n.dds",
-    },
-    {
-        "id": "skin-dragokini-scaleless",
-        "slug": "dragokini_scaleless",
-        "label": "Dragokini Scaleless (UBE)",
-        "mod": "Dragokini Skin - Scaleless Belly",
-        "head_mod": "Dragokini Skin",
-        "head_d": r"textures\!UBE\Head\femaleHead_d.dds",
-        "head_n": r"textures\!UBE\Head\femaleHead_n.dds",
-        "body_d": r"textures\!UBE\Body\femalebody_1_d.dds",
-        "body_n": r"textures\!UBE\Body\femalebody_1_n.dds",
-    },
-    {
         "id": "skin-imperfect-ube",
         "slug": "imperfect",
         "label": "Imperfect Skin (UBE)",
@@ -105,16 +85,6 @@ SKIN_MOD_SPECS = [
         "slug": "freckled_delight",
         "label": "Freckled Delight Skin (UBE)",
         "mod": "Freckled Delight Skin (UBE)",
-        "head_d": r"textures\!UBE\Head\femaleHead_d.dds",
-        "head_n": r"textures\!UBE\Head\femalehead_n.dds",
-        "body_d": r"textures\!UBE\Body\femalebody_1_d.dds",
-        "body_n": r"textures\!UBE\Body\femalebody_1_n.dds",
-    },
-    {
-        "id": "skin-ube-base",
-        "slug": "ube_base",
-        "label": "UBE 2.0 Standard",
-        "mod": "UBE 2.0 U0.7",
         "head_d": r"textures\!UBE\Head\femaleHead_d.dds",
         "head_n": r"textures\!UBE\Head\femalehead_n.dds",
         "body_d": r"textures\!UBE\Body\femalebody_1_d.dds",
@@ -191,6 +161,10 @@ def transcode_skin_set(spec: dict[str, Any]) -> dict[str, Any] | None:
 
         head_rough_dst = skin_dir / f"{slug}_head_rough.webp"
         head_mask = gloss_mask_from_normal(head_im_n, 1024)
+        if head_mask is None and spec.get("head_s"):
+            head_s_path = resolve_path(spec.get("head_s_mod", head_mod), spec["head_s"])
+            if head_s_path:
+                head_mask = specular_to_roughness(open_dds(head_s_path), 1024)
         if head_mask is not None:
             head_mask.save(head_rough_dst, "WEBP", lossless=True, method=4)
             head_rough_url = f"/assets/preset-pack/textures/skin/{slug}_head_rough.webp"
@@ -222,6 +196,10 @@ def transcode_skin_set(spec: dict[str, Any]) -> dict[str, Any] | None:
 
         body_rough_dst = body_dir / f"{slug}_body_rough.webp"
         body_mask = gloss_mask_from_normal(body_im_n, 1024)
+        if body_mask is None and spec.get("body_s"):
+            body_s_path = resolve_path(spec.get("body_s_mod", mod_name), spec["body_s"])
+            if body_s_path:
+                body_mask = specular_to_roughness(open_dds(body_s_path), 1024)
         if body_mask is not None:
             body_mask.save(body_rough_dst, "WEBP", lossless=True, method=4)
             body_rough_url = f"/assets/preset-pack/textures/body/{slug}_body_rough.webp"

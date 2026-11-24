@@ -95,7 +95,7 @@ export function WardrobeDrawer({ manifest, onClose }: WardrobeDrawerProps) {
       if (item.weightKey && !item.weightDefault) {
         return;
       }
-      if (/_0\.nif$/i.test(item.file) && (item.weightVariants || item.weightKey)) {
+      if (/_0\.nif$/i.test(item.file)) {
         return;
       }
 
@@ -153,7 +153,7 @@ export function WardrobeDrawer({ manifest, onClose }: WardrobeDrawerProps) {
       if (currentSlot === 'outfit') setAssets({ clothingMesh: null });
       showToast(`UNEQUIPPED: ${itemName}`);
     } else {
-      const targetId = item.weightVariants?.w1 ?? item.id;
+      const targetId = item.weightVariants?.w0 ?? item.id;
       setEquip({ [currentSlot]: targetId });
       if (currentSlot === 'outfit') setAssets({ clothingMesh: targetId });
       showToast(`EQUIPPED [${EQUIP_SLOT_LABEL[currentSlot]}]: ${itemName}`);
@@ -300,8 +300,8 @@ export function WardrobeDrawer({ manifest, onClose }: WardrobeDrawerProps) {
                   {/* Card 3D Garment Thumbnail Preview */}
                   <div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-xs bg-black/60 p-1">
                     <GarmentThumbnail
-                      id={item.weightVariants?.w1 ?? item.id}
-                      meshUrl={item.weightVariants ? convertUrl({ kind: 'clothingMesh', id: item.weightVariants.w1, mode: 'mesh' }) : undefined}
+                      id={item.weightVariants?.w0 ?? item.id}
+                      meshUrl={item.weightVariants ? convertUrl({ kind: 'clothingMesh', id: item.weightVariants.w0, mode: 'mesh' }) : undefined}
                       label={label}
                       slot={unrestrictedSlots ? itemSlot : currentSlot}
                       iconClassName={cn(

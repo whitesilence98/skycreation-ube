@@ -373,6 +373,9 @@ export interface CharacterState extends AnatomySnapshot {
   /** Specular sheen strength [0..1]. Independent of `skinGloss`, which drives
    *  roughness: this is the broad fabric-like highlight on top of it. */
   skinSheen: number;
+  /** Normal map depth/scale multiplier [0.0 = flat/off, 1.0 = standard, 2.5 = punchy depth]. */
+  skinNormalStrength: number;
+  setSkinNormalStrength: (v: number) => void;
   /** Skin tone color tint `#rrggbb`. '#ffffff' = untinted raw diffuse. */
   skinColor: string;
   /** Eyebrow tint `#rrggbb`. Default '#2B1A0A' matching Skyrim creation studio. */
@@ -1052,6 +1055,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   skinSss: 1,
   skinDetail: 0.45,
   skinSheen: 0.2,
+  skinNormalStrength: 1.0,
   skinColor: '#ffffff',
   browColor: PRESETS[0].browColor ?? '#110E0C',
   setBrowColor: (browColor) => set((s) => {
@@ -1189,6 +1193,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
      so a NaN from a slider cannot silently zero a setting. */
   setSkinDetail: (v) => { if (Number.isFinite(v)) set({ skinDetail: Math.min(1, Math.max(0, v)) }); },
   setSkinSheen: (v) => { if (Number.isFinite(v)) set({ skinSheen: Math.min(1, Math.max(0, v)) }); },
+  setSkinNormalStrength: (v) => { if (Number.isFinite(v)) set({ skinNormalStrength: Math.min(3, Math.max(0, v)) }); },
   setSkinColor: (skinColor) => set({ skinColor }),
   setToneMapping: (toneMapping) => {
     if ((TONE_MAPPING_IDS as readonly string[]).includes(toneMapping)) set({ toneMapping });

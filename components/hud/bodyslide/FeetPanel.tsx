@@ -2,8 +2,49 @@
 
 import React, { useMemo, useState } from 'react';
 import { useBodySlideStore } from '@/lib/bodyslide/store';
-import { NECOCO_FEET_CATEGORIES } from '@/lib/bodyslide/categories';
+import { NECOCO_FEET_CATEGORIES, type BodySlideSliderDef } from '@/lib/bodyslide/categories';
 import { BracketSlider } from '@/components/hud/common/BracketSlider';
+
+/** Determine slider min/max bounds, enabling -100 for bipolar and directional morphs */
+function getSliderBounds(s: BodySlideSliderDef): { min: number; max: number } {
+  const max = s.max ?? 100;
+  if (typeof s.min === 'number') {
+    return { min: s.min, max };
+  }
+  const n = s.name.toLowerCase();
+  const d = s.displayName.toLowerCase();
+  const isBipolar =
+    n.includes('n|p') ||
+    n.includes('p|n') ||
+    n.includes('size') ||
+    n.includes('length') ||
+    n.includes('width') ||
+    n.includes('height') ||
+    n.includes('longer') ||
+    n.includes('shorter') ||
+    n.includes('curve') ||
+    n.includes('spread') ||
+    n.includes('distance') ||
+    n.includes('rotation') ||
+    n.includes('forward') ||
+    n.includes('up') ||
+    n.includes('down') ||
+    n.includes('thickness') ||
+    d.includes('size') ||
+    d.includes('length') ||
+    d.includes('width') ||
+    d.includes('height') ||
+    d.includes('scale') ||
+    d.includes('longer') ||
+    d.includes('shorter') ||
+    d.includes('spread') ||
+    d.includes('distance') ||
+    d.includes('thickness') ||
+    d.includes('rotation') ||
+    d.includes('stance');
+
+  return { min: isBipolar ? -100 : 0, max };
+}
 
 export function FeetPanel() {
   const sliders = useBodySlideStore((s) => s.sliders);
@@ -94,7 +135,8 @@ export function FeetPanel() {
           <button
             type="button"
             onClick={() => setSearchQuery('')}
-            className="absolute right-2 min-h-[24px] px-1 font-mono text-[10px] text-[#a49a88] hover:text-[#efece6]"
+            className="absolute right-2 min-h-[24px] min-w-[24px] flex items-center justify-center font-mono text-[10px] text-[#a49a88] hover:text-[#efece6] transition-colors"
+            title="Clear search"
           >
             &times;
           </button>
@@ -105,7 +147,9 @@ export function FeetPanel() {
       <div className="flex flex-col gap-2">
         {filteredCategories.map((cat) => {
           const isExpanded = expanded[cat.name] ?? true;
-          const activeCount = cat.sliders.filter((s) => (sliders[s.name] ?? 0) !== 0).length;
+          const activeCount = cat.sliders.filter(
+            (s) => Math.abs((sliders[s.name] ?? s.defaultValue ?? 0) - (s.defaultValue ?? 0)) > 0.001,
+          ).length;
 
           return (
             <div
@@ -114,7 +158,7 @@ export function FeetPanel() {
             >
               {/* Category Header Bar */}
               <div
-                className="flex min-h-[28px] cursor-pointer items-center justify-between px-2.5 py-1.5 transition-colors hover:bg-white/5 select-none"
+                className="flex min-h-[32px] cursor-pointer items-center justify-between px-2.5 py-1.5 transition-colors hover:bg-white/5 select-none"
                 onClick={() => toggleCategory(cat.name)}
               >
                 <div className="flex items-center gap-2">
@@ -125,7 +169,7 @@ export function FeetPanel() {
                     {cat.name}
                   </span>
                   {activeCount > 0 && (
-                    <span className="rounded bg-[#d4b483]/20 px-1.5 py-0.2 font-mono text-[10px] text-[#eac87f]">
+                    <span className="rounded bg-[#d4b483]/20 px-1.5 py-0.5 font-mono text-[10px] text-[#eac87f]">
                       {activeCount} active
                     </span>
                   )}
@@ -142,7 +186,7 @@ export function FeetPanel() {
                         e.stopPropagation();
                         resetCategory(cat.name);
                       }}
-                      className="min-h-[24px] px-1 font-mono text-[10px] text-[#a49a88] hover:text-[#eac87f]"
+                      className="min-h-[24px] min-w-[24px] flex items-center justify-center px-1 font-mono text-[10px] text-[#a49a88] hover:text-[#eac87f] transition-colors"
                       title="Reset this category"
                     >
                       [RESET]
@@ -156,15 +200,24 @@ export function FeetPanel() {
                 <div className="flex flex-col gap-1 border-t border-[#d4b483]/10 px-2.5 pt-2 pb-1">
                   {cat.sliders.map((s) => {
                     const val = sliders[s.name] ?? s.defaultValue ?? 0;
+                    const { min, max } = getSliderBounds(s);
+                    const rounded = Math.round(val);
+                    const display = `${rounded === 0 ? 0 : rounded}%`;
+
                     return (
-                      <div key={s.name} className="group relative mb-1">
+                      <div
+                        key={s.name}
+                        onDoubleClick={() => resetSlider(s.name)}
+                        className="group relative mb-1 cursor-pointer"
+                        title={`Double-click to reset ${s.displayName}`}
+                      >
                         <BracketSlider
                           label={s.displayName.toUpperCase()}
-                          min={s.min ?? 0}
-                          max={s.max ?? 100}
+                          min={min}
+                          max={max}
                           step={1}
                           value={val}
-                          display={`${Math.round(val)}%`}
+                          display={display}
                           onChange={(v) => setSlider(s.name, v)}
                         />
                       </div>

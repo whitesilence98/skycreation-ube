@@ -6,6 +6,7 @@ import { GLTFExporter } from 'three-stdlib';
 import * as THREE from 'three';
 import { useCharacter } from '@/lib/store';
 import { buildExportClips, restInverses } from '@/lib/character/animation';
+import { detectFabricProfile } from '@/components/scene/fabricPbr';
 
 export interface ExportOptions {
   /** Include the `Pose` + `Idle` clips. `false` (or omitted) is a static mesh. */
@@ -22,6 +23,51 @@ export interface ExportTransform {
   translation?: [number, number, number];
   rotation?: [number, number, number, number];
   rootName?: string;
+}
+
+/**
+ * Normalizes raw Skyrim/character mesh names to clean, universal PBR asset names
+ * matching commercial standards like Beautiful Asian Girl (e.g. body, face, hair, eyes, etc.).
+ */
+export function cleanPbrPartName(rawName: string = ''): string {
+  const lower = rawName.toLowerCase();
+  if (lower === 'baseshape' || lower.includes('baseshape') || lower === 'body') return 'body';
+  if (lower.includes('head') || lower.includes('face')) return 'face';
+  if (lower.includes('eye') && !lower.includes('lash') && !lower.includes('brow')) return 'eyes';
+  if (lower.includes('lash')) return 'eyelashes';
+  if (lower.includes('brow')) return 'brows';
+  if (lower.includes('mouth') || lower.includes('teeth') || lower.includes('tongue')) return 'mouth';
+  if (lower.includes('hand')) return 'hands';
+  if (lower.includes('feet') || lower.includes('foot')) return 'feet';
+  if (
+    lower.includes('hair') ||
+    lower.includes('shadow') ||
+    lower.includes('s4studio') ||
+    lower.includes('empressof') ||
+    lower.includes('asterion') ||
+    /\bace\b/.test(lower) ||
+    /^[1-9]?[hlr]l?_\d*[hlr]/i.test(rawName) ||
+    /^[1-9][lr]_/i.test(rawName) ||
+    /^mat_([1-9]?[hlr]|a\d|top|braid|brf)/i.test(rawName)
+  ) {
+    return 'hair';
+  }
+  if (lower.includes('suit') || lower.includes('bodysuit') || lower.includes('outfit') || lower.includes('cloth') || lower.includes('garment')) {
+    return 'outfit';
+  }
+  if (lower.includes('shirt') || lower.includes('sweater') || lower.includes('top')) {
+    return 'shirt';
+  }
+  if (lower.includes('pant') || lower.includes('jean') || lower.includes('short')) {
+    return 'pants';
+  }
+  if (lower.includes('sock') || lower.includes('stocking') || lower.includes('tight')) {
+    return 'socks';
+  }
+  if (lower.includes('boot') || lower.includes('shoe')) {
+    return 'shoes';
+  }
+  return rawName.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() || 'material';
 }
 
 /**
@@ -52,10 +98,27 @@ export function patchGlbIor(
   const jsonStart = 20;
   const jsonBytes = new Uint8Array(glbBuffer, jsonStart, jsonLen);
   const json = JSON.parse(new TextDecoder().decode(jsonBytes)) as {
-    materials?: Array<{ extensions?: Record<string, unknown> }>;
+    materials?: Array<{
+      name?: string;
+      pbrMetallicRoughness?: {
+        baseColorTexture?: { index: number };
+        metallicRoughnessTexture?: { index: number };
+        baseColorFactor?: number[];
+        roughnessFactor?: number;
+        metallicFactor?: number;
+      };
+      normalTexture?: { index: number };
+      alphaMode?: string;
+      alphaCutoff?: number;
+      doubleSided?: boolean;
+      extensions?: Record<string, unknown>;
+    }>;
+    textures?: Array<{ name?: string; source?: number; sampler?: number }>;
+    images?: Array<{ name?: string; uri?: string; bufferView?: number; mimeType?: string }>;
     extensionsUsed?: string[];
-    nodes?: Array<{ name?: string; translation?: number[]; rotation?: number[]; [key: string]: unknown }>;
-    scenes?: Array<{ nodes?: number[]; [key: string]: unknown }>;
+    extensions?: Record<string, unknown>;
+    nodes?: Array<{ name?: string; translation?: number[]; rotation?: number[]; children?: number[]; extensions?: Record<string, unknown>; [key: string]: unknown }>;
+    scenes?: Array<{ name?: string; nodes?: number[]; [key: string]: unknown }>;
     scene?: number;
   };
 
@@ -67,6 +130,264 @@ export function patchGlbIor(
     json.extensionsUsed = [
       ...new Set([...(json.extensionsUsed ?? []), 'KHR_materials_ior']),
     ];
+  }
+
+  // 1. Inject high-fidelity PBR extensions matching Beautiful Asian Girl
+  if (json.materials) {
+    for (const mat of json.materials) {
+      const lower = (mat.name || '').toLowerCase();
+      const isLashesOrBrows = lower.includes('lash') || lower.includes('brow');
+      const isClothingKeyword =
+        lower.includes('suit') ||
+        lower.includes('cloth') ||
+        lower.includes('garment') ||
+        lower.includes('armor') ||
+        lower.includes('dress') ||
+        lower.includes('pant') ||
+        lower.includes('shirt') ||
+        lower.includes('jean') ||
+        lower.includes('jacket') ||
+        lower.includes('boot') ||
+        lower.includes('shoe') ||
+        lower.includes('skirt') ||
+        lower.includes('bra') ||
+        lower.includes('panties') ||
+        lower.includes('lingerie') ||
+        lower.includes('bikini') ||
+        lower.includes('sock') ||
+        lower.includes('stocking') ||
+        lower.includes('tight');
+      const isSkin =
+        !isLashesOrBrows &&
+        !isClothingKeyword &&
+        (lower === 'body' ||
+          lower.includes('femalebody') ||
+          lower.includes('malebody') ||
+          lower.includes('base') ||
+          lower.includes('hand') ||
+          lower.includes('feet') ||
+          lower.includes('foot') ||
+          lower.includes('head') ||
+          lower.includes('face') ||
+          lower.includes('mouth'));
+      const isEyes = !isLashesOrBrows && !isSkin && lower.includes('eye');
+      const isHair =
+        !isLashesOrBrows &&
+        !isSkin &&
+        !isEyes &&
+        !isClothingKeyword &&
+        (lower.includes('hair') ||
+          lower.includes('s4studio') ||
+          lower.includes('shadow') ||
+          lower.includes('empressof') ||
+          lower.includes('asterion') ||
+          /\bace\b/.test(lower) ||
+          /^[1-9]?[hlr]l?_\d*[hlr]/i.test(mat.name || '') ||
+          /^[1-9][lr]_/i.test(mat.name || '') ||
+          /^mat_([1-9]?[hlr]|a\d|top|braid|brf)/i.test(mat.name || '') ||
+          mat.alphaMode === 'MASK');
+
+      mat.extensions = mat.extensions ?? {};
+
+      if (isLashesOrBrows) {
+        // Lashes and brows stay crisp alpha-tested masks without fabric sheen
+        mat.alphaMode = 'MASK';
+        mat.alphaCutoff = lower.includes('brow') ? 0.18 : 0.25;
+        mat.doubleSided = true;
+      } else if (isSkin) {
+        // Guarantee skin parts are explicitly marked OPAQUE in glTF so external
+        // importers like Blender don't default to dithered/hashed transparency for 4-channel PNGs
+        mat.alphaMode = 'OPAQUE';
+        delete mat.alphaCutoff;
+
+        // Subsurface scattering: warm dermal light diffusion
+        mat.extensions['KHR_materials_subsurface'] = {
+          subsurfaceWeight: 0.65,
+          subsurfaceColor: [1.0, 0.62, 0.50],
+          subsurfaceRadius: [1.0, 0.35, 0.15],
+        };
+        // Accurate human skin IOR
+        mat.extensions['KHR_materials_ior'] = { ior: 1.45 };
+
+        // NOTE: KHR_materials_sheen is omitted on skin to prevent Blender Principled BSDF
+        // from applying a 100% white Charlie sheen (cloth/velvet fuzz) across human skin.
+        json.extensionsUsed = [
+          ...new Set([
+            ...(json.extensionsUsed ?? []),
+            'KHR_materials_subsurface',
+            'KHR_materials_ior',
+          ]),
+        ];
+      } else if (isHair) {
+        // Guarantee hair clump transparency (alphaMode: MASK) so Blender renders fine strands
+        if (!mat.alphaMode || mat.alphaMode === 'OPAQUE') {
+          mat.alphaMode = 'MASK';
+          mat.alphaCutoff = 0.35;
+          mat.doubleSided = true;
+        }
+        // NOTE: KHR_materials_anisotropy is omitted when hair cards lack TANGENT vertex
+        // attributes, preventing Blender from computing noisy radial white specular glare.
+      } else if (isEyes) {
+        mat.alphaMode = 'OPAQUE';
+        delete mat.alphaCutoff;
+        // Wet corneal IOR and clear specular
+        mat.extensions['KHR_materials_ior'] = { ior: 1.376 };
+        mat.extensions['KHR_materials_specular'] = {
+          specularFactor: 1.0,
+          specularColorFactor: [1.0, 1.0, 1.0],
+        };
+        json.extensionsUsed = [
+          ...new Set([
+            ...(json.extensionsUsed ?? []),
+            'KHR_materials_ior',
+            'KHR_materials_specular',
+          ]),
+        ];
+      } else {
+        // Garments and clothing are opaque solids unless already masked
+        if (!mat.alphaMode) {
+          mat.alphaMode = 'OPAQUE';
+        }
+        // Subtle fabric sheen only for matte woven/knit garments; Blender's importer
+        // forces Sheen Weight=1.0 whenever KHR_materials_sheen is present, so sleek
+        // bodysuits/spandex/leather stay rich and saturated without white velvet haze.
+        const profile = detectFabricProfile(mat.name || '');
+        if (profile.sheen > 0.35) {
+          const factor = Math.min(0.4, profile.sheen * 0.45);
+          mat.extensions['KHR_materials_sheen'] = {
+            sheenColorFactor: [factor, factor, factor],
+            sheenRoughnessFactor: profile.sheenRoughness,
+          };
+          json.extensionsUsed = [
+            ...new Set([...(json.extensionsUsed ?? []), 'KHR_materials_sheen']),
+          ];
+        }
+      }
+
+      // Safeguard PBR factors:
+      const pbr = mat.pbrMetallicRoughness;
+      if (pbr) {
+        // Prevent dark baseColorFactor from crushing textured materials (hair, skin) into black mud in Blender
+        if (pbr.baseColorTexture && pbr.baseColorFactor) {
+          const [r, g, b] = pbr.baseColorFactor;
+          if (r < 0.8 || g < 0.8 || b < 0.8) {
+            pbr.baseColorFactor = [1.0, 1.0, 1.0, pbr.baseColorFactor[3] ?? 1.0];
+          }
+        }
+        // Force metallicFactor to 0.0 for all dielectric organic parts (skin, hair, eyes, brows, lashes)
+        if (isSkin || isHair || isEyes || isLashesOrBrows) {
+          pbr.metallicFactor = 0.0;
+        }
+      }
+    }
+  }
+
+  // 2. Semantic Texture & Image Naming (matching standard PBR conventions: body_basecolor, face_basecolor, hair_basecolor, etc.)
+  if (json.materials && json.textures && json.images) {
+    const images = json.images;
+    const textures = json.textures;
+    for (const mat of json.materials) {
+      const matName = cleanPbrPartName(mat.name || '');
+      mat.name = matName;
+      const pbr = mat.pbrMetallicRoughness;
+      if (pbr?.baseColorTexture) {
+        const tex = textures[pbr.baseColorTexture.index];
+        if (tex) {
+          tex.name = `${matName}_basecolor`;
+          if (tex.source !== undefined && images[tex.source]) {
+            images[tex.source].name = `${matName}_basecolor`;
+          }
+        }
+      }
+      if (pbr?.metallicRoughnessTexture) {
+        const tex = textures[pbr.metallicRoughnessTexture.index];
+        if (tex) {
+          tex.name = `${matName}_roughness`;
+          if (tex.source !== undefined && images[tex.source]) {
+            images[tex.source].name = `${matName}_roughness`;
+          }
+        }
+      }
+      if (mat.normalTexture) {
+        const tex = textures[mat.normalTexture.index];
+        if (tex) {
+          tex.name = `${matName}_normal`;
+          if (tex.source !== undefined && images[tex.source]) {
+            images[tex.source].name = `${matName}_normal`;
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Inject embedded 3-Point Studio Lighting (Key, Rim, Fill) via KHR_lights_punctual
+  if (json.nodes && json.scenes && json.scenes.length > 0) {
+    json.extensions = json.extensions ?? {};
+    // glTF light intensity is in candela (cd = lm/sr); Blender's importer divides by ~54.35
+    // (PBR_WATTS_TO_LUMENS / (4*pi)) to convert candela into Blender Watts.
+    json.extensions['KHR_lights_punctual'] = {
+      lights: [
+        {
+          name: 'Key Light',
+          type: 'spot',
+          color: [0.98, 0.95, 0.92],
+          intensity: 14000.0,
+          spot: {
+            innerConeAngle: 0.45,
+            outerConeAngle: 0.85,
+          },
+        },
+        {
+          name: 'Rim Light',
+          type: 'spot',
+          color: [0.88, 0.96, 1.0],
+          intensity: 5400.0,
+          spot: {
+            innerConeAngle: 0.5,
+            outerConeAngle: 0.9,
+          },
+        },
+        {
+          name: 'Fill Light',
+          type: 'point',
+          color: [1.0, 1.0, 1.0],
+          intensity: 2700.0,
+        },
+      ],
+    };
+    json.extensionsUsed = [
+      ...new Set([...(json.extensionsUsed ?? []), 'KHR_lights_punctual']),
+    ];
+
+    const activeScene = json.scenes[json.scene ?? 0];
+    if (activeScene) {
+      activeScene.nodes = activeScene.nodes ?? [];
+
+      const keyIdx = json.nodes.length;
+      json.nodes.push({
+        name: 'Key_StudioLight',
+        translation: [0.3, 2.2, -3.2],
+        rotation: [-0.006, 0.9906, 0.1288, 0.0463],
+        extensions: { KHR_lights_punctual: { light: 0 } },
+      });
+
+      const rimIdx = json.nodes.length;
+      json.nodes.push({
+        name: 'Rim_StudioLight',
+        translation: [0.7, 1.8, 2.2],
+        rotation: [-0.095, 0.1527, 0.0147, 0.9836],
+        extensions: { KHR_lights_punctual: { light: 1 } },
+      });
+
+      const fillIdx = json.nodes.length;
+      json.nodes.push({
+        name: 'Fill_StudioLight',
+        translation: [-1.8, 1.4, -2.0],
+        extensions: { KHR_lights_punctual: { light: 2 } },
+      });
+
+      activeScene.nodes.push(keyIdx, rimIdx, fillIdx);
+    }
   }
 
   if (transform && json.nodes && json.nodes.length > 0) {
@@ -277,6 +598,197 @@ export function findEssentialBones(
 }
 
 
+/** Cache packed metallic-roughness textures across meshes sharing the same maps (e.g. skin parts) */
+const packedTextureCache = new Map<THREE.Texture | string, THREE.Texture>();
+
+/**
+ * Bakes material color tint (hair tone, brow color, lash tint, skin tint) directly
+ * into a diffuse texture's RGB pixels in sRGB space so the exported glTF image
+ * carries the exact author-selected color cleanly into Blender/Unreal/Unity,
+ * without relying on baseColorFactor (which causes dark multiply crushing or
+ * missing tints across engines).
+ */
+export function buildTintedDiffuseTexture(
+  baseMap: THREE.Texture,
+  tint: THREE.Color,
+): THREE.Texture {
+  // THREE.Color stores linear-sRGB; convert to display sRGB before multiplying sRGB canvas bytes.
+  const srgbTint = tint.clone().convertLinearToSRGB();
+  if (srgbTint.r >= 0.995 && srgbTint.g >= 0.995 && srgbTint.b >= 0.995) return baseMap;
+
+  const cacheKey = `tinted_${baseMap.uuid || baseMap.name}_${tint.getHexString()}`;
+  if (packedTextureCache.has(cacheKey)) {
+    return packedTextureCache.get(cacheKey)!;
+  }
+
+  try {
+    const img = baseMap.image as HTMLImageElement | HTMLCanvasElement | ImageBitmap | null | undefined;
+    if (!img) return baseMap;
+
+    if ((img as any).crossOrigin !== 'anonymous') {
+      try { (img as any).crossOrigin = 'anonymous'; } catch {}
+    }
+
+    const width = (img as any).naturalWidth || img.width || 1024;
+    const height = (img as any).naturalHeight || img.height || 1024;
+    if (width === 0 || height === 0 || typeof document === 'undefined') return baseMap;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return baseMap;
+
+    ctx.drawImage(img, 0, 0, width, height);
+    const imgData = ctx.getImageData(0, 0, width, height);
+    const data = imgData.data;
+    const tr = Math.max(0, Math.min(1, srgbTint.r));
+    const tg = Math.max(0, Math.min(1, srgbTint.g));
+    const tb = Math.max(0, Math.min(1, srgbTint.b));
+
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = Math.round(data[i] * tr);
+      data[i + 1] = Math.round(data[i + 1] * tg);
+      data[i + 2] = Math.round(data[i + 2] * tb);
+      // Alpha (data[i + 3]) is strictly preserved
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    const tintedTexture = new THREE.CanvasTexture(canvas);
+    tintedTexture.name = `${baseMap.name || 'diffuse'}_tinted`;
+    tintedTexture.wrapS = baseMap.wrapS;
+    tintedTexture.wrapT = baseMap.wrapT;
+    // CRITICAL: Preserve flipY (GLB hair textures use flipY=false; webp/png atlases use flipY=true).
+    // GLTFExporter reads texture.flipY directly when serializing to PNG!
+    tintedTexture.flipY = baseMap.flipY;
+    tintedTexture.repeat.copy(baseMap.repeat);
+    tintedTexture.offset.copy(baseMap.offset);
+    tintedTexture.colorSpace = THREE.SRGBColorSpace;
+    tintedTexture.needsUpdate = true;
+
+    packedTextureCache.set(cacheKey, tintedTexture);
+    packedTextureCache.set(tintedTexture, tintedTexture);
+    return tintedTexture;
+  } catch (err) {
+    console.warn('[exportGlb] Failed to bake tinted diffuse texture, using raw map:', err);
+    return baseMap;
+  }
+}
+
+/**
+ * Pre-bakes a canonical glTF 2.0 metallicRoughnessTexture canvas:
+ *   - Green channel: Roughness (from roughnessMap green/luminance, or defaultRoughness)
+ *   - Blue channel:  Metalness (from metalnessMap blue, or defaultMetalness; 0 for skin)
+ *   - Red channel:   0 (unused in glTF standard PBR)
+ * 
+ * In three-stdlib's GLTFExporter, having a roughnessMap without a metalnessMap triggers a bug
+ * where GLTFExporter initializes the bake canvas with #00ffff (100% metalness), making organic
+ * character skin look like a chrome statue.
+ * 
+ * By pre-baking this texture and setting BOTH mat.roughnessMap and mat.metalnessMap to the same
+ * packed texture instance, GLTFExporter recognizes `metalnessMap === roughnessMap` and serializes
+ * it directly without touching the bugged #00ffff path. Blender's glTF importer then automatically
+ * connects the Green channel to the Principled BSDF Roughness socket and keeps metalness at 0.0.
+ */
+export function buildPackedMetalRoughnessTexture(
+  roughnessMap: THREE.Texture | null | undefined,
+  metalnessMap: THREE.Texture | null | undefined,
+  defaultRoughness: number,
+  defaultMetalness: number = 0.0,
+): THREE.Texture | null {
+  // If neither texture is provided, return null to use glTF scalar factors
+  if (!roughnessMap && !metalnessMap) return null;
+
+  const cacheKey = roughnessMap || metalnessMap;
+  if (cacheKey && packedTextureCache.has(cacheKey)) {
+    return packedTextureCache.get(cacheKey)!;
+  }
+
+  try {
+    const rImg = roughnessMap?.image as (HTMLImageElement | HTMLCanvasElement | ImageBitmap | undefined) | null;
+    const mImg = metalnessMap?.image as (HTMLImageElement | HTMLCanvasElement | ImageBitmap | undefined) | null;
+
+    if (rImg && (rImg as any).crossOrigin !== 'anonymous') {
+      try { (rImg as any).crossOrigin = 'anonymous'; } catch {}
+    }
+    if (mImg && (mImg as any).crossOrigin !== 'anonymous') {
+      try { (mImg as any).crossOrigin = 'anonymous'; } catch {}
+    }
+
+    const rWidth = (rImg as any)?.naturalWidth || rImg?.width || 0;
+    const rHeight = (rImg as any)?.naturalHeight || rImg?.height || 0;
+    const mWidth = (mImg as any)?.naturalWidth || mImg?.width || 0;
+    const mHeight = (mImg as any)?.naturalHeight || mImg?.height || 0;
+
+    const width = Math.max(rWidth, mWidth);
+    const height = Math.max(rHeight, mHeight);
+
+    if (width === 0 || height === 0) return null;
+    if (typeof document === 'undefined') return null;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    const defaultR = Math.max(0, Math.min(255, Math.round(defaultRoughness * 255)));
+    const defaultM = Math.max(0, Math.min(255, Math.round(defaultMetalness * 255)));
+
+    let rData: Uint8ClampedArray | null = null;
+    if (rImg) {
+      ctx.drawImage(rImg, 0, 0, width, height);
+      rData = ctx.getImageData(0, 0, width, height).data;
+    }
+
+    let mData: Uint8ClampedArray | null = null;
+    if (mImg) {
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(mImg, 0, 0, width, height);
+      mData = ctx.getImageData(0, 0, width, height).data;
+    }
+
+    const outImgData = ctx.createImageData(width, height);
+    const out = outImgData.data;
+
+    for (let i = 0; i < out.length; i += 4) {
+      out[i] = 255; // Red channel = Ambient Occlusion (255 = fully unoccluded in glTF PBR standard)
+      // In Three.js and Skyrim, roughnessMap is an intensity multiplier for scalar roughness.
+      // In glTF PBR standard, the Green channel must directly carry the final physical roughness [0..255].
+      // Multiply the normalized mask by defaultRoughness so the Green channel has calibrated PBR values (~0.45 - 0.55).
+      const rawRough = rData ? (rData[i + 1] ?? rData[i]) / 255.0 : 1.0;
+      out[i + 1] = Math.max(0, Math.min(255, Math.round(rawRough * defaultRoughness * 255)));
+      // Blue channel = Metalness (0 for organic skin)
+      out[i + 2] = mData ? mData[i + 2] : defaultM;
+      out[i + 3] = 255;
+    }
+
+    ctx.putImageData(outImgData, 0, 0);
+
+    const packed = new THREE.CanvasTexture(canvas);
+    const ref = roughnessMap || metalnessMap;
+    if (ref) {
+      packed.wrapS = ref.wrapS;
+      packed.wrapT = ref.wrapT;
+      packed.flipY = ref.flipY;
+      packed.repeat.copy(ref.repeat);
+      packed.offset.copy(ref.offset);
+    }
+    packed.colorSpace = THREE.NoColorSpace;
+    packed.needsUpdate = true;
+
+    if (cacheKey) {
+      packedTextureCache.set(cacheKey, packed);
+    }
+    packedTextureCache.set(packed, packed);
+    return packed;
+  } catch (err) {
+    console.warn('Failed to pack metallic-roughness texture, falling back to direct texture:', err);
+    if (roughnessMap) return roughnessMap;
+    return null;
+  }
+}
+
 /**
  * Binds a mesh to the single head bone of the unified skeleton.
  */
@@ -319,11 +831,13 @@ export function createHeadSkinnedMesh(
   ];
   const skeleton = new THREE.Skeleton([rootBone, headBone], boneInverses);
 
-  // Clone material and assign explicit semantic name so exporters preserve it
+  // Clone material and assign explicit semantic name; sanitize() in Step 4.5
+  // handles canonical tint-baking & ORM packing once across both head and body.
   const origMat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial | undefined;
   const isSkin = name === 'Face' || name === 'Head' || name === 'Mouth';
   const isEyes = name === 'Eyes';
   const isAlpha = name === 'Lashes' || name === 'Brows';
+  const defaultR = isEyes ? 0.04 : (isSkin ? 0.48 : (origMat?.roughness ?? 0.6));
 
   const mat = new THREE.MeshStandardMaterial({
     name,
@@ -331,14 +845,16 @@ export function createHeadSkinnedMesh(
     map: origMat?.map ?? null,
     normalMap: origMat?.normalMap ?? null,
     normalScale: origMat?.normalScale ? origMat.normalScale.clone() : new THREE.Vector2(1, 1),
-    roughness: isEyes ? 0.1 : (isSkin ? 0.58 : (origMat?.roughness ?? 0.6)),
+    roughness: defaultR,
     metalness: 0.0,
+    roughnessMap: origMat?.roughnessMap ?? null,
+    metalnessMap: origMat?.metalnessMap ?? null,
     // Hair, lashes and brows MUST use transparent: false with alphaTest > 0
     // so GLTFExporter emits alphaMode: "MASK". transparent: true forces "BLEND" which makes
     // them completely invisible / ghost transparent in Blender EEVEE.
     transparent: false,
     opacity: origMat?.opacity ?? 1.0,
-    alphaTest: isAlpha ? 0.25 : 0,
+    alphaTest: isAlpha ? (name === 'Brows' ? 0.18 : 0.25) : 0,
     side: isAlpha ? THREE.DoubleSide : (origMat?.side ?? THREE.FrontSide),
     visible: origMat?.visible !== false,
   });
@@ -431,6 +947,8 @@ export async function exportCharacterScene(
   const tempFacialMeshes: THREE.SkinnedMesh[] = [];
   const restoreMaterials: Array<{ mesh: THREE.Mesh; origMaterial: THREE.Material | THREE.Material[] }> = [];
   const restoreGroups: Array<{ mesh: THREE.Mesh; origGroups: THREE.BufferGeometry['groups'] }> = [];
+  const tempTextures: THREE.Texture[] = [];
+  packedTextureCache.clear();
 
   exportInFlight = true;
   try {
@@ -547,41 +1065,134 @@ export async function exportCharacterScene(
           const std = m as THREE.MeshStandardMaterial;
           const matName = std.name || mesh.name || '';
           const lower = matName.toLowerCase();
+          const isLashesOrBrows = lower.includes('lash') || lower.includes('brow');
+          const isClothingKeyword =
+            lower.includes('suit') ||
+            lower.includes('cloth') ||
+            lower.includes('garment') ||
+            lower.includes('armor') ||
+            lower.includes('dress') ||
+            lower.includes('pant') ||
+            lower.includes('shirt') ||
+            lower.includes('jean') ||
+            lower.includes('jacket') ||
+            lower.includes('boot') ||
+            lower.includes('shoe') ||
+            lower.includes('skirt') ||
+            lower.includes('bra') ||
+            lower.includes('panties') ||
+            lower.includes('lingerie') ||
+            lower.includes('bikini') ||
+            lower.includes('sock') ||
+            lower.includes('stocking') ||
+            lower.includes('tight');
           const isSkin =
-            lower.includes('base') ||
-            lower.includes('body') ||
-            lower.includes('hand') ||
-            lower.includes('feet') ||
-            lower.includes('foot') ||
-            lower.includes('head') ||
-            lower.includes('face') ||
-            lower.includes('mouth');
-          const isEyes = lower.includes('eye');
+            !isLashesOrBrows &&
+            !isClothingKeyword &&
+            (lower === 'body' ||
+              lower.includes('femalebody') ||
+              lower.includes('malebody') ||
+              lower.includes('base') ||
+              lower.includes('hand') ||
+              lower.includes('feet') ||
+              lower.includes('foot') ||
+              lower.includes('head') ||
+              lower.includes('face') ||
+              lower.includes('mouth'));
+          const isEyes = !isLashesOrBrows && !isSkin && lower.includes('eye');
           const isHair =
+            !isLashesOrBrows &&
             !isSkin &&
+            !isEyes &&
+            !isClothingKeyword &&
             (lower.includes('hair') ||
               lower.includes('s4studio') ||
               lower.includes('shadow') ||
               lower.includes('empressof') ||
               lower.includes('asterion') ||
-              /\bace\b/.test(lower));
-          const isLashesOrBrows = lower.includes('lash') || lower.includes('brow');
+              /\bace\b/.test(lower) ||
+              /^1?[hlr]|^[1-9][lr]_/i.test(matName) ||
+              /^mat_([1-9]?[hlr]|a\d|top|braid|brf)/i.test(matName) ||
+              Boolean(std.transparent || std.alphaTest > 0));
+          const isGarment = !isSkin && !isHair && !isEyes && !isLashesOrBrows;
+          const fabric = isGarment ? detectFabricProfile(matName) : null;
+          const defaultR = isEyes
+            ? 0.04
+            : isSkin
+            ? 0.48
+            : isHair
+            ? 0.55
+            : isLashesOrBrows
+            ? 0.72
+            : fabric?.roughness ?? std.roughness ?? 0.55;
+          const defaultM = isSkin || isHair || isEyes || isLashesOrBrows
+            ? 0.0
+            : fabric?.metalness ?? std.metalness ?? 0.0;
+
+          // If roughnessMap or metalnessMap is present, bake them into the canonical glTF
+          // combined metallicRoughness texture (Green = Roughness, Blue = Metalness).
+          // Setting both roughnessMap and metalnessMap to this packed canvas avoids three-stdlib's
+          // buildMetalRoughTexture bug (which filled missing blue channels with #00ffff / 100% metalness),
+          // while ensuring Blender connects the Green channel to Roughness and keeps skin non-metallic.
+          const packedMetalRough = buildPackedMetalRoughnessTexture(
+            std.roughnessMap,
+            std.metalnessMap,
+            defaultR,
+            defaultM,
+          );
+          if (packedMetalRough && packedMetalRough !== std.roughnessMap && packedMetalRough !== std.metalnessMap) {
+            tempTextures.push(packedMetalRough);
+          }
+
+          // Bake color tint directly into diffuse texture pixels in sRGB space for ALL tinted
+          // textured parts (hair, hairline underlay, white-RGB brows, lashes, skin tone).
+          // That keeps baseColorFactor = [1, 1, 1, a] while carrying exact colors cleanly to Blender.
+          let finalMap = std.map ?? null;
+          if (finalMap && std.color && (std.color.r < 0.995 || std.color.g < 0.995 || std.color.b < 0.995)) {
+            const baked = buildTintedDiffuseTexture(finalMap, std.color);
+            if (baked !== finalMap) {
+              finalMap = baked;
+              tempTextures.push(baked);
+            }
+          }
+
+          // Semantic texture names so GLTFExporter and Blender show clean labels matching PBR standards
+          const baseName = cleanPbrPartName(matName || mesh.name || '');
+          if (finalMap) finalMap.name = `${baseName}_basecolor`;
+          if (std.normalMap) std.normalMap.name = `${baseName}_normal`;
+          if (packedMetalRough) packedMetalRough.name = `${baseName}_roughness`;
 
           // Hair and lashes/brows MUST use alphaTest with transparent=false so glTF exports alphaMode="MASK"
           // (transparent=true forces alphaMode="BLEND" which causes Blender EEVEE alpha sorting failure / ghost hair).
           const needsAlphaMask = isHair || isLashesOrBrows;
 
+          // When a texture map is present, tint was baked above so material.color stays pure white [1, 1, 1],
+          // ensuring GLTFExporter never emits a dark multiplicative baseColorFactor.
+          const exportColor = finalMap
+            ? new THREE.Color(1, 1, 1)
+            : std.color
+            ? std.color.clone()
+            : new THREE.Color(1, 1, 1);
+
+          // Hair cards ship without TANGENT vertex attributes; moderate normal scale avoids foil glare in Blender.
+          const normalScale = std.normalScale ? std.normalScale.clone() : new THREE.Vector2(1, 1);
+          if (isHair && std.normalMap) {
+            normalScale.set(Math.min(0.45, Math.abs(normalScale.x)), Math.min(0.45, Math.abs(normalScale.y)));
+          }
+
           return new THREE.MeshStandardMaterial({
             name: std.name || mesh.name,
-            color: std.color ? std.color.clone() : new THREE.Color(1, 1, 1),
-            map: std.map ?? null,
+            color: exportColor,
+            map: finalMap,
             normalMap: std.normalMap ?? null,
-            normalScale: std.normalScale ? std.normalScale.clone() : new THREE.Vector2(1, 1),
-            roughness: isEyes ? 0.1 : (isSkin ? 0.58 : (isHair ? 0.62 : (std.roughness ?? 0.55))),
-            metalness: isSkin || isHair || isEyes ? 0.0 : (std.metalness ?? 0.0),
+            normalScale,
+            roughness: packedMetalRough ? 1.0 : defaultR,
+            metalness: defaultM,
+            roughnessMap: packedMetalRough ?? null,
+            metalnessMap: packedMetalRough ?? null,
             transparent: false,
             opacity: std.opacity ?? 1.0,
-            alphaTest: isHair ? 0.35 : (isLashesOrBrows ? 0.25 : 0),
+            alphaTest: isHair ? 0.35 : (lower.includes('brow') ? 0.18 : (isLashesOrBrows ? 0.25 : 0)),
             side: needsAlphaMask ? THREE.DoubleSide : std.side,
             visible: std.visible, // CRITICAL: preserve hidden status to prevent white untextured embedded body meshes
           });
@@ -688,6 +1299,12 @@ export async function exportCharacterScene(
     for (const { object, wasVisible } of hidden) {
       object.visible = wasVisible;
     }
+    for (const tex of tempTextures) {
+      try {
+        tex.dispose();
+      } catch {}
+    }
+    packedTextureCache.clear();
     exportInFlight = false;
   }
 }

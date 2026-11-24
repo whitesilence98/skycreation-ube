@@ -5,6 +5,7 @@
 // reads as a see-through veil.
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const fs = require('node:fs');
 const { execSync } = require('node:child_process');
 
 const root = path.join(__dirname, '..');
@@ -91,7 +92,7 @@ assert.equal(custom.swayAmpX, 0.04);
 assert.equal(HAIR_BLEND_THRESHOLD, DEFAULT_HAIR.matBlendThreshold,
   'the exported threshold and the stored default agree');
 
-execSync(`rm -rf "${outDir}"`, { cwd: root });
+fs.rmSync(outDir, { recursive: true, force: true });
 
 console.log('✓ hair material policy: cutout stays opaque, blending only on fade');
 console.log(`✓ hair tuning: ${tuningFields.length} fields coerced, clamped and defaulted`);

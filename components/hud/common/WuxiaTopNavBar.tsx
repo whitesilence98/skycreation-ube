@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { cn } from '@/lib/cn';
-import { IconDoubleChevron, IconSearch } from '@/components/hud/outfit/WuxiaSlotIcons';
+import { IconDoubleChevron } from '@/components/hud/outfit/WuxiaSlotIcons';
 
 export interface TopNavTab {
   id: string;
@@ -49,7 +49,9 @@ export interface WuxiaTopNavBarProps {
   className?: string;
   /** Whether to show the navigation arrows (default true) */
   showArrows?: boolean;
-  /** Whether to show the previous hotkey badge (e.g. [Q]) directly before the tabs (default false) */
+  /** Whether to show the Q and E keycap hints (default true) */
+  showKeycaps?: boolean;
+  /** Legacy prop for backward compatibility */
   showPrevKeycap?: boolean;
 }
 
@@ -62,17 +64,18 @@ export function WuxiaTopNavBar({
   activeTab: controlledTab,
   defaultTab = tabs[0]?.id ?? 'wardrobe',
   onTabChange,
-  onSearch,
+  onSearch: _onSearch,
   onToggleCollapse,
   isCollapsed = false,
-  searchHotkey = 'Q',
+  searchHotkey: _searchHotkey,
   navHotkeys = { prev: 'q', next: 'e' },
   enableHotkeys = true,
   leftSlot,
   rightSlot,
   className,
   showArrows = true,
-  showPrevKeycap = false,
+  showKeycaps = true,
+  showPrevKeycap: _showPrevKeycap,
 }: WuxiaTopNavBarProps) {
   const [internalTab, setInternalTab] = useState(defaultTab);
   const currentTab = controlledTab !== undefined ? controlledTab : internalTab;
@@ -99,9 +102,9 @@ export function WuxiaTopNavBar({
     [tabs, currentTab, selectTab]
   );
 
-  // Global hotkeys (Q to search, E to next, etc.)
+  // Global hotkeys (E to next, Q to prev when multiple tabs)
   useEffect(() => {
-    if (!enableHotkeys || isCollapsed) return;
+    if (!enableHotkeys || isCollapsed || tabs.length <= 1) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -114,10 +117,7 @@ export function WuxiaTopNavBar({
       }
 
       const key = e.key.toLowerCase();
-      if (searchHotkey && key === searchHotkey.toLowerCase()) {
-        e.preventDefault();
-        onSearch?.();
-      } else if (key === navHotkeys.prev.toLowerCase()) {
+      if (key === navHotkeys.prev.toLowerCase()) {
         e.preventDefault();
         cycleTab('prev');
       } else if (key === navHotkeys.next.toLowerCase()) {
@@ -128,7 +128,7 @@ export function WuxiaTopNavBar({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [enableHotkeys, isCollapsed, navHotkeys, cycleTab, searchHotkey, onSearch]);
+  }, [enableHotkeys, isCollapsed, navHotkeys, cycleTab, tabs.length]);
 
   return (
     <header
@@ -138,52 +138,47 @@ export function WuxiaTopNavBar({
       )}
       aria-label="Top Navigation Bar"
     >
-      {/* Left Slot: Search Button or Custom Content */}
+      {/* Left Slot: Custom Content or clean spacer */}
       <div className="flex items-center gap-2">
-        {leftSlot !== undefined ? (
-          leftSlot
-        ) : (
-          <button
-            type="button"
-            onClick={onSearch}
-            aria-label={`Search items (${searchHotkey})`}
-            title={`Search items (${searchHotkey})`}
-            className="group flex h-7 items-center gap-1.5 rounded-[2px] border border-white/10 bg-[#202126]/80 px-2 py-0.5 text-[#cfcacf] backdrop-blur-md transition-all hover:border-[#d4b483]/40 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#eac87f]"
-          >
-            <IconSearch className="h-3.5 w-3.5 text-[#93828c] group-hover:text-[#e4cca8]" />
-            <span className="flex h-[18px] items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 px-1 font-mono text-[10px] font-medium text-[#eae5dc]">
-              {searchHotkey}
-            </span>
-          </button>
-        )}
+        {leftSlot !== undefined ? leftSlot : <div className="w-8" />}
       </div>
 
       {/* Center: Navigation Carousel */}
-      <nav className="flex items-center gap-2 sm:gap-4 text-sm font-sans" aria-label="Category Carousel">
-        {/* Left Arrow */}
-        {showArrows && (
-          <button
-            type="button"
-            onClick={() => cycleTab('prev')}
-            aria-label="Previous category"
-            className="flex h-6 w-6 items-center justify-center text-[#93828c] transition-colors hover:text-[#e4cca8] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]"
-          >
-            ◄
-          </button>
-        )}
-
+      <nav
+        className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 sm:gap-4 text-sm font-sans"
+        aria-label="Category Carousel"
+      >
         {/* Previous Category Keycap Hint (e.g. [Q]) */}
-        {showPrevKeycap && (
+        {showKeycaps && (
           <span
-            className="flex h-[18px] items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 px-1 font-mono text-[10px] font-medium text-[#eae5dc]"
+            className={cn(
+              'flex h-[18px] items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 px-1 font-mono text-[10px] font-medium text-[#eae5dc]',
+              tabs.length <= 1 && 'opacity-40'
+            )}
             aria-hidden
           >
             {navHotkeys.prev.toUpperCase()}
           </span>
         )}
 
+        {/* Left Arrow */}
+        {showArrows && (
+          <button
+            type="button"
+            disabled={tabs.length <= 1}
+            onClick={() => cycleTab('prev')}
+            aria-label="Previous category"
+            className={cn(
+              'flex h-6 w-6 items-center justify-center text-[#93828c] transition-colors hover:text-[#e4cca8] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]',
+              tabs.length <= 1 && 'opacity-30 cursor-default hover:text-[#93828c]'
+            )}
+          >
+            ◄
+          </button>
+        )}
+
         {/* Tab Items */}
-        <div className="flex items-center gap-3 sm:gap-5 overflow-x-auto max-w-[calc(100vw-130px)] sm:max-w-none">
+        <div className="flex items-center gap-3 sm:gap-5 overflow-x-auto max-w-[calc(100vw-280px)] sm:max-w-none scrollbar-none">
           {tabs.map(tab => {
             const isActive = currentTab === tab.id;
             return (
@@ -227,33 +222,43 @@ export function WuxiaTopNavBar({
         {showArrows && (
           <button
             type="button"
+            disabled={tabs.length <= 1}
             onClick={() => cycleTab('next')}
             aria-label="Next category"
-            className="flex h-6 w-6 items-center justify-center text-[#93828c] transition-colors hover:text-[#e4cca8] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]"
+            className={cn(
+              'flex h-6 w-6 items-center justify-center text-[#93828c] transition-colors hover:text-[#e4cca8] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]',
+              tabs.length <= 1 && 'opacity-30 cursor-default hover:text-[#93828c]'
+            )}
           >
             ►
           </button>
         )}
 
-        {/* Next Category Keycap Hint */}
-        <span
-          className="flex h-[18px] items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 px-1 font-mono text-[10px] font-medium text-[#eae5dc]"
-          aria-hidden
-        >
-          {navHotkeys.next.toUpperCase()}
-        </span>
+        {/* Next Category Keycap Hint (e.g. [E]) */}
+        {showKeycaps && (
+          <span
+            className={cn(
+              'flex h-[18px] items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 px-1 font-mono text-[10px] font-medium text-[#eae5dc]',
+              tabs.length <= 1 && 'opacity-40'
+            )}
+            aria-hidden
+          >
+            {navHotkeys.next.toUpperCase()}
+          </span>
+        )}
       </nav>
 
-      {/* Right Slot: Collapse Toggle or Custom Content */}
-      <div className="flex items-center">
-        {rightSlot ?? (
+      {/* Right Slot: Custom Content + Collapse Toggle */}
+      <div className="flex items-center gap-2 pointer-events-auto">
+        {rightSlot}
+        {onToggleCollapse && (
           <button
             type="button"
             onClick={onToggleCollapse}
             aria-pressed={isCollapsed}
             aria-label={isCollapsed ? 'Return to editor' : 'Collapse HUD into full preview'}
             title={isCollapsed ? 'Return to editor' : 'Full Preview (Collapse HUD)'}
-            className="flex h-8 w-8 items-center justify-center rounded-[2px] border border-white/10 bg-[#202126]/80 text-[#cfcacf] backdrop-blur-md transition-all hover:border-[#d4b483]/50 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#eac87f]"
+            className="flex h-7 w-7 items-center justify-center rounded-[2px] border border-white/10 bg-[#202126]/80 text-[#cfcacf] backdrop-blur-md transition-all hover:border-[#d4b483]/50 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#eac87f]"
           >
             <IconDoubleChevron className="h-4 w-4" />
           </button>

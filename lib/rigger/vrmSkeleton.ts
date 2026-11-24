@@ -577,7 +577,7 @@ export function vrmChildren(boneName: VrmBoneName): VrmBoneName[] {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * The 7 anatomical landmarks needed to place the full skeleton.
+ * The 8 anatomical landmarks needed to place the full skeleton.
  * These are the minimum user-provided or auto-detected points.
  */
 export type LandmarkId =
@@ -591,6 +591,38 @@ export type LandmarkId =
   | 'rightAnkle';   // Right ankle joint
 
 export type LandmarkMap = Record<LandmarkId, THREE.Vector3>;
+
+/**
+ * The canonical landmark set and its placement order — the single source of
+ * truth. `store.ts`, `LandmarkEditor` and `RiggerSidebar` all used to keep
+ * their own copy, so the "next unplaced landmark" advance had three orders to
+ * disagree about.
+ */
+export const LANDMARK_IDS: readonly LandmarkId[] = [
+  'headTop',
+  'neckBase',
+  'leftShoulder',
+  'rightShoulder',
+  'leftHip',
+  'rightHip',
+  'leftAnkle',
+  'rightAnkle',
+] as const;
+
+/** The next landmark after `current` that has no position yet, else null. */
+export function nextUnplacedLandmark(
+  current: LandmarkId | null,
+  landmarks: Partial<LandmarkMap>,
+): LandmarkId | null {
+  const start = current ? LANDMARK_IDS.indexOf(current) : -1;
+  // Walk forward from the current marker, then wrap, so placement always
+  // continues from where the user is rather than jumping back to the top.
+  for (let step = 1; step <= LANDMARK_IDS.length; step++) {
+    const id = LANDMARK_IDS[(start + step) % LANDMARK_IDS.length];
+    if (!landmarks[id]) return id;
+  }
+  return null;
+}
 
 /**
  * Maps each VRM bone to the pair of landmarks that bracket its position.

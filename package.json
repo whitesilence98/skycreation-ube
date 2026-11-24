@@ -41,6 +41,7 @@
     "check:nif": "node scripts/check_nif_import.cjs",
     "check:equip": "node scripts/check_equipment_thumbnails.cjs",
     "check:hair": "node scripts/check_hair_thumbnails.cjs && node scripts/check_hair_material.cjs",
+    "check:rigger": "node scripts/check_rigger_landmarks.cjs",
     "check:hdr": "node scripts/check_hdr.cjs",
     "check:editor": "node scripts/check_editor_shell.cjs",
     "check:editor:screens": "node scripts/check_editor_browser.cjs",

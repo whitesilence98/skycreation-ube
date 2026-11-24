@@ -6,6 +6,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import { GLTFLoader, OBJLoader } from 'three-stdlib';
 import { useRiggerStore } from '@/lib/rigger/store';
+import { nextUnplacedLandmark, LANDMARK_IDS, type LandmarkId } from '@/lib/rigger/vrmSkeleton';
 import { SkeletonOverlay } from '@/components/rigger/SkeletonOverlay';
 import { LandmarkEditor, LANDMARK_META } from '@/components/rigger/LandmarkEditor';
 import { buildWeightHeatmapColors } from '@/lib/rigger/weightTransfer';
@@ -31,9 +32,12 @@ function SceneContent() {
   const setMeshBbox     = useRiggerStore((s) => s.setMeshBbox);
   const setError        = useRiggerStore((s) => s.setError);
   const landmarks       = useRiggerStore((s) => s.landmarks);
+  const setLandmarkMissFlash = useRiggerStore((s) => s.setLandmarkMissFlash);
 
   const [loadedObject, setLoadedObject] = useState<THREE.Object3D | null>(null);
   const primaryMeshRef = useRef<THREE.Mesh | null>(null);
+  const pendingPoint = useRef<THREE.Vector3 | null>(null);
+  const [ghost, setGhost] = useState<THREE.Vector3 | null>(null);
 
   // ── Load Mesh ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -111,11 +115,46 @@ function SceneContent() {
   }, [heatmapColors]);
 
   // ── Click-to-place active landmark ────────────────────────────────────────
-  const handleMeshPointerDown = (e: { stopPropagation: () => void; point: THREE.Vector3 }) => {
+  /* Orbiting and placing used to be mutually exclusive: selecting a marker
+     disabled OrbitControls, so looking at the far side of the model meant
+     Esc → orbit → re-select, eight times. Instead we let the camera stay live
+     and decide on pointer-up: a press that barely moved is a placement, a
+     press that travelled is an orbit. */
+  const pressOrigin = useRef<{ x: number; y: number; id: LandmarkId } | null>(null);
+  const CLICK_SLOP_PX = 5;
+
+  const handleMeshPointerDown = (e: { stopPropagation: () => void; point: THREE.Vector3; clientX?: number; clientY?: number }) => {
     if (!activeLandmark) return;
     e.stopPropagation();
-    setLandmark(activeLandmark, e.point.clone());
-    setActiveLandmark(null);
+    pressOrigin.current = { x: e.clientX ?? 0, y: e.clientY ?? 0, id: activeLandmark };
+    // Record where the press landed; the commit happens on pointer-up.
+    pendingPoint.current = e.point.clone();
+  };
+
+  const handleMeshPointerUp = (e: { clientX?: number; clientY?: number }) => {
+    const origin = pressOrigin.current;
+    pressOrigin.current = null;
+    if (!origin) return;
+    const dx = (e.clientX ?? 0) - origin.x;
+    const dy = (e.clientY ?? 0) - origin.y;
+    // The pointer travelled: the user was orbiting, not placing.
+    if (Math.hypot(dx, dy) > CLICK_SLOP_PX) return;
+    const point = pendingPoint.current;
+    pendingPoint.current = null;
+    if (!point) return;
+    setLandmark(origin.id, point);
+    // Advance straight to the next empty marker — Mixamo-style — instead of
+    // dropping the user back to the sidebar after every single click.
+    const next = nextUnplacedLandmark(origin.id, { ...landmarks, [origin.id]: point });
+    setActiveLandmark(next);
+  };
+
+  /* A miss used to do literally nothing. Surface it so the user can tell a
+     misclick from a broken tool. */
+  const handleMissed = () => {
+    if (!activeLandmark) return;
+    setLandmarkMissFlash(true);
+    window.setTimeout(() => setLandmarkMissFlash(false), 900);
   };
 
   // Show live preview during landmark placement (not after full rig)
@@ -129,7 +168,25 @@ function SceneContent() {
       <gridHelper args={[10, 20, '#3f3f46', '#27272a']} position={[0, -0.001, 0]} />
 
       {loadedObject && (
-        <primitive object={loadedObject} onPointerDown={handleMeshPointerDown} />
+        <primitive
+          object={loadedObject}
+          onPointerDown={handleMeshPointerDown}
+          onPointerUp={handleMeshPointerUp}
+          onPointerMissed={handleMissed}
+          onPointerMove={(e: { point: THREE.Vector3 }) => {
+            if (!activeLandmark) return;
+            setGhost(e.point.clone());
+          }}
+        />
+      )}
+
+      {/* Ghost marker: shows where the click would land. Placement was blind
+          before this — the user aimed at an invisible target. */}
+      {activeLandmark && ghost && (
+        <mesh position={ghost}>
+          <sphereGeometry args={[0.022, 12, 12]} />
+          <meshBasicMaterial color="#38bdf8" transparent opacity={0.55} depthTest={false} />
+        </mesh>
       )}
 
       {stage !== 'idle' && (
@@ -144,7 +201,9 @@ function SceneContent() {
         <SkeletonOverlay fitResult={fitResult} visible={showSkeleton} />
       )}
 
-      <OrbitControls makeDefault minDistance={0.2} maxDistance={20} enabled={!activeLandmark && !isDraggingLandmark} />
+      {/* Orbit stays live during placement — the click/drag slop in
+          `handleMeshPointerUp` separates the two gestures. */}
+      <OrbitControls makeDefault minDistance={0.2} maxDistance={20} enabled={!isDraggingLandmark} />
       <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
         <GizmoViewport axisColors={['#ef4444', '#22c55e', '#3b82f6']} labelColor="#ffffff" />
       </GizmoHelper>
@@ -162,6 +221,7 @@ export function RiggerCanvas() {
   const setActiveLandmark  = useRiggerStore((s) => s.setActiveLandmark);
   const landmarks          = useRiggerStore((s) => s.landmarks);
   const landmarkCount      = Object.keys(landmarks).length;
+  const missFlash          = useRiggerStore((s) => s.landmarkMissFlash);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -187,8 +247,14 @@ export function RiggerCanvas() {
         <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-10">
           <div className="bg-sky-900/95 border border-sky-400/60 text-sky-100 text-xs font-semibold px-5 py-2.5 rounded-full backdrop-blur-sm shadow-xl flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse inline-block" />
-            Click on mesh to place <span className="text-white font-bold ml-1">{LANDMARK_META[activeLandmark]?.label || activeLandmark}</span>
-            <span className="text-sky-400 ml-1 font-normal text-[10px]">· Esc to cancel</span>
+            {missFlash ? (
+              <span className="text-amber-300 font-bold">Missed the mesh — click on the body</span>
+            ) : (
+              <>
+                Click on mesh to place <span className="text-white font-bold ml-1">{LANDMARK_META[activeLandmark]?.label || activeLandmark}</span>
+                <span className="text-sky-400 ml-1 font-normal text-[10px]">· orbit to rotate · Esc to cancel</span>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -40,12 +40,13 @@ export const NECOCO_V1_SLIDERS: Readonly<Record<string, number>> = Object.freeze
 
 /** Pre-parsed preset slider maps for instantaneous zero-latency application */
 export const BUILTIN_PRESET_SLIDERS: Record<string, Record<string, number>> = {
+  'default-slim': {},
   'necoco-v1': { ...NECOCO_V1_SLIDERS },
   'necoco-v2': {
     ...NECOCO_V1_SLIDERS,
     Necoco_Boob_Addon_Bom39: 65,
   },
-  'necoco-converting-outfits': {},
+  'necoco-converting-outfits': { ...CONVERTING_OUTFITS_SLIDERS },
 };
 
 /**
@@ -82,7 +83,7 @@ export function mapLegacySilhouetteToBodySlide(
   return result;
 }
 
-/** Canonical Background Bases (Baked into newbody baseline) */
+/** Canonical Background Bases (pure un-morphed _0 slim baseline) */
 export const NUDE_BASE_SLIDERS: Readonly<Record<string, number>> = Object.freeze({});
 
 export const CLOTHED_BASE_SLIDERS: Readonly<Record<string, number>> = Object.freeze({
@@ -114,30 +115,30 @@ export function computeDualSliders(userSliders: Record<string, number> = {}): {
   // Cross-map Necoco slider changes to standard UBE / Clothes Pack outfit morphs:
   if ('Necoco_Overall_Boob' in userSliders) {
     const val = userSliders.Necoco_Overall_Boob;
-    clothed.BreastsBigger = Math.max(0, (clothed.BreastsBigger ?? 31) + (val * 0.7));
+    clothed.BreastsBigger = Math.max(0, (clothed.BreastsBigger ?? 0) + (val * 0.7));
     clothed.BiggerBreasts_ForOutfits = val * 0.8;
   }
   if ('Necoco_Boob_Base' in userSliders) {
     const delta = userSliders.Necoco_Boob_Base - 100;
-    clothed.BreastsBigger = Math.max(0, (clothed.BreastsBigger ?? 31) + delta * 0.4);
+    clothed.BreastsBigger = Math.max(0, (clothed.BreastsBigger ?? 0) + delta * 0.4);
   }
   if ('Necoco_Boob_Distance' in userSliders) {
     clothed['BreastCenterGapWidth n|p'] = userSliders.Necoco_Boob_Distance;
   }
   if ('Necoco_Body_Addon_Belly' in userSliders) {
     const delta = userSliders.Necoco_Body_Addon_Belly - 100;
-    clothed.BellyFatty = Math.max(0, (clothed.BellyFatty ?? 25) + delta * 0.5);
+    clothed.BellyFatty = Math.max(0, (clothed.BellyFatty ?? 0) + delta * 0.5);
     clothed.BiggerBelly_ForOutfits = Math.max(0, delta * 0.5);
   }
   if ('Necoco_Body_Addon_Butt' in userSliders) {
     const delta = userSliders.Necoco_Body_Addon_Butt - 100;
-    clothed['GluteSize p|n'] = Math.max(0, (clothed['GluteSize p|n'] ?? 33) + delta * 0.5);
+    clothed['GluteSize p|n'] = Math.max(0, (clothed['GluteSize p|n'] ?? 0) + delta * 0.5);
     clothed.BiggerButt_ForOutfits = Math.max(0, delta * 0.5);
   }
   if ('Necoco_Body_Addon_Leg' in userSliders) {
     const delta = userSliders.Necoco_Body_Addon_Leg - 100;
     clothed.BiggerThighs_ForOutfits = Math.max(0, delta * 0.5);
-    clothed.UpperThighsSizeBig = (clothed.UpperThighsSizeBig ?? -110) + delta * 0.6;
+    clothed.UpperThighsSizeBig = Math.max(0, (clothed.UpperThighsSizeBig ?? 0) + delta * 0.6);
   }
   if ('Upper_Outer_Thighs_Width' in userSliders) {
     clothed.Upper_Outer_Thighs_Width = userSliders.Upper_Outer_Thighs_Width;
@@ -200,7 +201,22 @@ function getInitialUserSliders(): Record<string, number> {
   if (typeof window === 'undefined') return {};
   try {
     const raw = localStorage.getItem('cc_user_body_sliders');
-    return raw ? JSON.parse(raw) : {};
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Object.keys(parsed).length === 0) {
+      return {};
+    }
+    // Auto-clean old converting-outfits distortion (-153 BreastsZero, 100 SaggingBreastsZone, or stale breast expansion)
+    if (
+      parsed.BreastsZero === -153 ||
+      parsed.SaggingBreastsZone === 100 ||
+      parsed['Under Curve'] === 200 ||
+      (parsed.BreastsBigger !== undefined && parsed.BreastsBigger > 0)
+    ) {
+      localStorage.removeItem('cc_user_body_sliders');
+      return {};
+    }
+    return parsed;
   } catch {
     return {};
   }
@@ -217,7 +233,7 @@ export const createBodySlideSlice: StateCreator<BodySlideState> = (set, get) => 
   nudeSliders: initialNude,
   clothedSliders: initialClothed,
   sliders: initialSliders,
-  activePresetId: 'necoco-converting-outfits',
+  activePresetId: Object.keys(initialUserSliders).length === 0 ? 'default-slim' : null,
   searchQuery: '',
   activeCategory: '1. Necoco Boob',
   activeSubTab: 'bodyslide',
@@ -274,13 +290,14 @@ export const createBodySlideSlice: StateCreator<BodySlideState> = (set, get) => 
   },
 
   resetSliders: () => {
-    const { nudeSliders, clothedSliders, sliders } = computeDualSliders({});
+    const defaultSliders = {};
+    const { nudeSliders, clothedSliders, sliders } = computeDualSliders(defaultSliders);
     set({
-      userSliders: {},
+      userSliders: defaultSliders,
       nudeSliders,
       clothedSliders,
       sliders,
-      activePresetId: null,
+      activePresetId: 'default-slim',
     });
   },
 
@@ -290,13 +307,14 @@ export const createBodySlideSlice: StateCreator<BodySlideState> = (set, get) => 
         localStorage.removeItem('cc_user_body_sliders');
       } catch {}
     }
-    const { nudeSliders, clothedSliders, sliders } = computeDualSliders({});
+    const defaultSliders = {};
+    const { nudeSliders, clothedSliders, sliders } = computeDualSliders(defaultSliders);
     set({
-      userSliders: {},
+      userSliders: defaultSliders,
       nudeSliders,
       clothedSliders,
       sliders,
-      activePresetId: 'necoco-converting-outfits',
+      activePresetId: 'default-slim',
     });
   },
 
@@ -307,7 +325,7 @@ export const createBodySlideSlice: StateCreator<BodySlideState> = (set, get) => 
       nudeSliders,
       clothedSliders,
       sliders,
-      activePresetId: null,
+      activePresetId: 'default-slim',
     });
   },
 
@@ -329,6 +347,28 @@ export const createBodySlideSlice: StateCreator<BodySlideState> = (set, get) => 
     const query = presetIdOrPath.trim().toLowerCase();
 
     // Check synchronous builtin cache first for instant response
+    if (
+      query === 'default-slim' ||
+      query === 'slim' ||
+      query === '0' ||
+      query === 'default' ||
+      query === 'slim _0 base' ||
+      query === 'ube slim'
+    ) {
+      const presetSliders = { ...BUILTIN_PRESET_SLIDERS['default-slim'] };
+      const { nudeSliders, clothedSliders, sliders } = computeDualSliders(presetSliders);
+      set({
+        userSliders: presetSliders,
+        nudeSliders,
+        clothedSliders,
+        sliders,
+        activePresetId: 'default-slim',
+        isLoadingPreset: false,
+        presetError: null,
+      });
+      return;
+    }
+
     if (query === 'necoco-v1' || query === 'ube necoco v1' || query === 'v1') {
       const presetSliders = { ...BUILTIN_PRESET_SLIDERS['necoco-v1'] };
       const { nudeSliders, clothedSliders, sliders } = computeDualSliders(presetSliders);
@@ -363,8 +403,7 @@ export const createBodySlideSlice: StateCreator<BodySlideState> = (set, get) => 
       query === 'necoco-converting-outfits' ||
       query === 'converting-outfits' ||
       query === 'converting outfits' ||
-      query === 'ube necoco for converting outfits' ||
-      query === 'default'
+      query === 'ube necoco for converting outfits'
     ) {
       const presetSliders = { ...BUILTIN_PRESET_SLIDERS['necoco-converting-outfits'] };
       const { nudeSliders, clothedSliders, sliders } = computeDualSliders(presetSliders);

@@ -11,10 +11,26 @@ const cache = new Map();
 let fetchImpl;
 
 function load(name) {
-  const file = path.join(root, name + '.ts');
+  let file = path.join(root, name);
+  if (fs.existsSync(file + '.ts')) {
+    file = file + '.ts';
+  } else if (fs.existsSync(file + '.tsx')) {
+    file = file + '.tsx';
+  } else if (fs.existsSync(file + '.js')) {
+    file = file + '.js';
+  } else if (fs.existsSync(file) && fs.statSync(file).isDirectory()) {
+    if (fs.existsSync(path.join(file, 'index.ts'))) file = path.join(file, 'index.ts');
+    else if (fs.existsSync(path.join(file, 'index.tsx'))) file = path.join(file, 'index.tsx');
+    else if (fs.existsSync(path.join(file, 'index.js'))) file = path.join(file, 'index.js');
+  }
   if (cache.has(file)) return cache.get(file).exports;
   const module = { exports: {} };
   cache.set(file, module);
+  if (file.endsWith('.json')) {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    module.exports = { ...parsed, default: parsed };
+    return module.exports;
+  }
   vm.runInNewContext(
     ts.transpileModule(fs.readFileSync(file, 'utf8'), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },

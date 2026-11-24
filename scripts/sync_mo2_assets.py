@@ -65,12 +65,11 @@ except ImportError:  # pragma: no cover
 # Skin / CBBE head map would project its eyes and mouth onto the wrong part of
 # the mesh.
 SKIN_CANDIDATES = [
-    (r"UBE 2.0 U0.7", r"textures\!UBE\Head\femaleHead_d.dds"),
-    (r"Sayble Skin for UBE 2.0", r"textures\!UBE\Head\femaleHead_d.dds"),
-    (r"Zhizhen's Female Skin 8K UBE", r"textures\!UBE\Head\femaleHead_d.dds"),
-    (r"Imperfect Skin - UBE", r"textures\!UBE\Head\femaleHead_d.dds"),
     (r"Diamond Skin UBE - No Armpit Creases", r"textures\!UBE\head\femalehead_d.dds"),
-    (r"Dragokini Skin", r"textures\!UBE\Head\femaleHead_d.dds"),
+    (r"Zhizhen's Female Skin 8K UBE", r"textures\!UBE\Head\femaleHead_d.dds"),
+    (r"Sayble Skin for UBE 2.0", r"textures\!UBE\Head\femaleHead_d.dds"),
+    (r"Imperfect Skin - UBE", r"textures\!UBE\Head\femaleHead_d.dds"),
+    (r"Freckled Delight Skin (UBE)", r"textures\!UBE\Head\femaleHead_d.dds"),
 ]
 # One or two representatives per family. These atlases do *not* share a UV
 # layout — COR's eyeball island starts ~6 % lower than Zhizhen's — which is why
@@ -264,6 +263,17 @@ def to_tangent_normal(im: Image.Image, size: int) -> Image.Image:
     saves it as PNG.
     """
     rgb = im.convert("RGB")
+    arr = np.asarray(rgb)
+    if arr[:, :, 2].max() < 5:
+        # BC5 only encodes X and Y (Red and Green); Blue (Z) was left 0 by decoder.
+        # Reconstruct tangent-space Z = sqrt(max(0, 1 - X^2 - Y^2)).
+        r = arr[:, :, 0].astype(np.float32) / 127.5 - 1.0
+        g = arr[:, :, 1].astype(np.float32) / 127.5 - 1.0
+        z2 = np.clip(1.0 - (r * r + g * g), 0.0, 1.0)
+        z = np.sqrt(z2)
+        b = np.clip(np.round((z * 127.5) + 127.5), 0, 255).astype(np.uint8)
+        arr = np.stack([arr[:, :, 0], arr[:, :, 1], b], axis=-1)
+        rgb = Image.fromarray(arr, "RGB")
     if rgb.size != (size, size):
         rgb = rgb.resize((size, size), Image.LANCZOS)
     return rgb
@@ -330,6 +340,25 @@ def gloss_mask_from_normal(im: Image.Image, size: int) -> Image.Image | None:
     white = np.full_like(g, 255)
     out = Image.fromarray(np.stack([white, g, white], axis=-1), "RGB")
     if out.size != (size, size):
+        out = out.resize((size, size), Image.LANCZOS)
+    return out
+
+
+def specular_to_roughness(im: Image.Image, size: int) -> Image.Image:
+    """Convert Skyrim Blinn-Phong specular _s.dds (grayscale intensity) into a PBR roughness map.
+
+    Inverts and scales intensity: roughness = 1.0 - (specular * 0.85).
+    Formatted for Three.js ORM convention (Green channel carries roughness,
+    Red and Blue channels are set to 255 for compatibility with combined
+    OcclusionRoughnessMetallic textures).
+    """
+    lum = im.convert("L")
+    spec = np.asarray(lum).astype(np.float32) / 255.0
+    roughness = 1.0 - (spec * 0.85)
+    g = np.clip(np.round(roughness * 255.0), 0, 255).astype(np.uint8)
+    white = np.full_like(g, 255)
+    out = Image.fromarray(np.stack([white, g, white], axis=-1), "RGB")
+    if size > 0 and out.size != (size, size):
         out = out.resize((size, size), Image.LANCZOS)
     return out
 
@@ -1298,6 +1327,8 @@ def main() -> int:
         manifest["textures"]["skin"] = first["texture"]
         if first.get("normalTexture"):
             manifest["textures"]["normal"] = first["normalTexture"]
+        manifest["textures"]["skinRoughness"] = "/assets/preset-pack/textures/skin/head_rough.webp"
+        manifest["textures"]["bodyRoughness"] = "/assets/preset-pack/textures/body/body_rough.webp"
 
     # ── eyes ─────────────────────────────────────────────────────────
     for idx, (p, rel, mod, label) in enumerate(eyes):

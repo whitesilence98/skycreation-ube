@@ -53,7 +53,7 @@ import type {
  * v2 intentionally starts fresh for the new rendering defaults (approved reset).
  * The v1 key is left untouched; it is not automatically restored.
  */
-export const SESSION_VERSION = 3;
+export const SESSION_VERSION = 4;
 
 export const SESSION_KEY = `lyra.character-session.v${SESSION_VERSION}`;
 
@@ -117,6 +117,7 @@ export interface PersistedSession extends AnatomySnapshot {
   skinSss: number;
   skinDetail: number;
   skinSheen: number;
+  skinNormalStrength?: number;
   skinColor: string;
   browColor?: string;
   browOpacity?: number;
@@ -292,6 +293,7 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     skinSss: clamp(finite(o.skinSss, defaults.skinSss), 0, 1),
     skinDetail: clamp(finite(o.skinDetail, defaults.skinDetail), 0, 1),
     skinSheen: clamp(finite(o.skinSheen, defaults.skinSheen), 0, 1),
+    skinNormalStrength: clamp(finite(o.skinNormalStrength, defaults.skinNormalStrength ?? 1.0), 0, 3),
     skinColor: typeof o.skinColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.skinColor) ? o.skinColor : (defaults.skinColor ?? '#ffffff'),
     browColor: typeof o.browColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.browColor) ? o.browColor : (defaults.browColor ?? '#2B1A0A'),
     browOpacity: clamp(finite(o.browOpacity, defaults.browOpacity ?? 1.0), 0.05, 1.0),
@@ -372,6 +374,7 @@ export function pickSession(s: PersistedSession): PersistedSession {
     skinSss: s.skinSss,
     skinDetail: s.skinDetail,
     skinSheen: s.skinSheen,
+    skinNormalStrength: s.skinNormalStrength ?? 1.0,
     skinColor: s.skinColor,
     browColor: s.browColor ?? '#2B1A0A',
     browOpacity: s.browOpacity ?? 1.0,
@@ -427,23 +430,7 @@ function browserStorage(): StateStorage {
   try {
     return {
       getItem: (key) => {
-        const item = window.localStorage.getItem(key);
-        if (!item && key === SESSION_KEY) {
-          const old = window.localStorage.getItem('lyra.character-session.v2');
-          if (old) {
-            try {
-              const parsed = JSON.parse(old);
-              if (parsed?.state) {
-                // Ensure default to slim _0 mesh (weight = 0)
-                parsed.state.weight = 0;
-                return JSON.stringify(parsed);
-              }
-            } catch {
-              // fallback to null
-            }
-          }
-        }
-        return item;
+        return window.localStorage.getItem(key);
       },
       setItem: (key, value) => {
         window.localStorage.setItem(key, value);

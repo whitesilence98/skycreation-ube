@@ -44,17 +44,6 @@
     "partCount": 11
   },
   {
-    "id": "dint_hair_13",
-    "label": "Dint Hair 13",
-    "file": "dint_hair_13.glb",
-    "meshUrl": "/assets/hair/dint_hair_13.glb",
-    "badge": "GLB",
-    "author": "Dint999",
-    "mod": "[Dint999] HairPack",
-    "description": "High-poly hair with 13 sub-parts and PBR textures.",
-    "partCount": 13
-  },
-  {
     "id": "dint_hair_14",
     "label": "Dint Hair 14",
     "file": "dint_hair_14.glb",
@@ -143,17 +132,6 @@
     "partCount": 22
   },
   {
-    "id": "dint_hair_22",
-    "label": "Dint Hair 22",
-    "file": "dint_hair_22.glb",
-    "meshUrl": "/assets/hair/dint_hair_22.glb",
-    "badge": "GLB",
-    "author": "Dint999",
-    "mod": "[Dint999] HairPack",
-    "description": "High-poly hair with 37 sub-parts and PBR textures.",
-    "partCount": 37
-  },
-  {
     "id": "dint_hair_23",
     "label": "Dint Hair 23",
     "file": "dint_hair_23.glb",
@@ -187,28 +165,6 @@
     "partCount": 9
   },
   {
-    "id": "dint_hair_26",
-    "label": "Dint Hair 26",
-    "file": "dint_hair_26.glb",
-    "meshUrl": "/assets/hair/dint_hair_26.glb",
-    "badge": "GLB",
-    "author": "Dint999",
-    "mod": "[Dint999] HairPack",
-    "description": "High-poly hair with 7 sub-parts and PBR textures.",
-    "partCount": 7
-  },
-  {
-    "id": "dint_hair_27",
-    "label": "Dint Hair 27",
-    "file": "dint_hair_27.glb",
-    "meshUrl": "/assets/hair/dint_hair_27.glb",
-    "badge": "GLB",
-    "author": "Dint999",
-    "mod": "[Dint999] HairPack",
-    "description": "High-poly hair with 27 sub-parts and PBR textures.",
-    "partCount": 27
-  },
-  {
     "id": "dint_hair_28",
     "label": "Dint Hair 28",
     "file": "dint_hair_28.glb",
@@ -231,17 +187,6 @@
     "partCount": 24
   },
   {
-    "id": "dint_hair_30",
-    "label": "Dint Hair 30",
-    "file": "dint_hair_30.glb",
-    "meshUrl": "/assets/hair/dint_hair_30.glb",
-    "badge": "GLB",
-    "author": "Dint999",
-    "mod": "[Dint999] HairPack",
-    "description": "High-poly hair with 19 sub-parts and PBR textures.",
-    "partCount": 19
-  },
-  {
     "id": "dint_hair_31",
     "label": "Dint Hair 31",
     "file": "dint_hair_31.glb",
@@ -262,27 +207,5 @@
     "mod": "[Dint999] HairPack",
     "description": "High-poly hair with 20 sub-parts and PBR textures.",
     "partCount": 20
-  },
-  {
-    "id": "dint_hair_33",
-    "label": "Dint Hair 33",
-    "file": "dint_hair_33.glb",
-    "meshUrl": "/assets/hair/dint_hair_33.glb",
-    "badge": "GLB",
-    "author": "Dint999",
-    "mod": "[Dint999] HairPack",
-    "description": "High-poly hair with 5 sub-parts and PBR textures.",
-    "partCount": 5
-  },
-  {
-    "id": "dint_hair_34",
-    "label": "Dint Hair 34",
-    "file": "dint_hair_34.glb",
-    "meshUrl": "/assets/hair/dint_hair_34.glb",
-    "badge": "GLB",
-    "author": "Dint999",
-    "mod": "[Dint999] HairPack",
-    "description": "High-poly hair with 10 sub-parts and PBR textures.",
-    "partCount": 10
   }
 ]

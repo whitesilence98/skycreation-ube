@@ -51,7 +51,7 @@ export const CATEGORY_MAP: Record<'headMesh' | 'eyes' | 'lashes' | 'brows' | 'mo
 } satisfies Record<string, CategorySpec>;
 export type UiCategory = keyof typeof CATEGORY_MAP;
 
-type PartOption = Mo2PartOption & { pairedTextureId?: string };
+export type PartOption = Mo2PartOption & { pairedTextureId?: string };
 export interface AssetOptionMap {
   skin: Mo2SkinOption; eyes: Mo2EyeOption; hair: Mo2HairOption;
   headMesh: Mo2MeshOption; skeleton: Mo2SkeletonOption; preset: Mo2PresetOption;
@@ -155,6 +155,18 @@ export function weightVariantsFor(
   return { w0: url(row.weightVariants.w0), w1: url(row.weightVariants.w1) };
 }
 
+export function findClothingOption(
+  rows: PartOption[],
+  catalogues: AssetCatalogues,
+  id: string,
+): PartOption | undefined {
+  return (
+    rows.find((o) => o.id === id || o.weightVariants?.w0 === id || o.weightVariants?.w1 === id)
+    ?? (catalogues.clothingMesh?.find((e) => (e.id === id || e.weightVariants?.w0 === id || e.weightVariants?.w1 === id) && e.mapRole === 'mesh') as PartOption | undefined)
+    ?? undefined
+  );
+}
+
 /** Only registered catalogue ids resolve to URLs. Unknown/stale preset ids use the offline default. */
 export function resolveManifest(
   manifest: Mo2Manifest | null,
@@ -239,11 +251,21 @@ export function resolveManifest(
   const companionBrowsMesh = selection.browsMesh ? undefined : (head as { browsMeshUrl?: string })?.browsMeshUrl;
   const companionMouthMesh = selection.mouthMesh ? undefined : (head as { mouthMeshUrl?: string })?.mouthMeshUrl;
 
+  const pairedBody = !selection.body && (skin as any)?.bodyTexture ? {
+    texture: (skin as any).bodyTexture as string,
+    normalTexture: ((skin as any).bodyNormalTexture as string | null | undefined) ?? undefined,
+    roughnessTexture: ((skin as any).bodyRoughnessTexture as string | null | undefined) ?? undefined,
+  } : undefined;
+  const defaultBodyTexture = manifest.textures?.body;
+  const defaultBodyNormal = manifest.textures?.bodyNormal;
+  const defaultBodyRoughness = manifest.textures?.bodyRoughness;
+
   const part = (
     name: 'mouth' | 'brows' | 'lashes' | 'body' | 'hands' | 'feet' | 'hair' | 'clothing',
     meshKind: keyof AssetOptionMap,
     textureKind: string = name,
-  ) => {    const texture = pick(textureKind as keyof AssetOptionMap) as PartOption | undefined;
+  ) => {
+    const texture = pick(textureKind as keyof AssetOptionMap) as PartOption | undefined;
     const mesh = pick(meshKind) as PartOption | undefined;
     const fallback = manifest.parts?.[name] ?? (name === 'body' ? manifest.body : undefined);
     const pairId = mesh?.pairedTextureId ?? catalogues[meshKind]?.find((e) => e.rel === mesh?.rel)?.pairedTextureId;
@@ -266,6 +288,10 @@ export function resolveManifest(
     const selectedMeshRow = (() => {
       const id = selection[meshKind as AssetKind];
       if (id) {
+        if (meshKind === 'clothingMesh') {
+          const match = findClothingOption(assetOptions(manifest, 'clothingMesh') as PartOption[], catalogues, id);
+          if (match) return match;
+        }
         const curatedRow = (assetOptions(manifest, meshKind as AssetKind) as PartOption[])
           .find((o) => o.id === id);
         if (curatedRow) return curatedRow;
@@ -279,28 +305,23 @@ export function resolveManifest(
     const grey = mesh?.untextured === true;
     const usableTexture = !grey && texture && texture.available !== false ? texture : undefined;
     const usableMesh = mesh && isRenderableMeshRow(mesh) ? mesh : undefined;
-    const pairedBody = !selection.body && (skin as any)?.bodyTexture ? {
-      texture: (skin as any).bodyTexture as string,
-      normalTexture: (skin as any).bodyNormalTexture as string | undefined,
-      roughnessTexture: (skin as any).bodyRoughnessTexture as string | undefined,
-    } : undefined;
-    const resolvedTexture = (textureKind === 'body' && pairedBody)
-      ? pairedBody.texture
+    const resolvedTexture = textureKind === 'body'
+      ? (pairedBody?.texture ?? usableTexture?.texture ?? fallback?.texture ?? defaultBodyTexture)
       : (usableTexture?.texture ?? (grey ? undefined : fallback?.texture));
-    const resolvedNormal = (textureKind === 'body' && pairedBody)
-      ? pairedBody.normalTexture
+    const resolvedNormal = textureKind === 'body'
+      ? (pairedBody?.normalTexture ?? (usableTexture ? usableTexture.normalTexture : (grey ? undefined : fallback?.normalTexture)) ?? defaultBodyNormal)
       : (usableTexture ? usableTexture.normalTexture : (grey ? undefined : fallback?.normalTexture));
-    const resolvedRoughness = (textureKind === 'body' && pairedBody)
-      ? pairedBody.roughnessTexture
+    const resolvedRoughness = textureKind === 'body'
+      ? (pairedBody?.roughnessTexture ?? usableTexture?.roughnessTexture ?? fallback?.roughnessTexture ?? defaultBodyRoughness)
       : (usableTexture?.roughnessTexture ?? fallback?.roughnessTexture);
     return {
       ...(fallback ?? {}), ...(usableTexture ?? {}),
       meshUrl: (name === 'lashes' ? companionLashesMesh : name === 'brows' ? companionBrowsMesh : name === 'mouth' ? companionMouthMesh : undefined)
-        ?? (name === 'hair' || name === 'clothing'
+        ?? (name === 'hair'
           ? usableMesh?.meshUrl
-          : (weightVariants?.w0 ?? usableMesh?.meshUrl ?? fallback?.meshUrl ?? (name === 'body' ? body?.meshUrl : undefined))),
+          : (weightVariants?.w0 ?? (name === 'clothing' && usableMesh?.meshUrl ? usableMesh.meshUrl.replace(/_1\.nif/i, '_0.nif') : usableMesh?.meshUrl) ?? (name === 'clothing' && fallback?.meshUrl ? fallback.meshUrl.replace(/_1\.nif/i, '_0.nif') : fallback?.meshUrl) ?? (name === 'body' ? body?.meshUrl : undefined))),
       texture: pair ? convertUrl({ kind: textureKind, id: pair.id, mode: 'atlas' }) : resolvedTexture,
-      normalTexture: pair ? (pair.normalId ? convertUrl({ kind: textureKind, id: pair.normalId, mode: 'normal' }) : undefined) : resolvedNormal,
+      normalTexture: pair ? (pair.normalId ? convertUrl({ kind: textureKind, id: pair.normalId, mode: 'normal' }) : (textureKind === 'body' ? (pairedBody?.normalTexture ?? defaultBodyNormal) : undefined)) : resolvedNormal,
       roughnessTexture: resolvedRoughness,
       ...(weightVariants ? { weightVariants } : { weightVariants: undefined }),
       ...(mesh?.untextured === true
@@ -316,6 +337,17 @@ export function resolveManifest(
     hands: part('hands', 'handsMesh', 'body'), feet: part('feet', 'feetMesh', 'body'),
     hair: part('hair', 'hairMesh'), clothing: part('clothing', 'clothingMesh'),
   };
+  const fallbackBodyNormal = pairedBody?.normalTexture ?? defaultBodyNormal;
+  const fallbackBodyRoughness = pairedBody?.roughnessTexture ?? defaultBodyRoughness;
+  const fallbackBodyTexture = pairedBody?.texture ?? defaultBodyTexture;
+  for (const partKey of ['body', 'hands', 'feet'] as const) {
+    const p = parts[partKey];
+    if (p) {
+      if (!p.texture && fallbackBodyTexture) p.texture = fallbackBodyTexture;
+      if (!p.normalTexture && fallbackBodyNormal) p.normalTexture = fallbackBodyNormal;
+      if (!p.roughnessTexture && fallbackBodyRoughness) p.roughnessTexture = fallbackBodyRoughness;
+    }
+  }
   /**
    * One garment per filled equipment slot.
    *
@@ -341,9 +373,7 @@ export function resolveManifest(
   for (const slot of EQUIP_SLOTS) {
     const id = equipment[slot];
     if (!id) continue;
-    const row = clothingRows.find((o) => o.id === id)
-      ?? (catalogues.clothingMesh?.find((e) => e.id === id && e.mapRole === 'mesh') as PartOption | undefined)
-      ?? undefined;
+    const row = findClothingOption(clothingRows, catalogues, id);
     if (!row || !isRenderableMeshRow(row)) continue;
     const unrestricted = options?.unrestrictedSlots ?? false;
     if (!unrestricted && equipSlotOf(row) !== slot) continue;
@@ -373,7 +403,7 @@ export function resolveManifest(
     ) as PartOption[]),
   ];
   const hairGroups = buildHairGroups(allHairMeshes);
-  const activeHairId = selection.hairMesh ?? (parts.hair?.id && !parts.hair.id.startsWith('hairMesh-') ? parts.hair.id : undefined) ?? 'wolf_haircut';
+  const activeHairId = selection.hairMesh ?? (parts.hair?.id && !parts.hair.id.startsWith('hairMesh-') ? parts.hair.id : undefined) ?? 'dint_hair_12';
   const activeHairGroup = findHairGroupForPartId(hairGroups, activeHairId);
 
   const resolvedHairParts: Mo2PartOption[] = [];
@@ -387,14 +417,14 @@ export function resolveManifest(
       rel: curatedGlb.file,
       meshUrl: curatedGlb.meshUrl,
     });
-  } else if (activeHairId === 'dint_hair_03' || (typeof activeHairId === 'string' && activeHairId.endsWith('.glb'))) {
+  } else if (typeof activeHairId === 'string' && activeHairId.endsWith('.glb')) {
     resolvedHairParts.push({
       id: activeHairId,
-      label: 'Dint Hair 03',
-      mod: '[Dint999] HairPack02',
-      file: 'hair_03.glb',
-      rel: 'hair_03.glb',
-      meshUrl: activeHairId.endsWith('.glb') ? activeHairId : '/assets/hair/hair_03.glb',
+      label: 'Custom Hair',
+      mod: 'Custom',
+      file: activeHairId.split('/').pop() || 'hair.glb',
+      rel: activeHairId.split('/').pop() || 'hair.glb',
+      meshUrl: activeHairId,
     });
   } else if (activeHairGroup && activeHairGroup.parts.length > 0) {
     for (const p of activeHairGroup.parts) {
@@ -435,6 +465,9 @@ export function resolveManifest(
     },
     textures: {
       ...manifest.textures,
+      body: parts.body?.texture ?? manifest.textures?.body,
+      bodyNormal: parts.body?.normalTexture ?? manifest.textures?.bodyNormal,
+      bodyRoughness: parts.body?.roughnessTexture ?? manifest.textures?.bodyRoughness,
       skin: head?.headTextureMissing ? undefined : skin?.texture ?? manifest.textures?.skin,
       eye: eye?.texture ?? manifest.textures?.eye,
       hair: hair?.texture ?? manifest.textures?.hair,

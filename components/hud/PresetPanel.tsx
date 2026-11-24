@@ -21,6 +21,12 @@ interface BodyPresetCard {
 
 const BODY_PRESET_CARDS: BodyPresetCard[] = [
   {
+    id: 'default-slim',
+    label: 'SLIM _0 BASE',
+    subtitle: 'Neutral Body',
+    description: 'Authentic slim Skyrim _0 mesh with zero morphs',
+  },
+  {
     id: 'necoco-v1',
     label: 'UBE NECOCO V1',
     subtitle: 'Base Curves',
@@ -127,7 +133,7 @@ export function PresetPanel({ manifest: _manifest }: PresetPanelProps) {
               PRESETS
             </span>
             <span className="font-mono text-[10px] text-[#a49a88]">
-              {activeTab === 'face' ? `${slots.length} SLOTS` : '3 CANONICAL'}
+              {activeTab === 'face' ? `${slots.length} SLOTS` : `${BODY_PRESET_CARDS.length} CANONICAL`}
             </span>
           </div>
 

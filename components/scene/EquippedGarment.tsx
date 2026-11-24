@@ -138,6 +138,14 @@ export function EquippedGarment({
     const target = posAttr.array as Float32Array;
     if (target.length !== base.length) return;
 
+    const hasActiveMorphs = Object.values(clothedSliders).some((v) => Math.abs(v) > 0.0001);
+    if (!hasActiveMorphs) {
+      target.set(base);
+      posAttr.needsUpdate = true;
+      mesh.geometry.computeVertexNormals();
+      return;
+    }
+
     applyBodySlideMorphs(
       target,
       base,
@@ -163,15 +171,17 @@ export function EquippedGarment({
   /* Several armour sets (the Gladiator one included) embed a copy of the body
      shape in every piece. Drawing them all would stack three bodies inside
      each other, so the standalone body wins and each piece contributes only
-     its garment shapes — the same rule the whole-outfit node already uses. */
+     its garment shapes — the same rule the whole-outfit node already uses.
+     When hideEmbeddedBody is true, any shape with role 'skin' is added to hidden,
+     leaving only clothing and accessory. */
   const hasEmbeddedBody = Boolean(mesh?.materials?.some((m) => m.role === 'skin'));
   const hiddenKey = hiddenRoles?.join('|') ?? '';
   const hidden = useMemo(() => {
     const out = [...(hiddenRoles ?? [])];
-    if (hideEmbeddedBody && hasEmbeddedBody) out.push('skin');
+    if (hideEmbeddedBody && !out.includes('skin')) out.push('skin');
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hiddenKey, hideEmbeddedBody, hasEmbeddedBody]);
+  }, [hiddenKey, hideEmbeddedBody]);
 
   if (!mesh) return null;
 

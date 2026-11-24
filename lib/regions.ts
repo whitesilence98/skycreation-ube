@@ -328,7 +328,7 @@ export const PRESETS: PresetDef[] = [
     headMeshId: 'preset-279bbfa8f35ce962-face',
     weight: 0.0,
     assets: {
-      hairMesh: 'wolf_haircut',
+      hairMesh: 'dint_hair_12',
       skin: 'skin-zhizhen-ube',
       headMesh: 'preset-279bbfa8f35ce962-face',
       preset: 'preset-279bbfa8f35ce962',
@@ -422,7 +422,7 @@ export const PRESETS: PresetDef[] = [
     headMeshId: 'headMesh-52e201357614eaf7-face',
     weight: 0.0,
     assets: {
-      hairMesh: 'wolf_haircut',
+      hairMesh: 'dint_hair_12',
       skin: 'skin-zhizhen-ube',
       headMesh: 'headMesh-52e201357614eaf7-face',
       eyes: 'eyes-8439fa932deee6f8',

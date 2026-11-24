@@ -471,9 +471,10 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     () => parts?.hairParts ?? (parts?.hair?.meshUrl ? [parts.hair] : []),
     [parts?.hairParts, parts?.hair],
   );
-  const clothingMeshUrl = parts?.clothing?.meshUrl;
+  const clothingMeshSelection = useCharacter((s) => s.assetSelection.clothingMesh);
+  const clothingMeshUrl = clothingMeshSelection ? parts?.clothing?.meshUrl : undefined;
   const clothingResource = useWeightedMeshResource(
-    parts?.clothing?.weightVariants,
+    clothingMeshSelection ? parts?.clothing?.weightVariants : undefined,
     clothingMeshUrl,
     'clothing mesh',
     weight,
@@ -536,6 +537,14 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     const base = clothingBasePositionsRef.current;
     const target = posAttr.array as Float32Array;
     if (target.length !== base.length) return;
+
+    const hasActiveMorphs = Object.values(bodySlideSliders).some((v) => Math.abs(v) > 0.0001);
+    if (!hasActiveMorphs) {
+      target.set(base);
+      posAttr.needsUpdate = true;
+      clothingMesh.geometry.computeVertexNormals();
+      return;
+    }
 
     applyBodySlideMorphs(
       target,
@@ -970,7 +979,9 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   /* Skyrim's `_n.dds` alpha as a roughness map. The pack ships this for its
      own head; a catalogue skin pick converts on demand and has none, in which
      case the material keeps its scalar roughness. */
-  const skinRoughnessSrc = manifest?.textures?.skinRoughness;
+  const skinRoughnessSrc =
+    manifest?.textures?.skinRoughness ??
+    '/assets/preset-pack/textures/skin/head_rough.webp';
   const eyeSrc =
     manifest?.textures?.eye ??
     manifest?.eye?.texture ??
@@ -1078,6 +1089,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const skinSss = useCharacter((s) => s.skinSss);
   const skinDetail = useCharacter((s) => s.skinDetail);
   const skinSheen = useCharacter((s) => s.skinSheen);
+  const skinNormalStrength = useCharacter((s) => s.skinNormalStrength ?? 1.0);
   const skinColor = useCharacter((s) => s.skinColor);
   const lashesColor = useCharacter((s) => s.lashesColor);
   const lashesOpacity = useCharacter((s) => s.lashesOpacity);
@@ -1193,7 +1205,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
       headMaterial.color.set(skinColor);
       headMaterial.roughness = skinRoughness;
       headMaterial.metalness = 0.0;
-      headMaterial.normalScale.set(1.0, 1.0);
+      headMaterial.normalScale.set(skinNormalStrength, skinNormalStrength);
       headMaterial.needsUpdate = true;
       return;
     }
@@ -1204,10 +1216,10 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     headMaterial.metalness = 0.0;
     const normal = skinNormal ?? detailTex;
     headMaterial.normalMap = normal ?? null;
-    const ns = skinNormal ? 1.0 : 0.34;
+    const ns = (skinNormal ? 1.0 : 0.34) * skinNormalStrength;
     headMaterial.normalScale.set(ns, ns);
     headMaterial.needsUpdate = true;
-  }, [faceTex, detailTex, skinNormal, headMaterial, isReal, skinRoughness, realOverlayTex, baseAtlasRef, skinColor]);
+  }, [faceTex, detailTex, skinNormal, headMaterial, isReal, skinRoughness, realOverlayTex, baseAtlasRef, skinColor, skinNormalStrength]);
 
   useEffect(() => {
     neckMaterial.roughness = skinRoughness;
@@ -1221,6 +1233,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
       neckMaterial.map = headMapState === 'loaded' ? headMaterial.map : null;
       neckMaterial.roughnessMap = skinRoughnessSrc ? headMaterial.roughnessMap : null;
       neckMaterial.normalMap = headNormalState === 'loaded' ? headMaterial.normalMap : null;
+      neckMaterial.normalScale.set(skinNormalStrength, skinNormalStrength);
       neckMaterial.color.set(skinColor);
       neckMaterial.needsUpdate = true;
       return;
@@ -1231,7 +1244,15 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     neckMaterial.normalMap = null;
     neckMaterial.color.set(skinColor);
     neckMaterial.needsUpdate = true;
-  }, [faceTex, neckMaterial, isReal, headMapState, headNormalState, headMaterial, realOverlayTex, skinRoughness, skinRoughnessSrc, skinColor]);
+  }, [faceTex, neckMaterial, isReal, headMapState, headNormalState, headMaterial, realOverlayTex, skinRoughness, skinRoughnessSrc, skinColor, skinNormalStrength]);
+
+  // Live-update normal scale across skin materials without texture reloads
+  useEffect(() => {
+    headMaterial.normalScale.set(skinNormalStrength, skinNormalStrength);
+    neckMaterial.normalScale.set(skinNormalStrength, skinNormalStrength);
+    headMaterial.needsUpdate = true;
+    neckMaterial.needsUpdate = true;
+  }, [skinNormalStrength, headMaterial, neckMaterial]);
 
   // Live-update SSS/sheen uniforms when GLOSS, SSS or SHEEN changes (no recompile needed)
   useEffect(() => {
@@ -1251,10 +1272,13 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
 
   const eyeMaterial = useMemo(
     () =>
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         color: '#ffffff',
-        roughness: 0.1,
+        roughness: 0.04,
         metalness: 0.0,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.02,
+        ior: 1.376,
         /* Koralina's atlases leave transparent-white texels around the sclera
            (COR's are alpha-255 everywhere, so this is a no-op for them).
            Without the cut they render as white patches on the eyeball. */
@@ -1439,14 +1463,28 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     mouthMaterial.needsUpdate = true;
   }, [skinColor, headMaterial, neckMaterial, bodyMaterial, mouthMaterial]);
 
+  useEffect(() => {
+    bodyMaterial.normalScale.set(skinNormalStrength, skinNormalStrength);
+    bodyMaterial.needsUpdate = true;
+  }, [skinNormalStrength, bodyMaterial]);
+
   const bodyTexUrl =
-    parts?.body?.texture ?? manifest?.body?.texture ?? (packMode ? undefined : '/assets/mo2/body/femalebody.webp');
+    parts?.body?.texture ??
+    manifest?.body?.texture ??
+    (packMode
+      ? (manifest?.textures?.body ?? '/assets/preset-pack/textures/body/diamond_body.webp')
+      : '/assets/mo2/body/femalebody.webp');
   const bodyNormalUrl =
     parts?.body?.normalTexture ??
     manifest?.body?.normalTexture ??
-    (packMode ? undefined : '/assets/mo2/body/femalebody_n.webp');
+    (packMode
+      ? (manifest?.textures?.bodyNormal ?? '/assets/preset-pack/textures/body/diamond_body_n.png')
+      : '/assets/mo2/body/femalebody_n.webp');
   const bodyRoughUrl =
-    parts?.body?.roughnessTexture ?? manifest?.body?.roughnessTexture;
+    parts?.body?.roughnessTexture ??
+    manifest?.body?.roughnessTexture ??
+    manifest?.textures?.bodyRoughness ??
+    '/assets/preset-pack/textures/body/diamond_body_rough.webp';
   const bodyTexState = useMaterialTexture(bodyMaterial, 'map', bodyTexUrl, {
     colorSpace: THREE.SRGBColorSpace,
     wrap: true,
@@ -1714,7 +1752,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           <primitive object={browsMesh} material={partMaterial(browsTexState, browsMaterial)} dispose={null} />
         )}
       </primitive>
-      {bodyGeo && bodyMesh && !hasBodywear ? (
+      {bodyGeo && bodyMesh ? (
         bodyMesh.bones?.length || autoRigUnskinned ? (
           <SkinnedPart
             key="body"
@@ -1797,7 +1835,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
       )}
       {/* The outfit's embedded body is always drawn; only the garment shapes
           follow the toggle. Missing garment atlases hide just those shapes. */}
-      {clothingResource.mesh && !equipped.some((g) => g.slot === 'outfit') && (
+      {clothingMeshSelection && clothingResource.mesh && parts?.clothing && !equipped.some((g) => g.slot === 'outfit' || g.slot === 'top' || g.slot === 'chest' || g.slot === 'bottom') && (
         clothingResource.mesh.bones?.length || autoRigUnskinned ? (
           <SkinnedPart
             key="clothing"
@@ -1845,7 +1883,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           rigDonor={bodyMesh ?? undefined}
           weight={weight}
           hiddenRoles={equipmentHiddenRoles}
-          hideEmbeddedBody={!hasBodywear || garmentVisible === false}
+          hideEmbeddedBody={true}
           fallbackByRole={clothingFallback}
           fallbackNormalByRole={clothingNormalFallback}
           fallbackRoughnessByRole={bodyRoughnessFallback}

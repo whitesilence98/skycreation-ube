@@ -181,44 +181,12 @@ interface TexturePreset {
 
 const TEXTURE_PRESETS: TexturePreset[] = [
   {
-    id: 'ube-base',
-    name: 'UBE Base',
-    title: 'UBE 2.0 BASE SKIN',
-    description: 'Official UBE 2.0 foundation skin with neutral tones and balanced surface specularity.',
-    thumb: '/assets/preset-pack/textures/skin/thumbs/ube_base.webp',
-    manifestId: 'skin-ube-base',
-  },
-  {
-    id: 'sayble',
-    name: 'Sayble',
-    title: 'SAYBLE SKIN (UBE)',
-    description: 'Soft, satin-smooth complexion with delicate micro-pores and luminous highlights.',
-    thumb: '/assets/preset-pack/textures/skin/thumbs/sayble.webp',
-    manifestId: 'skin-sayble-ube',
-  },
-  {
     id: 'diamond',
     name: 'Diamond',
     title: 'DIAMOND SKIN (UBE)',
     description: 'Iconic high-definition skin with crystalline clarity, sharp highlights, and seamless shading.',
     thumb: '/assets/preset-pack/textures/skin/thumbs/diamond.webp',
     manifestId: 'skin-diamond-ube',
-  },
-  {
-    id: 'imperfect',
-    name: 'Imperfect',
-    title: 'IMPERFECT SKIN (UBE)',
-    description: 'Authentic, natural complexion with realistic skin micro-relief, subtle freckles, and pores.',
-    thumb: '/assets/preset-pack/textures/skin/thumbs/imperfect.webp',
-    manifestId: 'skin-imperfect-ube',
-  },
-  {
-    id: 'dragokini',
-    name: 'Dragokini',
-    title: 'DRAGOKINI SKIN (UBE)',
-    description: 'Exotic dragon-touched aesthetic with radiant warm tones and fine scale textures.',
-    thumb: '/assets/preset-pack/textures/skin/thumbs/dragokini.webp',
-    manifestId: 'skin-dragokini-ube',
   },
   {
     id: 'zhizhen',
@@ -229,12 +197,28 @@ const TEXTURE_PRESETS: TexturePreset[] = [
     manifestId: 'skin-zhizhen-ube',
   },
   {
-    id: 'dragokini-scaleless',
-    name: 'Scaleless',
-    title: 'DRAGOKINI SCALELESS (UBE)',
-    description: 'Smooth torso variant with dragon-born facial texture and accented extremities.',
-    thumb: '/assets/preset-pack/textures/skin/thumbs/dragokini_scaleless.webp',
-    manifestId: 'skin-dragokini-scaleless',
+    id: 'sayble',
+    name: 'Sayble',
+    title: 'SAYBLE SKIN (UBE)',
+    description: 'Soft, satin-smooth complexion with delicate micro-pores and luminous highlights.',
+    thumb: '/assets/preset-pack/textures/skin/thumbs/sayble.webp',
+    manifestId: 'skin-sayble-ube',
+  },
+  {
+    id: 'imperfect',
+    name: 'Imperfect',
+    title: 'IMPERFECT SKIN (UBE)',
+    description: 'Authentic, natural complexion with realistic skin micro-relief, subtle freckles, and pores.',
+    thumb: '/assets/preset-pack/textures/skin/thumbs/imperfect.webp',
+    manifestId: 'skin-imperfect-ube',
+  },
+  {
+    id: 'freckled-delight',
+    name: 'Freckled',
+    title: 'FRECKLED DELIGHT (UBE)',
+    description: 'Youthful sun-kissed complexion with delicate, organic facial freckle distribution.',
+    thumb: '/assets/preset-pack/textures/skin/thumbs/freckled_delight.webp',
+    manifestId: 'skin-freckled-delight',
   },
 ];
 
@@ -373,11 +357,16 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
         </div>
 
         {/* ── 1. BODY WEIGHT & STATURE ───────────────────────────────── */}
-        <div className="flex flex-col gap-1.5 pt-0.5">
+        <div
+          className="flex flex-col gap-1.5 pt-0.5"
+          title={!BODY_WEIGHT_ENABLED ? "Body weight temporarily locked to base _0 mesh for maximum stability" : undefined}
+        >
           <div className="flex items-center justify-between text-[10px] font-mono tracking-[0.08em]">
             <span className="text-[#c4b595] uppercase">BODY WEIGHT {!BODY_WEIGHT_ENABLED && '(LOCKED)'}</span>
             <div className="flex items-center gap-1.5 text-[#8f8778]">
-              <span className="text-[#d8c39c]">[{!BODY_WEIGHT_ENABLED ? '0%' : `${weightPercent}%`}]</span>
+              <span className="text-[#d8c39c] font-medium">
+                {!BODY_WEIGHT_ENABLED ? '0% [LOCKED TO _0 BODY]' : `[${weightPercent}%]`}
+              </span>
               <span>({!BODY_WEIGHT_ENABLED ? '0.00' : weight.toFixed(2)})</span>
             </div>
           </div>
@@ -394,9 +383,15 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
               !BODY_WEIGHT_ENABLED && "opacity-40 cursor-not-allowed pointer-events-none"
             )}
             aria-label="Body weight slider"
+            title={!BODY_WEIGHT_ENABLED ? "Body weight temporarily locked to base _0 mesh for maximum stability" : undefined}
           />
           <div className="flex items-center justify-between text-[10px] font-mono text-[#a49a88] px-0.5 leading-tight">
             <span>Slim (_0)</span>
+            {!BODY_WEIGHT_ENABLED ? (
+              <span className="text-[#eac87f]/90 font-medium">[LOCKED TO _0 BODY]</span>
+            ) : (
+              <span className="text-[#8f8778]">Dynamic Mesh Blend</span>
+            )}
             <span>Muscular (_1)</span>
           </div>
 
@@ -406,7 +401,7 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
             onClick={() => setLinkFaceToWeight(!linkFaceToWeight)}
             title="Link Face to Weight: FaceGen fullness and neck perimeter scale with body weight (Skyrim Creation Engine parity)"
             className={cn(
-              'mt-0.5 flex w-full items-center justify-between border px-2 py-1 text-[10px] font-mono tracking-[0.08em] leading-tight transition-colors',
+              'mt-0.5 flex w-full items-center justify-between border px-2 py-1 text-[10px] font-mono tracking-[0.08em] leading-tight transition-colors min-h-[26px]',
               linkFaceToWeight
                 ? 'border-[#d4b483]/70 bg-[#d4b483]/14 text-[#e8c691] font-medium shadow-[0_0_8px_rgba(212,180,131,0.15)]'
                 : 'border-[#8c8477]/30 bg-black/20 text-[#a8a294]/70 hover:border-[#d4b483]/45 hover:text-[#d5cdbd]',
@@ -569,7 +564,7 @@ export function SkinPicker({ manifest = null }: SkinPickerProps) {
             </h3>
 
             {/* Grid of Real Skin Presets */}
-            <div className="grid grid-cols-3 gap-2 max-h-[195px] overflow-y-auto thin-scroll pr-1">
+            <div className="grid grid-cols-3 gap-2 max-h-[195px] overflow-y-auto scrollbar-none pr-1">
               {TEXTURE_PRESETS.map((preset) => {
                 const isSelected = draftTexture.id === preset.id;
                 return (

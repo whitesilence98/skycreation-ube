@@ -18,6 +18,7 @@ import { SmartFooter } from '@/components/hud/smart/SmartFooter';
 import { notifyOutfitsChanged, requestOutfitSave } from '@/lib/outfits/saveRequest';
 import { useCharacter } from '@/lib/store';
 import { usePresetUiStore } from '@/lib/presets/presetUiStore';
+import { useBodySlideStore } from '@/lib/bodyslide/store';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
 function Key({ children }: { children: React.ReactNode }) {
@@ -42,6 +43,7 @@ export function Footer({
   const isHair = useCharacter(s => s.primaryTab === 'HAIR');
   const isMakeup = useCharacter(s => s.primaryTab === 'FACE');
   const isFace = useCharacter(s => s.primaryTab === 'FACE SHAPE');
+  const isBody = useCharacter(s => s.primaryTab === 'BODY');
   const isPreset = useCharacter(s => s.primaryTab === 'PRESET');
   const smart = useCharacter(s => s.studioPage === 'smart');
   const past = useCharacter(s => s.facePast.length);
@@ -55,6 +57,7 @@ export function Footer({
   if (isHair) return <HairFooter onToggleImport={onToggleCustomizationDrawer} />;
   if (isMakeup) return <MakeupFooter onToggleImport={onToggleCustomizationDrawer} />;
   if (isFace) return <FeaturesFooter onToggleImport={onToggleCustomizationDrawer} />;
+  if (isBody) return <PhysiqueFooter onToggleImport={onToggleCustomizationDrawer} />;
   if (isPreset) return <PresetFooter />;
 
   return (
@@ -350,14 +353,14 @@ function OutfitFooter() {
 
         {/* Early Access Watermark */}
         <span className="font-mono text-[10px] tracking-wide text-[#7a7882]/80 select-none">
-          ID: 0507582430 Early Access Version
+          ID: 0507582430
         </span>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────────────────────
-          RIGHT ACTIONS (Callouts 10 & 11)
+          RIGHT ACTIONS (Callouts 10 & 11 + Gold Primary CTA)
           ───────────────────────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-6 text-xs text-[#cfcacf]">
+      <div className="flex items-center gap-4 sm:gap-6 text-xs text-[#cfcacf]">
         {/* CALLOUT 10: [R] Upload to the Gallery */}
         <button
           type="button"
@@ -382,6 +385,25 @@ function OutfitFooter() {
           <Key>F</Key>
           <span>Outfit Plan</span>
         </button>
+
+        {/* Select */}
+        <span className="hidden sm:inline-flex items-center gap-1 text-[#8f8d97]">
+          <span className="text-[11px] font-mono">✕</span>
+          <span>Select</span>
+        </span>
+
+        {/* Gold Preview Button */}
+        <button
+          type="button"
+          onClick={() => {
+            const cur = state().previewMode;
+            state().setPreviewMode(!cur);
+          }}
+          className="flex items-center gap-2 rounded-sm bg-[#dfba73] px-3.5 py-1.5 text-xs font-semibold text-black shadow-md transition-all hover:bg-[#eac87f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+        >
+          <span className="font-mono text-[10px] bg-black/20 px-1 rounded-[2px] text-black">Space</span>
+          <span>Preview</span>
+        </button>
       </div>
     </footer>
   );
@@ -389,6 +411,8 @@ function OutfitFooter() {
 
 function HairFooter({ onToggleImport }: { onToggleImport?: () => void }) {
   const state = useCharacter.getState;
+  const setPreviewMode = useCharacter(s => s.setPreviewMode);
+  const preview = useCharacter(s => s.previewMode);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -409,11 +433,14 @@ function HairFooter({ onToggleImport }: { onToggleImport?: () => void }) {
       } else if (event.key.toLowerCase() === 'r') {
         event.preventDefault();
         state().showToast('Uploading customization data to the gallery…');
+      } else if (event.code === 'Space') {
+        event.preventDefault();
+        setPreviewMode(!preview);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onToggleImport]);
+  }, [onToggleImport, preview, setPreviewMode]);
 
   const randomize = () => {
     const s = state();
@@ -463,14 +490,14 @@ function HairFooter({ onToggleImport }: { onToggleImport?: () => void }) {
           </button>
         </div>
 
-        {/* Early Access Watermark */}
+        {/* Watermark */}
         <span className="font-mono text-[10px] tracking-wide text-[#7a7882]/80 select-none">
-          ID: 2063263297
+          ID: 0507582430
         </span>
       </div>
 
       {/* Right Actions */}
-      <div className="flex items-center gap-6 text-xs text-[#cfcacf]">
+      <div className="flex items-center gap-4 sm:gap-6 text-xs text-[#cfcacf]">
         {/* [R] Upload to the Gallery */}
         <button
           type="button"
@@ -479,6 +506,136 @@ function HairFooter({ onToggleImport }: { onToggleImport?: () => void }) {
         >
           <Key>R</Key>
           <span>Upload to the Gallery</span>
+        </button>
+
+        {/* Select */}
+        <span className="hidden sm:inline-flex items-center gap-1 text-[#8f8d97]">
+          <span className="text-[11px] font-mono">✕</span>
+          <span>Select</span>
+        </span>
+
+        {/* Gold Preview Button */}
+        <button
+          type="button"
+          onClick={() => setPreviewMode(!preview)}
+          className="flex items-center gap-2 rounded-sm bg-[#dfba73] px-3.5 py-1.5 text-xs font-semibold text-black shadow-md transition-all hover:bg-[#eac87f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+        >
+          <span className="font-mono text-[10px] bg-black/20 px-1 rounded-[2px] text-black">Space</span>
+          <span>Preview</span>
+        </button>
+      </div>
+    </footer>
+  );
+}
+
+function PhysiqueFooter({ onToggleImport }: { onToggleImport?: () => void }) {
+  const state = useCharacter.getState;
+  const setPreviewMode = useCharacter(s => s.setPreviewMode);
+  const preview = useCharacter(s => s.previewMode);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest('button, summary, a, input, textarea, select, [role="button"], [role="slider"], [contenteditable="true"]')
+      )
+        return;
+
+      if (event.key.toLowerCase() === 'v') {
+        event.preventDefault();
+        onToggleImport?.();
+      } else if (event.key.toLowerCase() === 't') {
+        event.preventDefault();
+        resetSliders();
+      } else if (event.key.toLowerCase() === 'r') {
+        event.preventDefault();
+        state().showToast('Uploading customization data to the gallery…');
+      } else if (event.code === 'Space') {
+        event.preventDefault();
+        setPreviewMode(!preview);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onToggleImport, preview, setPreviewMode]);
+
+  const resetSliders = () => {
+    useBodySlideStore.getState().resetSliders();
+    state().showToast('Reset body morph sliders to default');
+  };
+
+  return (
+    <footer className="pointer-events-auto absolute inset-x-0 bottom-0 z-20 flex min-h-[54px] flex-wrap md:flex-nowrap items-center justify-between gap-3 px-4 sm:px-8 py-2 md:py-0 select-none bg-gradient-to-t from-black/80 to-transparent">
+      {/* Left Actions */}
+      <div className="flex flex-col gap-0.5">
+        <div className="flex items-center gap-3 sm:gap-5 text-xs text-[#cfcacf] flex-wrap">
+          {/* Return */}
+          <button
+            type="button"
+            onClick={() => state().setWorkspace('edit')}
+            className="flex items-center gap-1.5 transition-colors hover:text-white"
+          >
+            <span className="flex h-4 w-4 items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 font-mono text-[10px] font-medium text-[#eae5dc]">
+              ↵
+            </span>
+            <span>Return</span>
+          </button>
+
+          {/* [V] Import Customization Data */}
+          <button
+            type="button"
+            onClick={onToggleImport}
+            className="flex items-center gap-1.5 transition-colors hover:text-white"
+          >
+            <Key>V</Key>
+            <span>Import Customization Data</span>
+          </button>
+
+          {/* [T] Reset Sliders */}
+          <button
+            type="button"
+            onClick={resetSliders}
+            className="flex items-center gap-1.5 transition-colors hover:text-white"
+          >
+            <Key>T</Key>
+            <span>Reset Sliders</span>
+          </button>
+        </div>
+
+        {/* Watermark */}
+        <span className="font-mono text-[10px] tracking-wide text-[#7a7882]/80 select-none">
+          ID: 0507582430
+        </span>
+      </div>
+
+      {/* Right Actions */}
+      <div className="flex items-center gap-4 sm:gap-6 text-xs text-[#cfcacf]">
+        {/* [R] Upload to the Gallery */}
+        <button
+          type="button"
+          onClick={() => state().showToast('Uploading customization data to the gallery…')}
+          className="flex items-center gap-1.5 transition-colors hover:text-white"
+        >
+          <Key>R</Key>
+          <span>Upload to the Gallery</span>
+        </button>
+
+        {/* Select */}
+        <span className="hidden sm:inline-flex items-center gap-1 text-[#8f8d97]">
+          <span className="text-[11px] font-mono">✕</span>
+          <span>Select</span>
+        </span>
+
+        {/* Gold Preview Button */}
+        <button
+          type="button"
+          onClick={() => setPreviewMode(!preview)}
+          className="flex items-center gap-2 rounded-sm bg-[#dfba73] px-3.5 py-1.5 text-xs font-semibold text-black shadow-md transition-all hover:bg-[#eac87f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+        >
+          <span className="font-mono text-[10px] bg-black/20 px-1 rounded-[2px] text-black">Space</span>
+          <span>Preview</span>
         </button>
       </div>
     </footer>
@@ -579,9 +736,9 @@ function FeaturesFooter({ onToggleImport }: { onToggleImport?: () => void }) {
           </button>
         </div>
 
-        {/* Watermark matching Image 2: ID: 1127544843 */}
+        {/* Watermark */}
         <span className="font-mono text-[10px] tracking-wide text-[#7a7882]/80 select-none">
-          ID: 1127544843
+          ID: 0507582430
         </span>
       </div>
 
@@ -701,9 +858,9 @@ function MakeupFooter({ onToggleImport }: { onToggleImport?: () => void }) {
           </button>
         </div>
 
-        {/* Watermark matching Image 2 & 3: ID: 1127544843 */}
+        {/* Watermark */}
         <span className="font-mono text-[10px] tracking-wide text-[#7a7882]/80 select-none">
-          ID: 1127544843
+          ID: 0507582430
         </span>
       </div>
 
@@ -823,9 +980,9 @@ export function PresetFooter() {
           </button>
         </div>
 
-        {/* Watermark matching target Image 2 */}
+        {/* Watermark */}
         <span className="font-mono text-[10px] tracking-wide text-[#7a7882]/80 select-none">
-          ID: 1007029704
+          ID: 0507582430
         </span>
       </div>
 

@@ -523,6 +523,30 @@ def _nif_texture_paths(nif: dict, block: int) -> list[str]:
     return out
 
 
+def _export_textures(slots: list[str]) -> dict[str, str | None]:
+    """Return dictionary of referenced textures: diffuse, normal, and specular.
+
+    Slots 2+ are cube maps, masks and glow maps whose meaning varies by
+    shader and author. Slot 2 is typically specular/subsurface (_s.dds, _sk.dds),
+    or slot 5 is environment/specular mask (_m.dds, _s.dds).
+    """
+    def at(i: int) -> str | None:
+        return slots[i].replace("/", "\\") if i < len(slots) and slots[i] else None
+
+    spec = None
+    for idx in (2, 5):
+        ref = at(idx)
+        if ref and any(ref.lower().endswith(sfx) for sfx in ("_s.dds", "_sk.dds", "_m.dds")):
+            spec = ref
+            break
+    if spec is None:
+        spec = at(2) or at(5)
+    if spec and not spec.lower().endswith(".dds"):
+        spec = None
+
+    return {"albedo": at(0), "normal": at(1), "specular": spec}
+
+
 def _nif_shader(nif: dict, block: int) -> tuple[list[str], int]:
     """Return (texture slots, shader flags2) for a BSLightingShaderProperty.
 
@@ -1089,17 +1113,8 @@ def _nif_authored_geometry(path: Path, frame: str = "head") -> dict[str, object]
     materials: list[dict[str, object]] = []
 
     def texture_refs(slots: list[str]) -> dict[str, str | None]:
-        """Return the two maps a static pass can use: diffuse and normal.
-
-        Slots 2+ are cube maps, masks and glow maps whose meaning varies by
-        shader and by author (this pack puts them at 2-5), so they are left
-        out rather than guessed at. ponytail: add specular/gloss when the
-        renderer actually shades with them.
-        """
-        def at(i: int) -> str | None:
-            return slots[i].replace("/", "\\") if i < len(slots) and slots[i] else None
-
-        return {"albedo": at(0), "normal": at(1)}
+        """Return the maps a pass can use: diffuse, normal, and specular."""
+        return _export_textures(slots)
 
     # ── skeleton ─────────────────────────────────────────────────────
     # Every shape embeds its own copy of the skeleton it was skinned to. The
@@ -1546,6 +1561,26 @@ def main() -> int:
             out = downscale(out, ALBEDO_MAX)
             save_png(out, dst)
             result.update(ok=True, size=list(out.size), format="png")
+            print(json.dumps(result))
+            return 0
+
+        if args.mode in ("specular", "roughness"):
+            # Converts Skyrim Blinn-Phong specular into a PBR roughness map (ORM Green channel)
+            lum = im.convert("L")
+            import numpy as np
+
+            spec = np.asarray(lum).astype(np.float32) / 255.0
+            roughness = 1.0 - (spec * 0.85)
+            g = np.clip(np.round(roughness * 255.0), 0, 255).astype(np.uint8)
+            white = np.full_like(g, 255)
+            out = Image.fromarray(np.stack([white, g, white], axis=-1), "RGB")
+            out = downscale(out, ALBEDO_MAX)
+            if dst.suffix.lower() == ".png":
+                save_png(out, dst)
+                result.update(ok=True, size=list(out.size), format="png")
+            else:
+                save_webp(out, dst, quality=95, method=4)
+                result.update(ok=True, size=list(out.size), format="webp")
             print(json.dumps(result))
             return 0
 

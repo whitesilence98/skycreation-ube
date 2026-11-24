@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { getDynamicMesh, registerDynamicMesh } from '@/lib/head/dynamicSculpt';
 import { retrieveDynamicMesh } from '@/lib/head/dynamicStorage';
+import { BODY_WEIGHT_ENABLED } from '@/lib/store';
 
 export interface MeshGroup {
   start: number;
@@ -470,14 +471,15 @@ export function useWeightedMeshResource(
   const w0 = variants?.w0;
   const w1 = variants?.w1;
   const low = useMeshResource(w0, `${label} weight 0`);
-  const high = useMeshResource(w1, `${label} weight 1`);
-  /* A pair's `_1` half *is* the part. Fetching the single URL as well would
-     download and decode the same mesh twice. */
+  const high = useMeshResource(BODY_WEIGHT_ENABLED ? w1 : undefined, `${label} weight 1`);
+  /* A pair's `_0` half is the default slim mesh when weight scaling is disabled.
+     Fetching the single URL as well would download and decode the same mesh twice. */
   const single = useMeshResource(variants ? undefined : singleUrl, label);
 
   const activePairRef = useRef<LoadedMesh | null>(null);
 
   useEffect(() => {
+    if (!BODY_WEIGHT_ENABLED) return;
     // Only blend when both halves have settled for the current variant pair
     if (!low.mesh || !high.mesh || !low.settled || !high.settled) return;
     const norm0 = low.mesh.geometry.getAttribute('normal')?.array as Float32Array | undefined;
@@ -489,6 +491,13 @@ export function useWeightedMeshResource(
   if (!variants) {
     activePairRef.current = null;
     return single;
+  }
+
+  if (!BODY_WEIGHT_ENABLED) {
+    activePairRef.current = null;
+    // When weight scaling is disabled, both character body and outfits
+    // consistently use the base slim _0 mesh (0% weight).
+    return low;
   }
 
   const pairReady = Boolean(low.mesh && high.mesh && low.settled && high.settled);
@@ -539,7 +548,9 @@ export function useMaterialTexture(
     let cancelled = false;
     setState('pending');
     const prevTex = material[slot];
-    const tex = new THREE.TextureLoader().load(
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+    const tex = loader.load(
       src,
       () => {
         if (cancelled) {

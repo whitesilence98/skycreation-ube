@@ -3,8 +3,30 @@
 import { useCharacter } from '@/lib/store';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { WuxiaTopNavBar } from '@/components/hud/common/WuxiaTopNavBar';
+import { WuxiaExportDropdown } from '@/components/hud/common/WuxiaExportDropdown';
+import { WuxiaImportButton } from '@/components/hud/common/WuxiaImportButton';
 
-export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }) {
+function TopBarRightActions({ manifest }: { manifest: Mo2Manifest | null }) {
+  return (
+    <div className="flex items-center gap-1.5 sm:gap-2 select-none">
+      <WuxiaImportButton manifest={manifest} />
+      <WuxiaExportDropdown />
+      <a
+        href="/rigger"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Auto-Rigger Studio (opens in a new tab)"
+        title="Auto-Rigger Studio (opens in a new tab)"
+        className="pointer-events-auto h-7 px-2 sm:px-2.5 rounded-[2px] text-[10px] font-mono tracking-widest text-[#dfba73] bg-[#dfba73]/10 hover:bg-[#dfba73]/20 border border-[#dfba73]/30 transition-all flex items-center gap-1.5 uppercase"
+      >
+        <span>⚡</span>
+        <span className="hidden xl:inline">Auto-Rigger</span>
+      </a>
+    </div>
+  );
+}
+
+export function TopBar({ manifest }: { manifest: Mo2Manifest | null }) {
   const name = useCharacter((s) => s.name);
   const preview = useCharacter((s) => s.previewMode);
   const primaryTab = useCharacter((s) => s.primaryTab);
@@ -34,23 +56,9 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
             useCharacter.getState().setPrimaryTab('PRESET');
           }
         }}
-        showArrows={false}
-        showPrevKeycap={true}
-        searchHotkey=""
-        leftSlot={<div className="w-8" />}
         isCollapsed={preview}
         onToggleCollapse={() => setPreviewMode(!preview)}
-        rightSlot={
-          <a
-            href="/rigger"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Auto-Rigger Studio (opens in a new tab)"
-            className="pointer-events-auto ml-2 px-2.5 py-0.5 rounded-[2px] text-[10px] font-mono tracking-widest text-[#d4b483] bg-[#d4b483]/10 hover:bg-[#d4b483]/20 border border-[#d4b483]/30 transition-all flex items-center gap-1.5 uppercase"
-          >
-            <span>⚡</span> Auto-Rigger
-          </a>
-        }
+        rightSlot={<TopBarRightActions manifest={manifest} />}
       />
     );
   }
@@ -75,38 +83,17 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
             .setStudioPage(tabId === 'smart_customization' ? 'smart' : 'default')}
         isCollapsed={preview}
         onToggleCollapse={() => setPreviewMode(!preview)}
-        onSearch={() =>
-          showToast(
-            isMakeup
-              ? 'Search makeup styles (Q)'
-              : isHair
-                ? 'Search hairstyles (Q)'
-                : isFace
-                  ? 'Search facial features (Q)'
-                  : 'Search body morphs (Q)'
-          )}
-        rightSlot={
-          <a
-            href="/rigger"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Auto-Rigger Studio (opens in a new tab)"
-            className="pointer-events-auto ml-2 px-2.5 py-0.5 rounded-[2px] text-[10px] font-mono tracking-widest text-[#d4b483] bg-[#d4b483]/10 hover:bg-[#d4b483]/20 border border-[#d4b483]/30 transition-all flex items-center gap-1.5 uppercase"
-          >
-            <span>⚡</span> Auto-Rigger
-          </a>
-        }
+        rightSlot={<TopBarRightActions manifest={manifest} />}
       />
     );
   }
 
-  // If in Wardrobe mode, render the reusable Wuxia Top Navigation Bar
+  // If in Wardrobe mode:
   if (isOutfit) {
     return (
       <WuxiaTopNavBar
         isCollapsed={preview}
         onToggleCollapse={() => setPreviewMode(!preview)}
-        onSearch={() => showToast('Search item or slot (Q)')}
         onTabChange={(tabId) => {
           if (tabId === 'backgrounds') {
             useCharacter.getState().setWorkspace('camera');
@@ -116,6 +103,7 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
             showToast(`Category switched: ${tabId}`);
           }
         }}
+        rightSlot={<TopBarRightActions manifest={manifest} />}
       />
     );
   }
@@ -132,28 +120,22 @@ export function TopBar({ manifest: _manifest }: { manifest: Mo2Manifest | null }
           {name || 'Character Creator'}
         </span>
         <span className="creator-header-caption">{preview ? 'Preview Mode' : 'Sculpting Mode'}</span>
-        <a
-          href="/rigger"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Auto-Rigger Studio (opens in a new tab)"
-          className="ml-4 px-2.5 py-0.5 rounded-[2px] text-[10px] font-mono tracking-widest text-[#d4b483] bg-[#d4b483]/10 hover:bg-[#d4b483]/20 border border-[#d4b483]/30 transition-all flex items-center gap-1.5 uppercase"
-        >
-          <span>⚡</span> Auto-Rigger
-        </a>
       </div>
-      <button
-        type="button"
-        className="creator-header-collapse"
-        onClick={() => setPreviewMode(!preview)}
-        aria-pressed={preview}
-        title={preview ? 'Return to editor' : 'Preview without panels'}
-      >
-        <span>{preview ? 'Edit' : 'Preview'}</span>
-        <svg viewBox="0 0 24 24" className="h-[15px] w-[15px]" aria-hidden>
-          <path d="M13.5 12 6 4.5 8.2 2.3 18 12l-9.8 9.7L6 19.5z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-        </svg>
-      </button>
+      <div className="flex items-center gap-2">
+        <TopBarRightActions manifest={manifest} />
+        <button
+          type="button"
+          className="creator-header-collapse"
+          onClick={() => setPreviewMode(!preview)}
+          aria-pressed={preview}
+          title={preview ? 'Return to editor' : 'Preview without panels'}
+        >
+          <span>{preview ? 'Edit' : 'Preview'}</span>
+          <svg viewBox="0 0 24 24" className="h-[15px] w-[15px]" aria-hidden>
+            <path d="M13.5 12 6 4.5 8.2 2.3 18 12l-9.8 9.7L6 19.5z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
     </header>
   );
 }

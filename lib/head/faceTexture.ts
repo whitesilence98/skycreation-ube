@@ -205,7 +205,7 @@ export interface Mo2Manifest {
   /** Producer-side problems that never became a usable resource. */
   diagnostics?: string[];
   generatedAt?: string;
-  textures: Partial<Record<'skin' | 'eye' | 'hair' | 'normal' | 'headMesh' | 'eyeDisc' | 'skinRoughness', string>>;
+  textures: Partial<Record<'skin' | 'eye' | 'hair' | 'normal' | 'headMesh' | 'eyeDisc' | 'skinRoughness' | 'body' | 'bodyNormal' | 'bodyRoughness', string>>;
   skin?: Mo2SkinPalette;
   /** Landmark calibration for the active skin's atlas, when measured. */
   atlasFit?: Mo2AtlasFit;

@@ -289,7 +289,7 @@ export function applySkinGloss(
   mat: THREE.MeshStandardMaterial,
   skinGloss: number,
   sssStrength = 1,
-  sheen = 0.2,
+  sheen = 0.35,
 ): void {
   const params = skinParamsFromGloss(skinGloss, sssStrength);
   applySkinShader(mat, params);
@@ -302,19 +302,19 @@ export function updateSkinGloss(
   mat: THREE.MeshStandardMaterial,
   skinGloss: number,
   sssStrength = 1,
-  sheen = 0.2,
+  sheen = 0.35,
 ): void {
   updateSkinUniforms(mat, skinParamsFromGloss(skinGloss, sssStrength));
   mat.roughness = skinRoughnessFromGloss(skinGloss);
   if (mat instanceof THREE.MeshPhysicalMaterial) {
-    mat.ior = 1.4;
-    mat.specularIntensity = 1;
+    mat.ior = 1.45;
+    mat.specularIntensity = 1.0;
     mat.specularColor.set('#fff3ed');
-    mat.sheen = sheen;
+    mat.sheen = Math.max(sheen, 0.35);
     mat.sheenColor.set('#ffd8c8');
-    mat.sheenRoughness = 0.7;
+    mat.sheenRoughness = 0.55;
     mat.clearcoat = 0.08;
-    mat.clearcoatRoughness = 0.5;
+    mat.clearcoatRoughness = 0.45;
   }
 }
 

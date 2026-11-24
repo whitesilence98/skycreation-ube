@@ -22,17 +22,24 @@ export interface PresetMeta {
   isDefault?: boolean;
 }
 
-export const DEFAULT_PRESET_ID = 'necoco-converting-outfits';
+export const DEFAULT_PRESET_ID = 'default-slim';
 
 /** Pre-bundled Necoco Body presets in public/assets/bodyslide/presets/ */
 export const BUILTIN_PRESETS: readonly PresetMeta[] = [
+  {
+    id: 'default-slim',
+    name: 'Slim _0 Base',
+    set: 'UBE SE 2.0 - Necoco Body',
+    filePath: '',
+    description: 'Authentic slim Skyrim _0 mesh baseline with zero morphs',
+    isDefault: true,
+  },
   {
     id: 'necoco-converting-outfits',
     name: 'UBE Necoco for Converting Outfits',
     set: 'UBE SE 2.0 - Necoco Body',
     filePath: '/assets/bodyslide/presets/UBE Necoco for Converting Outfits.xml',
     description: 'Master 211 morph slider preset for seamless Clothes Pack 6 outfit fitting',
-    isDefault: true,
   },
   {
     id: 'necoco-v1',

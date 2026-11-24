@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { create } from 'zustand';
 
-import type { LandmarkId, LandmarkMap } from '@/lib/rigger/vrmSkeleton';
+import { LANDMARK_IDS, nextUnplacedLandmark, type LandmarkId, type LandmarkMap } from '@/lib/rigger/vrmSkeleton';
 import type { FitResult } from '@/lib/rigger/templateFitter';
 import type { WeightTransferResult } from '@/lib/rigger/weightTransfer';
 import type { DiffusionResult } from '@/lib/rigger/heatDiffusion';
@@ -22,17 +22,12 @@ import type { DiffusionResult } from '@/lib/rigger/heatDiffusion';
 export type RigStage = 'idle' | 'mesh-loaded' | 'landmarks-ready' | 'rigging' | 'done' | 'error';
 export type LandmarkMode = 'auto' | 'manual';
 
-/** The 8 anatomical landmarks required before rigging can proceed. */
-const REQUIRED_LANDMARK_IDS: LandmarkId[] = [
-  'headTop',
-  'neckBase',
-  'leftShoulder',
-  'rightShoulder',
-  'leftHip',
-  'rightHip',
-  'leftAnkle',
-  'rightAnkle',
-];
+/**
+ * The 8 anatomical landmarks required before rigging can proceed. The list
+ * itself lives in `vrmSkeleton.ts` so the store, the 3D editor and the sidebar
+ * cannot drift apart.
+ */
+const REQUIRED_LANDMARK_IDS: readonly LandmarkId[] = LANDMARK_IDS;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper
@@ -66,6 +61,8 @@ export interface RiggerState {
   isDraggingLandmark: boolean;
   useSymmetry: boolean;
   landmarksConfirmed: boolean;
+  /** Brief flash when a placement click misses the mesh. */
+  landmarkMissFlash: boolean;
 
   // ── Pipeline results (non-serialisable Three.js objects — no persist) ──
   fitResult: FitResult | null;
@@ -95,7 +92,10 @@ export interface RiggerState {
   clearMesh: () => void;
   setLandmark: (id: LandmarkId, pos: THREE.Vector3) => void;
   clearLandmarks: () => void;
+  /** Remove exactly one marker, leaving the other seven in place. */
+  deleteLandmark: (id: LandmarkId) => void;
   setActiveLandmark: (id: LandmarkId | null) => void;
+  setLandmarkMissFlash: (v: boolean) => void;
   setIsDraggingLandmark: (dragging: boolean) => void;
   setUseSymmetry: (use: boolean) => void;
   setLandmarkMode: (mode: LandmarkMode) => void;
@@ -133,7 +133,9 @@ type RiggerStateData = Omit<
   | 'clearMesh'
   | 'setLandmark'
   | 'clearLandmarks'
+  | 'deleteLandmark'
   | 'setActiveLandmark'
+  | 'setLandmarkMissFlash'
   | 'setIsDraggingLandmark'
   | 'setUseSymmetry'
   | 'setLandmarkMode'
@@ -164,6 +166,7 @@ const DEFAULT_STATE: RiggerStateData = {
   isDraggingLandmark: false,
   useSymmetry: true,
   landmarksConfirmed: false,
+  landmarkMissFlash: false,
   // Pipeline results
   fitResult: null,
   rawWeights: null,
@@ -259,9 +262,36 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
     set({ landmarks: {}, landmarksConfirmed: false, activeLandmark: null, isDraggingLandmark: false });
   },
 
+  deleteLandmark: (id) => {
+    set((s) => {
+      const nextLandmarks = { ...s.landmarks };
+      delete nextLandmarks[id];
+      /* With symmetry on, the mirrored partner was placed implicitly, so
+         removing one half would leave a silently wrong pair. Drop both. */
+      if (s.useSymmetry) {
+        const pair: Partial<Record<LandmarkId, LandmarkId>> = {
+          leftShoulder: 'rightShoulder', rightShoulder: 'leftShoulder',
+          leftHip: 'rightHip', rightHip: 'leftHip',
+          leftAnkle: 'rightAnkle', rightAnkle: 'leftAnkle',
+        };
+        const partner = pair[id];
+        if (partner) delete nextLandmarks[partner];
+      }
+      return {
+        landmarks: nextLandmarks,
+        landmarksConfirmed: false,
+        // Re-select the one just removed so the user can immediately re-place it.
+        activeLandmark: id,
+        isDraggingLandmark: false,
+      };
+    });
+  },
+
   setActiveLandmark: (id) => {
     set({ activeLandmark: id });
   },
+
+  setLandmarkMissFlash: (v) => set({ landmarkMissFlash: v }),
 
   setIsDraggingLandmark: (dragging) => {
     set({ isDraggingLandmark: dragging });
@@ -296,11 +326,19 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
 
   setProgress: (p) => set({ progress: p }),
 
-  setError: (e) => set((s) => ({
-    error: e,
-    // Only change stage when setting an error; clearing error keeps current stage.
-    stage: e !== null ? 'error' : s.stage,
-  })),
+  setError: (e) => set((s) => {
+    if (e === null) {
+      /* Clearing used to keep `stage: 'error'` forever, so dismissing the
+         banner left the wizard stuck on a stage that no longer applied. Fall
+         back to a stage derived from what actually exists. */
+      if (s.stage !== 'error') return { error: null };
+      return {
+        error: null,
+        stage: s.fitResult ? 'done' : s.meshUrl ? 'mesh-loaded' : 'idle',
+      };
+    }
+    return { error: e, stage: 'error' };
+  }),
 
   // ── Preview toggles ───────────────────────────────────────────────────────
 

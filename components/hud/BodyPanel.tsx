@@ -341,7 +341,10 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
               {activeSection === 'weight_build' && (
                 <div className="flex flex-col gap-3">
                   {/* Master Body Weight Slider */}
-                  <div className="flex flex-col gap-1.5 border-b border-[#d4b483]/14 pb-2.5">
+                  <div
+                    className="flex flex-col gap-1.5 border-b border-[#d4b483]/14 pb-2.5"
+                    title={!BODY_WEIGHT_ENABLED ? "Body weight temporarily locked to base _0 mesh for maximum stability" : undefined}
+                  >
                     <BracketSlider
                       label="BODY WEIGHT"
                       min={0}
@@ -349,36 +352,46 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
                       step={0.01}
                       value={weight}
                       disabled={!BODY_WEIGHT_ENABLED || !hasBodyPair}
-                      display={!BODY_WEIGHT_ENABLED ? '0% (DISABLED)' : `${Math.round(weight * 100)}%`}
+                      display={!BODY_WEIGHT_ENABLED ? '0% [LOCKED TO _0 BODY]' : `${Math.round(weight * 100)}%`}
+                      title={!BODY_WEIGHT_ENABLED ? "Body weight temporarily locked to base _0 mesh for maximum stability" : undefined}
                       onChange={(v) => {
                         if (BODY_WEIGHT_ENABLED && hasBodyPair) setWeight(v);
                       }}
                     />
 
                     {/* Quick Weight Preset Buttons */}
-                    <div className="mt-1 flex items-center justify-between gap-1.5 text-[10px] font-mono leading-none">
+                    <div
+                      className="mt-1 flex items-center justify-between gap-1.5 text-[10px] font-mono leading-none"
+                      title={!BODY_WEIGHT_ENABLED ? "Body weight temporarily locked to base _0 mesh for maximum stability" : undefined}
+                    >
                       <button
                         type="button"
                         disabled={!BODY_WEIGHT_ENABLED}
+                        title={!BODY_WEIGHT_ENABLED ? "Body weight temporarily locked to base _0 mesh for maximum stability" : "Set weight to 0% (Slim _0)"}
                         onClick={() => setWeight(0)}
                         className={cn(
-                          'flex-1 rounded-[2px] border py-1 tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed min-h-[26px]',
-                          weight === 0
-                            ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
-                            : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
+                          'flex-1 rounded-[2px] border py-1 tracking-wider transition-all min-h-[26px]',
+                          !BODY_WEIGHT_ENABLED
+                            ? 'border-[#eac87f]/50 bg-[#d4b483]/15 font-bold text-[#f2dfbe] cursor-not-allowed shadow-[0_0_6px_rgba(234,200,127,0.2)]'
+                            : weight === 0
+                              ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
+                              : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
                         )}
                       >
-                        SLIM [0%]
+                        {!BODY_WEIGHT_ENABLED ? 'SLIM [LOCKED]' : 'SLIM [0%]'}
                       </button>
                       <button
                         type="button"
                         disabled={!BODY_WEIGHT_ENABLED}
+                        title={!BODY_WEIGHT_ENABLED ? "Body weight temporarily locked to base _0 mesh for maximum stability" : "Set weight to 50% (Medium)"}
                         onClick={() => setWeight(0.5)}
                         className={cn(
-                          'flex-1 rounded-[2px] border py-1 tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed min-h-[26px]',
-                          Math.abs(weight - 0.5) < 0.02
-                            ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
-                            : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
+                          'flex-1 rounded-[2px] border py-1 tracking-wider transition-all min-h-[26px]',
+                          !BODY_WEIGHT_ENABLED
+                            ? 'border-white/5 bg-black/20 text-[#8c8477]/40 cursor-not-allowed opacity-35'
+                            : Math.abs(weight - 0.5) < 0.02
+                              ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
+                              : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
                         )}
                       >
                         MEDIUM [50%]
@@ -386,17 +399,30 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
                       <button
                         type="button"
                         disabled={!BODY_WEIGHT_ENABLED}
+                        title={!BODY_WEIGHT_ENABLED ? "Body weight temporarily locked to base _0 mesh for maximum stability" : "Set weight to 100% (Full _1)"}
                         onClick={() => setWeight(1)}
                         className={cn(
-                          'flex-1 rounded-[2px] border py-1 tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed min-h-[26px]',
-                          weight === 1
-                            ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
-                            : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
+                          'flex-1 rounded-[2px] border py-1 tracking-wider transition-all min-h-[26px]',
+                          !BODY_WEIGHT_ENABLED
+                            ? 'border-white/5 bg-black/20 text-[#8c8477]/40 cursor-not-allowed opacity-35'
+                            : weight === 1
+                              ? 'border-[#eac87f] bg-[#d4b483]/25 font-bold text-[#f2dfbe] shadow-[0_0_6px_rgba(234,200,127,0.3)]'
+                              : 'border-[#d4b483]/25 bg-black/40 text-[#a9a192]/80 hover:border-[#d4b483]/50 hover:text-[#d5ccbb]',
                         )}
                       >
                         FULL [100%]
                       </button>
                     </div>
+
+                    {!BODY_WEIGHT_ENABLED && (
+                      <div className="mt-1 flex items-center justify-between text-[10px] font-mono text-[#a49a88] px-0.5 leading-tight">
+                        <span className="text-[#eac87f]/90 flex items-center gap-1 font-medium">
+                          <span className="inline-block h-1 w-1 rounded-full bg-[#eac87f]" />
+                          [LOCKED TO _0 BODY]
+                        </span>
+                        <span className="text-[#8c8477]/80">STABILITY LOCK</span>
+                      </div>
+                    )}
 
                     {/* Link Face to Weight */}
                     <button

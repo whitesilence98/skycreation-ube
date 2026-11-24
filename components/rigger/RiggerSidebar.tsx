@@ -3,19 +3,15 @@
 import * as THREE from 'three';
 import { useRef, useState } from 'react';
 import { useRiggerStore, areAllLandmarksSet } from '@/lib/rigger/store';
-import type { LandmarkId, LandmarkMap } from '@/lib/rigger/vrmSkeleton';
+import { LANDMARK_IDS, type LandmarkId, type LandmarkMap } from '@/lib/rigger/vrmSkeleton';
 import { LANDMARK_META } from '@/components/rigger/LandmarkEditor';
-import { fitSkeletonToLandmarks, estimateLandmarksFromBounds } from '@/lib/rigger/templateFitter';
+import { fitSkeletonToLandmarks, estimateLandmarksFromBounds, validateLandmarks } from '@/lib/rigger/templateFitter';
 import { transferWeightsAsync } from '@/lib/rigger/weightTransfer';
 import { diffuseWeightsAsync } from '@/lib/rigger/heatDiffusion';
 import { exportRiggedGlb, exportSummary } from '@/lib/rigger/exportRiggedGlb';
 
-const ORDERED_LANDMARKS: LandmarkId[] = [
-  'headTop', 'neckBase',
-  'leftShoulder', 'rightShoulder',
-  'leftHip', 'rightHip',
-  'leftAnkle', 'rightAnkle',
-];
+/* Order comes from `vrmSkeleton.ts` so it matches the auto-advance sequence. */
+const ORDERED_LANDMARKS: readonly LandmarkId[] = LANDMARK_IDS;
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
@@ -87,6 +83,7 @@ export function RiggerSidebar() {
   const setMeshFile        = useRiggerStore((s) => s.setMeshFile);
   const setLandmark        = useRiggerStore((s) => s.setLandmark);
   const clearLandmarks     = useRiggerStore((s) => s.clearLandmarks);
+  const deleteLandmark     = useRiggerStore((s) => s.deleteLandmark);
   const setActiveLandmark  = useRiggerStore((s) => s.setActiveLandmark);
   const setLandmarkMode    = useRiggerStore((s) => s.setLandmarkMode);
   const setUseSymmetry     = useRiggerStore((s) => s.setUseSymmetry);
@@ -114,7 +111,10 @@ export function RiggerSidebar() {
 
   const landmarkCount = Object.keys(landmarks).length;
   const allSet = areAllLandmarksSet(landmarks);
-  const canRig = allSet && Boolean(meshGeometry);
+  /* `validateLandmarks` was written but never called, so a swapped left/right
+     pair rigged a mangled character with no warning. Block on it instead. */
+  const landmarkWarnings = allSet ? validateLandmarks(landmarks as LandmarkMap) : [];
+  const canRig = allSet && landmarkWarnings.length === 0 && Boolean(meshGeometry);
 
   // ── File handlers ──────────────────────────────────────────────────────────
   const handleFile = (file: File) => {
@@ -374,7 +374,27 @@ export function RiggerSidebar() {
                             style={{ background: meta.color, boxShadow: isSet ? `0 0 4px ${meta.color}` : 'none' }}
                           />
                           <span className="truncate">{meta.label}</span>
-                          <span className="ml-auto flex-shrink-0">{isSet ? '✓' : isActive ? '●' : '○'}</span>
+                          {isSet ? (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Remove ${meta.label}`}
+                              title={`Remove ${meta.label}`}
+                              onClick={(ev) => { ev.stopPropagation(); deleteLandmark(id); }}
+                              onKeyDown={(ev) => {
+                                if (ev.key === 'Enter' || ev.key === ' ') {
+                                  ev.preventDefault();
+                                  ev.stopPropagation();
+                                  deleteLandmark(id);
+                                }
+                              }}
+                              className="ml-auto flex-shrink-0 rounded px-1 text-[11px] text-zinc-400 hover:bg-red-950/60 hover:text-red-300"
+                            >
+                              ×
+                            </span>
+                          ) : (
+                            <span className="ml-auto flex-shrink-0">{isActive ? '●' : '○'}</span>
+                          )}
                         </button>
                       );
                     })}
@@ -398,6 +418,16 @@ export function RiggerSidebar() {
                     </button>
                   </div>
                 </div>
+              )}
+
+              {/* Validation: previously `validateLandmarks` was never called,
+                  so a swapped L/R pair rigged a mangled character silently. */}
+              {landmarkWarnings.length > 0 && (
+                <ul className="mt-1 flex flex-col gap-1 rounded-lg border border-amber-700/40 bg-amber-950/20 px-2 py-1.5">
+                  {landmarkWarnings.map((w) => (
+                    <li key={w} className="text-[10px] leading-snug text-amber-300">⚠ {w}</li>
+                  ))}
+                </ul>
               )}
 
               {/* Progress dots */}

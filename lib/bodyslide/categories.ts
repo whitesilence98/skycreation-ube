@@ -1,3 +1,9 @@
+import CONVERTING_OUTFITS_SLIDERS from './convertingOutfitsPreset.json';
+
+export { CONVERTING_OUTFITS_SLIDERS };
+
+const PRESET_MAP = CONVERTING_OUTFITS_SLIDERS as Record<string, number>;
+
 export interface BodySlideSliderDef {
   name: string;
   displayName: string;
@@ -576,3 +582,25 @@ export const NECOCO_FEET_CATEGORIES: BodySlideCategory[] = [
     ],
   },
 ];
+
+/**
+ * Enriches all category sliders with baseline min/max bounds and default preset values
+ * from UBE Necoco Converting Outfits master preset.
+ */
+function enrichCategoriesWithDefaults(categories: BodySlideCategory[]): void {
+  for (const cat of categories) {
+    for (const slider of cat.sliders) {
+      const presetVal = PRESET_MAP[slider.name] ?? 0;
+      const targetMin = presetVal < -100 ? -200 : -100;
+      const targetMax = presetVal > 100 ? 200 : 100;
+      slider.min = slider.min !== undefined ? Math.min(slider.min, targetMin) : targetMin;
+      slider.max = slider.max !== undefined ? Math.max(slider.max, targetMax) : targetMax;
+      slider.defaultValue = 0; // Clean neutral baseline (0% morph deformation)
+    }
+  }
+}
+
+enrichCategoriesWithDefaults(UBE_BODY_CATEGORIES);
+enrichCategoriesWithDefaults(NECOCO_HAND_CATEGORIES);
+enrichCategoriesWithDefaults(NECOCO_FEET_CATEGORIES);
+

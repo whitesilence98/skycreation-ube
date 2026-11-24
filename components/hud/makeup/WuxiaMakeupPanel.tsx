@@ -88,6 +88,8 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
   const setSkinSheen = useCharacter((s) => s.setSkinSheen);
   const skinDetail = useCharacter((s) => s.skinDetail);
   const setSkinDetail = useCharacter((s) => s.setSkinDetail);
+  const skinNormalStrength = useCharacter((s) => s.skinNormalStrength ?? 1.0);
+  const setSkinNormalStrength = useCharacter((s) => s.setSkinNormalStrength);
 
   // ── 2. Brows State ─────────────────────────────────────────────────
   const browColor = useCharacter((s) => s.browColor);
@@ -627,6 +629,55 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
                       step={0.01}
                       onChange={setSkinDetail}
                     />
+                    <BracketSlider
+                      label="NORMAL MAP DEPTH"
+                      value={skinNormalStrength}
+                      min={0}
+                      max={2.5}
+                      step={0.05}
+                      onChange={setSkinNormalStrength}
+                    />
+                    <div className="flex items-center justify-between gap-1.5 pt-1">
+                      <span className="font-mono text-[10px] text-[#8e8c94] uppercase tracking-wider">A/B Normal Depth</span>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setSkinNormalStrength(0.0)}
+                          title="Disable normal map deflection (flat surface)"
+                          className={`px-2 py-0.5 text-[10px] font-mono rounded transition-all min-h-[24px] ${
+                            skinNormalStrength === 0
+                              ? 'bg-[#dfba73] text-black font-semibold shadow-sm'
+                              : 'bg-white/5 hover:bg-white/10 text-[#9f9da6] hover:text-white border border-white/10'
+                          }`}
+                        >
+                          FLAT (0.0)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSkinNormalStrength(1.0)}
+                          title="Standard authored 1.0x normal map depth"
+                          className={`px-2 py-0.5 text-[10px] font-mono rounded transition-all min-h-[24px] ${
+                            Math.abs(skinNormalStrength - 1.0) < 0.01
+                              ? 'bg-[#dfba73] text-black font-semibold shadow-sm'
+                              : 'bg-white/5 hover:bg-white/10 text-[#9f9da6] hover:text-white border border-white/10'
+                          }`}
+                        >
+                          1.0x (DEFAULT)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSkinNormalStrength(2.0)}
+                          title="Boosted 2.0x normal map depth (sculpted relief)"
+                          className={`px-2 py-0.5 text-[10px] font-mono rounded transition-all min-h-[24px] ${
+                            Math.abs(skinNormalStrength - 2.0) < 0.01
+                              ? 'bg-[#dfba73] text-black font-semibold shadow-sm'
+                              : 'bg-white/5 hover:bg-white/10 text-[#9f9da6] hover:text-white border border-white/10'
+                          }`}
+                        >
+                          2.0x (PUNCHY)
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

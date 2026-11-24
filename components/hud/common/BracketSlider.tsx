@@ -12,6 +12,7 @@ export interface BracketSliderProps {
   display?: string;
   unit?: string;
   disabled?: boolean;
+  title?: string;
   onChange: (v: number) => void;
 }
 
@@ -24,6 +25,7 @@ export function BracketSlider({
   display,
   unit = '%',
   disabled = false,
+  title,
   onChange,
 }: BracketSliderProps) {
   const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
@@ -58,7 +60,7 @@ export function BracketSlider({
   const readout = display ?? `${Math.round(value * (max <= 1 ? 100 : 1))}${unit}`;
 
   return (
-    <div className={cn('flex flex-col gap-0.5', disabled && 'opacity-40 cursor-not-allowed')}>
+    <div className={cn('flex flex-col gap-0.5', disabled && 'opacity-40 cursor-not-allowed')} title={title}>
       <div className="flex items-center justify-between text-[10px] font-mono tracking-wider mb-1">
         <span className="text-[#a89e8f] uppercase">{label}</span>
         <span className="text-[#eac87f] font-medium tabular-nums">{readout}</span>

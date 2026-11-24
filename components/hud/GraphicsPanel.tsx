@@ -107,6 +107,8 @@ export function GraphicsPanel({ onClose }: GraphicsPanelProps = {}) {
   const setSkinDetail = useCharacter((s) => s.setSkinDetail);
   const skinSheen = useCharacter((s) => s.skinSheen);
   const setSkinSheen = useCharacter((s) => s.setSkinSheen);
+  const skinNormalStrength = useCharacter((s) => s.skinNormalStrength ?? 1.0);
+  const setSkinNormalStrength = useCharacter((s) => s.setSkinNormalStrength);
   const toneMapping = useCharacter((s) => s.toneMapping);
   const setToneMapping = useCharacter((s) => s.setToneMapping);
 
@@ -302,6 +304,16 @@ export function GraphicsPanel({ onClose }: GraphicsPanelProps = {}) {
                   step={0.01}
                   onChange={setSkinSheen}
                   ariaLabel="Skin sheen"
+                  format={(v) => v.toFixed(2)}
+                />
+                <SliderRow
+                  label="NORMAL DEPTH"
+                  value={skinNormalStrength}
+                  min={0}
+                  max={2.5}
+                  step={0.05}
+                  onChange={setSkinNormalStrength}
+                  ariaLabel="Normal map depth"
                   format={(v) => v.toFixed(2)}
                 />
                 <button

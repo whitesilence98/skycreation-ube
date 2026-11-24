@@ -7,7 +7,7 @@ import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { useRiggerStore } from '@/lib/rigger/store';
 import { fitSkeletonToLandmarks } from '@/lib/rigger/templateFitter';
 import type { LandmarkId, LandmarkMap } from '@/lib/rigger/vrmSkeleton';
-import { VRM_BONE_DEFS } from '@/lib/rigger/vrmSkeleton';
+import { LANDMARK_IDS, VRM_BONE_DEFS } from '@/lib/rigger/vrmSkeleton';
 
 // ── Landmark metadata ────────────────────────────────────────────────────────
 
@@ -22,12 +22,8 @@ export const LANDMARK_META: Record<LandmarkId, { label: string; emoji: string; c
   rightAnkle:    { label: 'R. Ankle',       emoji: '🔵', color: '#FF4500' },
 };
 
-const LANDMARK_IDS: LandmarkId[] = [
-  'headTop', 'neckBase',
-  'leftShoulder', 'rightShoulder',
-  'leftHip', 'rightHip',
-  'leftAnkle', 'rightAnkle',
-];
+/* `LANDMARK_IDS` now comes from vrmSkeleton.ts — three copies of this list
+   meant three places for the placement order to drift. */
 
 const REGION_COLORS: Record<string, string> = {
   spine: '#ffffff', head: '#ffd700',
@@ -127,6 +123,7 @@ function LandmarkHandle({ id, position, targetMeshRef, isActive }: HandleProps) 
 
   const meshRef  = useRef<THREE.Mesh>(null);
   const dragging = useRef(false);
+  const dragPlane = useRef<THREE.Plane | null>(null);
   const [hovered, setHovered] = useState(false);
 
   const { color, label } = LANDMARK_META[id];
@@ -136,6 +133,7 @@ function LandmarkHandle({ id, position, targetMeshRef, isActive }: HandleProps) 
     (e: ThreeEvent<PointerEvent>) => {
       e.stopPropagation();
       dragging.current = true;
+      dragPlane.current = null; // rebuilt for the current camera angle
       setIsDraggingLandmark(true);
       try {
         gl.domElement.setPointerCapture(e.pointerId);
@@ -160,6 +158,20 @@ function LandmarkHandle({ id, position, targetMeshRef, isActive }: HandleProps) 
       const hits = raycaster.intersectObject(mesh, true);
       if (hits.length > 0) {
         setLandmark(id, hits[0].point.clone());
+        return;
+      }
+      /* Off the silhouette: project onto a camera-facing plane through the
+         marker instead of freezing. Hips and shoulders are interior joints, so
+         surface-only dragging made them impossible to place correctly. */
+      const plane = dragPlane.current ?? new THREE.Plane();
+      if (!dragPlane.current) {
+        camera.getWorldDirection(plane.normal);
+        plane.setFromNormalAndCoplanarPoint(plane.normal, position);
+        dragPlane.current = plane;
+      }
+      const target = new THREE.Vector3();
+      if (raycaster.ray.intersectPlane(plane, target)) {
+        setLandmark(id, target);
       }
     },
     [camera, gl, id, raycaster, setLandmark, targetMeshRef],

@@ -12,6 +12,7 @@ import {
 } from '@/components/scene/SkinShader';
 import { useCharacter } from '@/lib/store';
 import { HAIR_ALPHA_CUTOFF, hairMaterialState, hairRoughness } from '@/lib/hair/material';
+import { applyFabricPbr } from '@/components/scene/fabricPbr';
 import type { HairSettings } from '@/lib/hair/settings';
 
 /**
@@ -117,6 +118,7 @@ export function AuthoredPart({
   const skinGloss = useCharacter((s) => s.skinGloss);
   const skinSss = useCharacter((s) => s.skinSss);
   const skinSheen = useCharacter((s) => s.skinSheen);
+  const skinNormalStrength = useCharacter((s) => s.skinNormalStrength ?? 1.0);
 
   /* Two parallel material sets: the textured standard material each slot uses
      once its atlas lands, and the grey stand-in the same geometry draws with
@@ -125,8 +127,9 @@ export function AuthoredPart({
     const standard = slots.map(({ spec }) => {
       const skin = spec.role === 'skin';
       const isHair = spec.role === 'hair';
+      const isClothing = spec.role === 'clothing' || spec.role === 'accessory';
       const hairAlpha = isHair && hair?.alpha !== undefined ? hair.alpha : 1.0;
-      const Material = skin ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
+      const Material = (skin || isClothing) ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
       const material = new Material({
         color: skin && skinColor ? skinColor : (isHair && hair ? hair.tone : '#ffffff'),
         roughness: skin
@@ -144,7 +147,11 @@ export function AuthoredPart({
         visible: true,
       });
       material.name = spec.name;
-      if (skin) applySkinGloss(material, skinGloss, skinSss, skinSheen);
+      if (skin) {
+        applySkinGloss(material, skinGloss, skinSss, skinSheen);
+      } else if (isClothing && material instanceof THREE.MeshPhysicalMaterial) {
+        applyFabricPbr(material, spec.name || name);
+      }
       return material;
     });
     const grey = slots.map(({ spec }) => new THREE.MeshBasicMaterial({
@@ -172,13 +179,14 @@ export function AuthoredPart({
       if (material && slot.spec.role === 'skin') {
         updateSkinGloss(material, skinGloss, skinSss, skinSheen);
         updateSkinDetail(material, skinDetailMap ?? null, (skinDetail ?? 0.45) * 0.5, 32);
+        material.normalScale.set(skinNormalStrength, skinNormalStrength);
         if (skinColor) {
           material.color.set(skinColor);
-          material.needsUpdate = true;
         }
+        material.needsUpdate = true;
       }
     });
-  }, [slots, standardMaterials, skinGloss, skinSss, skinSheen, skinDetailMap, skinDetail, skinColor]);
+  }, [slots, standardMaterials, skinGloss, skinSss, skinSheen, skinDetailMap, skinDetail, skinColor, skinNormalStrength]);
 
   /* One-ring cavity for the skin shader; harmless for non-skin slots. */
   useEffect(() => {
@@ -213,6 +221,7 @@ export function AuthoredPart({
 
   useEffect(() => {
     const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
     let cancelled = false;
 
     /** Release whatever this run attached to a slot. */
@@ -293,6 +302,8 @@ export function AuthoredPart({
         normal.wrapT = THREE.RepeatWrapping;
         normal.anisotropy = 8;
         material.normalMap = normal;
+        const ns = slot.spec.role === 'skin' ? skinNormalStrength : 1.0;
+        material.normalScale.set(ns, ns);
       }
 
       /* Skyrim's `_n.dds` alpha as a gloss mask: a linear multiplier, so no

@@ -94,7 +94,7 @@ export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
       if (!showGroundMeshes && /_gnd\.nif$/i.test(item.file)) return;
       if (item.weightVariants && item.weightVariants.w0 === item.id && item.weightVariants.w1 !== item.id) return;
       if (item.weightKey && !item.weightDefault) return;
-      if (/_0\.nif$/i.test(item.file) && (item.weightVariants || item.weightKey)) return;
+      if (/_0\.nif$/i.test(item.file)) return;
       const pairKey = item.weightVariants?.w1 ?? item.weightKey ?? item.id;
       if (seenWeightKeys.has(pairKey) || seen.has(item.id)) return;
       seenWeightKeys.add(pairKey);
@@ -161,10 +161,10 @@ export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
           {equipment.outfit ? (
             <div className="flex h-full w-full items-center justify-center p-2">
               <GarmentThumbnail
-                id={fullOutfitItem?.weightVariants?.w1 ?? fullOutfitItem?.id ?? equipment.outfit}
+                id={fullOutfitItem?.weightVariants?.w0 ?? fullOutfitItem?.id ?? equipment.outfit}
                 meshUrl={
                   fullOutfitItem?.weightVariants
-                    ? convertUrl({ kind: 'clothingMesh', id: fullOutfitItem.weightVariants.w1, mode: 'mesh' })
+                    ? convertUrl({ kind: 'clothingMesh', id: fullOutfitItem.weightVariants.w0, mode: 'mesh' })
                     : fullOutfitItem?.meshUrl
                 }
                 slot="outfit"
@@ -307,10 +307,10 @@ function SlotCell({ def, equippedId, item, itemName, isActive, onSelect, onUnequ
         {equippedId ? (
           <div className="relative flex h-full w-full items-center justify-center p-1">
             <GarmentThumbnail
-              id={item?.weightVariants?.w1 ?? item?.id ?? equippedId}
+              id={item?.weightVariants?.w0 ?? item?.id ?? equippedId}
               meshUrl={
                 item?.weightVariants
-                  ? convertUrl({ kind: 'clothingMesh', id: item.weightVariants.w1, mode: 'mesh' })
+                  ? convertUrl({ kind: 'clothingMesh', id: item.weightVariants.w0, mode: 'mesh' })
                   : item?.meshUrl
               }
               slot={def.equipSlot ?? 'accessories'}

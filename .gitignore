@@ -39,10 +39,12 @@ production/session-state/
 production/session-logs/
 
 # local scratch: ad-hoc inspection scripts and measurements
+/scratch/
 /.scratch-weight/
 /tools/poser/*.exe
 /tools/poser/*.hkx
 .impeccable/
+asset-source.local.json
 
 # OS / editor
 .DS_Store
@@ -53,8 +55,11 @@ Thumbs.db
 !.vscode/launch.json
 .idea/
 
-# local asset archive (819 MB, rebuilt from the external pack)
+# local asset archive & share packages (uploaded to Google Drive, never Git)
+/*.zip
 /public/*.zip
+/public/assets/cache/
+/share/
 
 # local screenshot/verification harness (dev only, never shipped)
 .shots/

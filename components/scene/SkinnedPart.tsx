@@ -13,6 +13,7 @@ import {
 } from '@/components/scene/SkinShader';
 import { useCharacter } from '@/lib/store';
 import { HAIR_ALPHA_CUTOFF, hairMaterialState, hairRoughness } from '@/lib/hair/material';
+import { applyFabricPbr } from '@/components/scene/fabricPbr';
 import type { HairSettings } from '@/lib/hair/settings';
 import {
   autoRigMesh,
@@ -331,6 +332,7 @@ export function SkinnedPart({
   const skinGloss = useCharacter((s) => s.skinGloss);
   const skinSss = useCharacter((s) => s.skinSss);
   const skinSheen = useCharacter((s) => s.skinSheen);
+  const skinNormalStrength = useCharacter((s) => s.skinNormalStrength ?? 1.0);
 
   /* Two parallel material sets: the textured standard material each slot uses
      once its atlas lands, and the grey stand-in the same geometry draws with
@@ -339,8 +341,9 @@ export function SkinnedPart({
     const standard = slots.map(({ spec }) => {
       const skin = spec.role === 'skin';
       const isHair = spec.role === 'hair';
+      const isClothing = spec.role === 'clothing' || spec.role === 'accessory';
       const hairAlpha = isHair && hair?.alpha !== undefined ? hair.alpha : 1.0;
-      const Material = skin ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
+      const Material = (skin || isClothing) ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
       const material = new Material({
         color: skin && skinColor ? skinColor : (isHair && hair ? hair.tone : '#ffffff'),
         roughness: skin
@@ -359,7 +362,11 @@ export function SkinnedPart({
         visible: true,
       });
       material.name = spec.name;
-      if (skin) applySkinGloss(material, skinGloss, skinSss, skinSheen);
+      if (skin) {
+        applySkinGloss(material, skinGloss, skinSss, skinSheen);
+      } else if (isClothing && material instanceof THREE.MeshPhysicalMaterial) {
+        applyFabricPbr(material, spec.name || name);
+      }
       return material;
     });
     const grey = slots.map(({ spec }) => new THREE.MeshBasicMaterial({
@@ -415,6 +422,18 @@ export function SkinnedPart({
     });
   }, [slots, standardMaterials, skinColor]);
 
+  /* Live normal scale updates for skin slots (head/neck/body sync), without reloading textures. */
+  useEffect(() => {
+    slots.forEach((slot, i) => {
+      if (slot.spec.role !== 'skin') return;
+      const material = standardMaterials[i];
+      if (material) {
+        material.normalScale.set(skinNormalStrength, skinNormalStrength);
+        material.needsUpdate = true;
+      }
+    });
+  }, [slots, standardMaterials, skinNormalStrength]);
+
   /* Live hair tone/gloss/alpha updates for hair slots, without reloading textures. */
   useEffect(() => {
     if (!hair) return;
@@ -444,6 +463,7 @@ export function SkinnedPart({
 
   useEffect(() => {
     const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
     let cancelled = false;
 
     /** Release whatever this run attached to a slot. */
@@ -519,11 +539,14 @@ export function SkinnedPart({
           normal.dispose();
           material.needsUpdate = true;
         });
+        normal.colorSpace = THREE.NoColorSpace;
         normal.flipY = true;
         normal.wrapS = THREE.RepeatWrapping;
         normal.wrapT = THREE.RepeatWrapping;
         normal.anisotropy = 8;
         material.normalMap = normal;
+        const ns = slot.spec.role === 'skin' ? skinNormalStrength : 1.0;
+        material.normalScale.set(ns, ns);
       }
 
       /* The `_n.dds` alpha as a gloss mask. `colorSpace` stays linear: this is
@@ -536,6 +559,7 @@ export function SkinnedPart({
           rough.dispose();
           material.needsUpdate = true;
         });
+        rough.colorSpace = THREE.NoColorSpace;
         rough.flipY = true;
         rough.wrapS = THREE.RepeatWrapping;
         rough.wrapT = THREE.RepeatWrapping;

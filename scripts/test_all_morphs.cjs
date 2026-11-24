@@ -15,6 +15,7 @@ function loadTs(filePath) {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
       target: ts.ScriptTarget.ES2022,
+      esModuleInterop: true,
     },
   });
   const m = { exports: {} };
@@ -22,7 +23,12 @@ function loadTs(filePath) {
 
   const customRequire = (specifier) => {
     if (specifier.startsWith('.')) {
-      const targetPath = path.resolve(path.dirname(absPath), specifier + '.ts');
+      if (specifier.endsWith('.json')) {
+        const targetPath = path.resolve(path.dirname(absPath), specifier);
+        const parsed = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
+        return { default: parsed, ...parsed, __esModule: true };
+      }
+      const targetPath = path.resolve(path.dirname(absPath), specifier.endsWith('.ts') ? specifier : specifier + '.ts');
       return loadTs(targetPath);
     }
     return require(specifier);

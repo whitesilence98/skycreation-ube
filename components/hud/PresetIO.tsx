@@ -5,7 +5,7 @@ import { useCharacter } from '@/lib/store';
 import { presetFileName } from '@/lib/presetIO';
 import { downloadPresetJson } from '@/lib/presets/download';
 import { useGlbExport } from '@/components/hud/useGlbExport';
-import { importPresetFromFiles } from '@/lib/head/nifImport';
+import { usePresetImport } from '@/components/hud/usePresetImport';
 import { runWardrobeBatchBuild, type BatchBuildProgress } from '@/lib/bodyslide/batchBuilder';
 import { BatchBuildModal } from './bodyslide/BatchBuildModal';
 import { useBodySlideStore } from '@/lib/bodyslide/store';
@@ -29,15 +29,11 @@ interface PresetIOProps {
  * Import accepts LYRA JSON, RaceMenu .jslot, or NIF meshes straight from MO2.
  */
 export function PresetIO({ manifest }: PresetIOProps) {
-  const loadPreset = useCharacter((s) => s.loadPreset);
   const snapshotPreset = useCharacter((s) => s.snapshotPreset);
-  const setName = useCharacter((s) => s.setName);
   const showToast = useCharacter((s) => s.showToast);
-  const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<Status>(null);
-  const [busy, setBusy] = useState(false);
   const characterName = useCharacter((s) => s.name);
   const bodySlideSliders = useBodySlideStore((s) => s.sliders);
   const [batchProgress, setBatchProgress] = useState<BatchBuildProgress | null>(null);
@@ -91,31 +87,12 @@ export function PresetIO({ manifest }: PresetIOProps) {
   };
 
   const { exportGlb: onExportGlb, exportingGlb } = useGlbExport(flash);
+  const { inputRef, importing: busy, openFilePicker, onFileChange: onPick } = usePresetImport(manifest, flash);
 
   const onExport = () => {
     const file = snapshotPreset();
     downloadPresetJson(file);
     flash({ kind: 'ok', text: `EXPORTED ${presetFileName(file.name)}` });
-  };
-
-  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = Array.from(e.target.files ?? []);
-    e.target.value = '';
-    if (!fileList.length) return;
-
-    setBusy(true);
-    try {
-      const result = await importPresetFromFiles(fileList, manifest);
-      loadPreset(result.payload, result.headOption?.id);
-      if (result.characterName) {
-        setName(result.characterName.toUpperCase().slice(0, 14));
-      }
-      flash({ kind: result.kind, text: result.summary });
-    } catch (err) {
-      flash({ kind: 'error', text: err instanceof Error ? err.message : 'Could not read that file.' });
-    } finally {
-      setBusy(false);
-    }
   };
 
   const tone =
@@ -139,7 +116,7 @@ export function PresetIO({ manifest }: PresetIOProps) {
       {/* ── IMPORT ──────────────────────────────────────────────── */}
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
+        onClick={openFilePicker}
         disabled={busy}
         className="group flex items-center gap-[4px] text-[10px] tracking-[0.13em] text-[#b6ad9d]/80 transition-colors hover:text-[#eee2ca] disabled:opacity-40"
       >

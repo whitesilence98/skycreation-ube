@@ -258,10 +258,12 @@ export function BodySlidePanel({ categoryFilter, hideSkeletonHeader }: BodySlide
           ) : (
             filteredCategories.map((cat) => {
               const isExpanded = expandedCats[cat.name] ?? (categoryFilter ? true : false);
-              // Check how many sliders in this category are non-zero
-              const catActiveCount = cat.sliders.filter(
-                (s) => Math.abs(sliders[s.name] ?? 0) > 0.001,
-              ).length;
+              // Check how many sliders in this category are non-zero / modified from default
+              const catActiveCount = cat.sliders.filter((s) => {
+                const current = sliders[s.name] ?? s.defaultValue ?? 0;
+                const baseline = s.defaultValue ?? 0;
+                return Math.abs(current - baseline) > 0.001;
+              }).length;
 
               return (
                 <div
@@ -327,12 +329,17 @@ function MorphSliderRow({ slider }: { slider: BodySlideSliderDef }) {
   const setSlider = useBodySlideStore((s) => s.setSlider);
   const resetSlider = useBodySlideStore((s) => s.resetSlider);
 
-  const min = slider.min ?? 0;
+  const min = slider.min ?? -100;
   const max = slider.max ?? 100;
-  const display = `${Math.round(value)}%`;
+  const rounded = Math.round(value);
+  const display = `${rounded === 0 ? 0 : rounded}%`;
 
   return (
-    <div onDoubleClick={() => resetSlider(slider.name)} className="cursor-pointer mb-1.5">
+    <div
+      onDoubleClick={() => resetSlider(slider.name)}
+      className="cursor-pointer mb-1.5"
+      title={`Double-click to reset ${slider.displayName}`}
+    >
       <BracketSlider
         label={slider.displayName}
         min={min}

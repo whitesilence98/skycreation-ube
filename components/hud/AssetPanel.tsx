@@ -5,11 +5,13 @@ import { useCharacter } from '@/lib/store';
 import {
   CATEGORY_MAP,
   assetOptions,
+  findClothingOption,
   isOverlayKind,
   isRenderableMeshRow,
   sculptHeadFor,
   type AssetKind,
   type CategorySpec,
+  type PartOption,
 } from '@/lib/manifestSelect';
 import { payloadFromMorphs } from '@/lib/presetIO';
 import { cn } from '@/lib/cn';
@@ -189,14 +191,18 @@ export function AssetPanel({ manifest, active = false, onClose }: AssetPanelProp
        `_0` half would offer the same boots a second time; the whole-outfit row
        is `full` and belongs to BODY → OUTFIT. Neither is a worn-slot pick. */
     return equipMode
-      ? list.filter((r) => (unrestrictedSlots || equipSlotOf(r) === equipSlot) && !(r.weightKey && !r.weightDefault))
-      : list;
+      ? list.filter((r) => (unrestrictedSlots || equipSlotOf(r) === equipSlot) && !(/_0\.nif$/i.test(r.file ?? '') || (r.weightKey && !r.weightDefault)))
+      : activeKind === 'clothingMesh'
+        ? list.filter((r) => !/_0\.nif$/i.test(r.file ?? ''))
+        : list;
   }, [manifest, activeKind, equipMode, equipSlot, unrestrictedSlots]);
   const catalogue = useMemo(() => {
     const list = (assetCatalogues[activeKind] ?? []) as Entry[];
     return equipMode
-      ? list.filter((e) => (unrestrictedSlots || equipSlotOf(e) === equipSlot) && !(e.weightKey && !e.weightDefault))
-      : list;
+      ? list.filter((e) => (unrestrictedSlots || equipSlotOf(e) === equipSlot) && !(/_0\.nif$/i.test(e.file ?? '') || (e.weightKey && !e.weightDefault)))
+      : activeKind === 'clothingMesh'
+        ? list.filter((e) => !/_0\.nif$/i.test(e.file ?? ''))
+        : list;
   }, [assetCatalogues, activeKind, equipMode, equipSlot, unrestrictedSlots]);
   const textureCatalogue = useMemo(
     () => (textureKind ? ((assetCatalogues[textureKind] ?? []) as Entry[]) : []),
@@ -313,7 +319,9 @@ export function AssetPanel({ manifest, active = false, onClose }: AssetPanelProp
        and one picked atlas painted over another set's UVs would look worse
        than the grey placeholder. So EQUIPMENT fills the slot and nothing else. */
     if (equipMode) {
-      setEquip({ [equipSlot]: id });
+      const match = findClothingOption(curated as PartOption[], assetCatalogues, id);
+      const targetId = match?.weightVariants?.w0 ?? id;
+      setEquip({ [equipSlot]: targetId });
       return;
     }
     const patch: Partial<Record<AssetKind, string | null>> = { [meshKind]: id };
