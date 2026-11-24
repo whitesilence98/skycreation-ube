@@ -70,10 +70,321 @@ export function cleanPbrPartName(rawName: string = ''): string {
   return rawName.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() || 'material';
 }
 
+const CLOTHING_KEYWORDS = [
+  'suit', 'cloth', 'garment', 'armor', 'dress', 'pant', 'shirt', 'jean',
+  'jacket', 'boot', 'shoe', 'skirt', 'bra', 'panties', 'lingerie', 'bikini',
+  'sock', 'stocking', 'tight',
+] as const;
+
+const SKIN_KEYWORDS = [
+  'femalebody', 'malebody', 'base', 'hand', 'feet', 'foot', 'head', 'face', 'mouth',
+] as const;
+
+const HAIR_KEYWORDS = [
+  'hair', 's4studio', 'shadow', 'empressof', 'asterion',
+] as const;
+
+function classifyExportMaterial(
+  matName: string,
+  hints?: { alphaMasked?: boolean },
+): { lower: string; isLashesOrBrows: boolean; isSkin: boolean; isEyes: boolean; isHair: boolean; isGarment: boolean } {
+  const lower = matName.toLowerCase();
+  const isLashesOrBrows = lower.includes('lash') || lower.includes('brow');
+  const isClothingKeyword = CLOTHING_KEYWORDS.some((kw) => lower.includes(kw));
+  const isSkin =
+    !isLashesOrBrows &&
+    !isClothingKeyword &&
+    (lower === 'body' || SKIN_KEYWORDS.some((kw) => lower.includes(kw)));
+  const isEyes = !isLashesOrBrows && !isSkin && lower.includes('eye');
+  const isHair =
+    !isLashesOrBrows &&
+    !isSkin &&
+    !isEyes &&
+    !isClothingKeyword &&
+    (HAIR_KEYWORDS.some((kw) => lower.includes(kw)) ||
+      /\bace\b/.test(lower) ||
+      /^[1-9]?[hlr]l?_\d*[hlr]/i.test(matName) ||
+      /^1?[hlr]|^[1-9][lr]_/i.test(matName) ||
+      /^mat_([1-9]?[hlr]|a\d|top|braid|brf)/i.test(matName) ||
+      Boolean(hints?.alphaMasked));
+  const isGarment = !isSkin && !isHair && !isEyes && !isLashesOrBrows;
+  return { lower, isLashesOrBrows, isSkin, isEyes, isHair, isGarment };
+}
+
+interface GltfAccessor {
+  bufferView?: number;
+  byteOffset?: number;
+  componentType: number;
+  count: number;
+  type: string;
+  min?: number[];
+  max?: number[];
+}
+
+interface GltfNode {
+  name?: string;
+  translation?: number[];
+  rotation?: number[];
+  scale?: number[];
+  children?: number[];
+  extensions?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface GltfSkin {
+  name?: string;
+  joints: number[];
+  skeleton?: number;
+  inverseBindMatrices?: number;
+}
+
+interface GltfAnimation {
+  name?: string;
+  samplers?: Array<{ input: number; output: number; interpolation?: string }>;
+  channels?: Array<{ sampler: number; target?: { node?: number; path?: string } }>;
+}
+
+interface GltfJsonDocument {
+  materials?: Array<{
+    name?: string;
+    pbrMetallicRoughness?: {
+      baseColorTexture?: { index: number };
+      metallicRoughnessTexture?: { index: number };
+      baseColorFactor?: number[];
+      roughnessFactor?: number;
+      metallicFactor?: number;
+    };
+    normalTexture?: { index: number };
+    alphaMode?: string;
+    alphaCutoff?: number;
+    doubleSided?: boolean;
+    extensions?: Record<string, unknown>;
+  }>;
+  textures?: Array<{ name?: string; source?: number; sampler?: number }>;
+  images?: Array<{ name?: string; uri?: string; bufferView?: number; mimeType?: string }>;
+  extensionsUsed?: string[];
+  extensions?: Record<string, unknown>;
+  nodes?: GltfNode[];
+  skins?: GltfSkin[];
+  animations?: GltfAnimation[];
+  accessors?: GltfAccessor[];
+  bufferViews?: Array<{ buffer?: number; byteOffset?: number; byteLength: number; byteStride?: number }>;
+  scenes?: Array<{ name?: string; nodes?: number[]; [key: string]: unknown }>;
+  scene?: number;
+}
+
+const GLTF_FLOAT_COMPONENT_TYPE = 5126;
+const GLTF_COMPONENT_COUNTS: Readonly<Record<string, number>> = {
+  SCALAR: 1,
+  VEC2: 2,
+  VEC3: 3,
+  VEC4: 4,
+  MAT4: 16,
+};
+
+function transformFloatAccessor(
+  json: GltfJsonDocument,
+  binView: DataView,
+  accIdx: number,
+  expectedType: string,
+  mutateElement: (read: (c: number) => number, write: (c: number, v: number) => void) => void,
+): void {
+  const acc = json.accessors?.[accIdx];
+  if (!acc || acc.componentType !== GLTF_FLOAT_COMPONENT_TYPE || acc.type !== expectedType) return;
+  if (acc.bufferView === undefined) return;
+  const bv = json.bufferViews?.[acc.bufferView];
+  if (!bv) return;
+  const comps = GLTF_COMPONENT_COUNTS[acc.type] ?? 0;
+  if (comps === 0) return;
+
+  const baseOffset = (bv.byteOffset ?? 0) + (acc.byteOffset ?? 0);
+  const stride = bv.byteStride ?? comps * 4;
+  if (baseOffset + (acc.count > 0 ? (acc.count - 1) * stride + comps * 4 : 0) > binView.byteLength) return;
+
+  const updateBounds = Array.isArray(acc.min) && Array.isArray(acc.max);
+  const mins = updateBounds ? new Array<number>(comps).fill(Infinity) : null;
+  const maxs = updateBounds ? new Array<number>(comps).fill(-Infinity) : null;
+
+  for (let i = 0; i < acc.count; i++) {
+    const elemOffset = baseOffset + i * stride;
+    const read = (c: number) => binView.getFloat32(elemOffset + c * 4, true);
+    const write = (c: number, v: number) => binView.setFloat32(elemOffset + c * 4, v, true);
+    mutateElement(read, write);
+
+    if (mins && maxs) {
+      for (let c = 0; c < comps; c++) {
+        const val = read(c);
+        if (val < mins[c]) mins[c] = val;
+        if (val > maxs[c]) maxs[c] = val;
+      }
+    }
+  }
+
+  if (mins && maxs && acc.count > 0) {
+    acc.min = mins;
+    acc.max = maxs;
+  }
+}
+
+/**
+ * Normalizes any skeleton root carrying a negative-determinant or non-unit uniform
+ * scale (e.g. Skyrim NIF Y/Z swap `[-0.01288, +0.01288, +0.01288]` on `Scene Root`)
+ * into a right-handed (`det = +1.0`), meter-scale (`[1, 1, 1]`) bone basis inside the
+ * exported glTF binary without mutating live Three.js bones or mesh geometry.
+ */
+function normalizeSkeletonsForPositiveDet(json: GltfJsonDocument, binDataView: DataView): void {
+  const nodes = json.nodes;
+  const skins = json.skins;
+  if (!nodes || !skins || skins.length === 0) return;
+
+  const parentOf = new Map<number, number>();
+  for (let i = 0; i < nodes.length; i++) {
+    for (const childIdx of nodes[i].children ?? []) {
+      parentOf.set(childIdx, i);
+    }
+  }
+
+  const allJoints = new Set<number>();
+  const rootCandidates = new Set<number>();
+  for (const skin of skins) {
+    for (const j of skin.joints) allJoints.add(j);
+    if (skin.skeleton !== undefined) {
+      rootCandidates.add(skin.skeleton);
+    } else if (skin.joints.length > 0) {
+      const skinJointSet = new Set(skin.joints);
+      let curr = skin.joints[0];
+      while (parentOf.has(curr) && skinJointSet.has(parentOf.get(curr)!)) {
+        curr = parentOf.get(curr)!;
+      }
+      rootCandidates.add(curr);
+    }
+  }
+
+  const updatedIbmAccessors = new Set<number>();
+  const updatedAnimAccessors = new Set<number>();
+
+  for (const rootIdx of rootCandidates) {
+    const rootNode = nodes[rootIdx];
+    if (!rootNode?.scale) continue;
+    const [sx, sy, sz] = rootNode.scale;
+    const det = sx * sy * sz;
+    const ax = Math.abs(sx);
+    const ay = Math.abs(sy);
+    const az = Math.abs(sz);
+    const maxAbs = Math.max(ax, ay, az);
+
+    // Skip skeletons that already have positive unit scale or zero/degenerate scale
+    if (maxAbs < 1e-6) continue;
+    if (det > 0 && Math.abs(sx - 1) < 1e-4 && Math.abs(sy - 1) < 1e-4 && Math.abs(sz - 1) < 1e-4) {
+      continue;
+    }
+    // Require uniform scale magnitude so quaternion conjugation preserves exact SO(3) rotations
+    if (Math.max(Math.abs(ax - ay), Math.abs(ay - az)) > 0.002 * maxAbs) {
+      continue;
+    }
+
+    // Collect every descendant node of this skeleton root
+    const descendants = new Set<number>();
+    const stack = [...(rootNode.children ?? [])];
+    while (stack.length > 0) {
+      const idx = stack.pop()!;
+      if (descendants.has(idx)) continue;
+      descendants.add(idx);
+      for (const ch of nodes[idx]?.children ?? []) {
+        stack.push(ch);
+      }
+    }
+
+    // Abort safely if any non-joint mesh lives directly under this bone subtree
+    let hasNonJointChild = false;
+    for (const d of descendants) {
+      if (!allJoints.has(d) && (nodes[d]?.mesh !== undefined || nodes[d]?.camera !== undefined)) {
+        hasNonJointChild = true;
+        break;
+      }
+    }
+    if (hasNonJointChild) continue;
+
+    // Conjugating R(x,y,z,w) by Q = diag(qx,qy,qz) flips axes according to det(Q) * Q
+    const qx = sx < 0 ? -1 : 1;
+    const qy = sy < 0 ? -1 : 1;
+    const qz = sz < 0 ? -1 : 1;
+    const detQ = qx * qy * qz;
+    const rxMul = detQ * qx;
+    const ryMul = detQ * qy;
+    const rzMul = detQ * qz;
+
+    // 1. Reset root joint scale to positive unit meter scale [1, 1, 1]
+    rootNode.scale = [1, 1, 1];
+
+    // 2. Transform descendant rest translations & rotations into the new bone basis
+    for (const d of descendants) {
+      const dn = nodes[d];
+      if (!dn) continue;
+      if (dn.translation && dn.translation.length >= 3) {
+        dn.translation = [sx * dn.translation[0], sy * dn.translation[1], sz * dn.translation[2]];
+      }
+      if (dn.rotation && dn.rotation.length >= 4) {
+        dn.rotation = [
+          rxMul * dn.rotation[0],
+          ryMul * dn.rotation[1],
+          rzMul * dn.rotation[2],
+          dn.rotation[3],
+        ];
+      }
+    }
+
+    // 3. Left-multiply inverseBindMatrices by D = diag(sx, sy, sz, 1) (rows 0, 1, 2 in col-major)
+    for (const skin of skins) {
+      const ibmIdx = skin.inverseBindMatrices;
+      if (ibmIdx === undefined || updatedIbmAccessors.has(ibmIdx)) continue;
+      if (!skin.joints.every((j) => j === rootIdx || descendants.has(j))) continue;
+      updatedIbmAccessors.add(ibmIdx);
+      transformFloatAccessor(json, binDataView, ibmIdx, 'MAT4', (read, write) => {
+        for (let col = 0; col < 4; col++) {
+          const base = col * 4;
+          write(base, read(base) * sx);
+          write(base + 1, read(base + 1) * sy);
+          write(base + 2, read(base + 2) * sz);
+        }
+      });
+    }
+
+    // 4. Transform animation channels targeting descendant joints equivalently
+    for (const anim of json.animations ?? []) {
+      const samplers = anim.samplers ?? [];
+      for (const ch of anim.channels ?? []) {
+        const nodeIdx = ch.target?.node;
+        const path = ch.target?.path;
+        if (nodeIdx === undefined || !descendants.has(nodeIdx)) continue;
+        const outIdx = samplers[ch.sampler]?.output;
+        if (outIdx === undefined || updatedAnimAccessors.has(outIdx)) continue;
+
+        if (path === 'translation') {
+          updatedAnimAccessors.add(outIdx);
+          transformFloatAccessor(json, binDataView, outIdx, 'VEC3', (read, write) => {
+            write(0, read(0) * sx);
+            write(1, read(1) * sy);
+            write(2, read(2) * sz);
+          });
+        } else if (path === 'rotation') {
+          updatedAnimAccessors.add(outIdx);
+          transformFloatAccessor(json, binDataView, outIdx, 'VEC4', (read, write) => {
+            write(0, read(0) * rxMul);
+            write(1, read(1) * ryMul);
+            write(2, read(2) * rzMul);
+          });
+        }
+      }
+    }
+  }
+}
+
 /**
  * Post-processes GLB binary:
  * - If a custom IOR is explicitly provided (and not 1.5), injects `KHR_materials_ior`.
  *   Otherwise, standard glTF 2.0 / Blender default IOR (1.5) is preserved.
+ * - Normalizes skeleton root scales to right-handed positive-determinant meter space.
  * - Injects root elevation (soles at Y=0.0) and front-facing rotation directly
  *   into the glTF root node, eliminating the need to mutate the live character in
  *   the Three.js viewport (which would cause the camera to snap/look down at the feet).
@@ -97,30 +408,7 @@ export function patchGlbIor(
   const jsonLen = view.getUint32(12, true);
   const jsonStart = 20;
   const jsonBytes = new Uint8Array(glbBuffer, jsonStart, jsonLen);
-  const json = JSON.parse(new TextDecoder().decode(jsonBytes)) as {
-    materials?: Array<{
-      name?: string;
-      pbrMetallicRoughness?: {
-        baseColorTexture?: { index: number };
-        metallicRoughnessTexture?: { index: number };
-        baseColorFactor?: number[];
-        roughnessFactor?: number;
-        metallicFactor?: number;
-      };
-      normalTexture?: { index: number };
-      alphaMode?: string;
-      alphaCutoff?: number;
-      doubleSided?: boolean;
-      extensions?: Record<string, unknown>;
-    }>;
-    textures?: Array<{ name?: string; source?: number; sampler?: number }>;
-    images?: Array<{ name?: string; uri?: string; bufferView?: number; mimeType?: string }>;
-    extensionsUsed?: string[];
-    extensions?: Record<string, unknown>;
-    nodes?: Array<{ name?: string; translation?: number[]; rotation?: number[]; children?: number[]; extensions?: Record<string, unknown>; [key: string]: unknown }>;
-    scenes?: Array<{ name?: string; nodes?: number[]; [key: string]: unknown }>;
-    scene?: number;
-  };
+  const json = JSON.parse(new TextDecoder().decode(jsonBytes)) as GltfJsonDocument;
 
   if (ior !== undefined && ior !== 1.5 && json.materials) {
     for (const mat of json.materials) {
@@ -135,65 +423,22 @@ export function patchGlbIor(
   // 1. Inject high-fidelity PBR extensions matching Beautiful Asian Girl
   if (json.materials) {
     for (const mat of json.materials) {
-      const lower = (mat.name || '').toLowerCase();
-      const isLashesOrBrows = lower.includes('lash') || lower.includes('brow');
-      const isClothingKeyword =
-        lower.includes('suit') ||
-        lower.includes('cloth') ||
-        lower.includes('garment') ||
-        lower.includes('armor') ||
-        lower.includes('dress') ||
-        lower.includes('pant') ||
-        lower.includes('shirt') ||
-        lower.includes('jean') ||
-        lower.includes('jacket') ||
-        lower.includes('boot') ||
-        lower.includes('shoe') ||
-        lower.includes('skirt') ||
-        lower.includes('bra') ||
-        lower.includes('panties') ||
-        lower.includes('lingerie') ||
-        lower.includes('bikini') ||
-        lower.includes('sock') ||
-        lower.includes('stocking') ||
-        lower.includes('tight');
-      const isSkin =
-        !isLashesOrBrows &&
-        !isClothingKeyword &&
-        (lower === 'body' ||
-          lower.includes('femalebody') ||
-          lower.includes('malebody') ||
-          lower.includes('base') ||
-          lower.includes('hand') ||
-          lower.includes('feet') ||
-          lower.includes('foot') ||
-          lower.includes('head') ||
-          lower.includes('face') ||
-          lower.includes('mouth'));
-      const isEyes = !isLashesOrBrows && !isSkin && lower.includes('eye');
-      const isHair =
-        !isLashesOrBrows &&
-        !isSkin &&
-        !isEyes &&
-        !isClothingKeyword &&
-        (lower.includes('hair') ||
-          lower.includes('s4studio') ||
-          lower.includes('shadow') ||
-          lower.includes('empressof') ||
-          lower.includes('asterion') ||
-          /\bace\b/.test(lower) ||
-          /^[1-9]?[hlr]l?_\d*[hlr]/i.test(mat.name || '') ||
-          /^[1-9][lr]_/i.test(mat.name || '') ||
-          /^mat_([1-9]?[hlr]|a\d|top|braid|brf)/i.test(mat.name || '') ||
-          mat.alphaMode === 'MASK');
+      const matName = mat.name || '';
+      const { lower, isLashesOrBrows, isSkin, isEyes, isHair } = classifyExportMaterial(matName, {
+        alphaMasked: mat.alphaMode === 'MASK',
+      });
 
       mat.extensions = mat.extensions ?? {};
 
       if (isLashesOrBrows) {
-        // Lashes and brows stay crisp alpha-tested masks without fabric sheen
+        // Lashes and brows stay crisp alpha-tested masks without fabric sheen or specular haze
         mat.alphaMode = 'MASK';
         mat.alphaCutoff = lower.includes('brow') ? 0.18 : 0.25;
         mat.doubleSided = true;
+        mat.extensions['KHR_materials_specular'] = { specularFactor: 0.2 };
+        json.extensionsUsed = [
+          ...new Set([...(json.extensionsUsed ?? []), 'KHR_materials_specular']),
+        ];
       } else if (isSkin) {
         // Guarantee skin parts are explicitly marked OPAQUE in glTF so external
         // importers like Blender don't default to dithered/hashed transparency for 4-channel PNGs
@@ -202,12 +447,13 @@ export function patchGlbIor(
 
         // Subsurface scattering: warm dermal light diffusion
         mat.extensions['KHR_materials_subsurface'] = {
-          subsurfaceWeight: 0.65,
-          subsurfaceColor: [1.0, 0.62, 0.50],
-          subsurfaceRadius: [1.0, 0.35, 0.15],
+          subsurfaceWeight: 0.55,
+          subsurfaceColor: [1.0, 0.62, 0.5],
+          subsurfaceRadius: [0.85, 0.3, 0.12],
         };
-        // Accurate human skin IOR
+        // Accurate human skin IOR & soft dermal specular reflectance (~0.028 F0 vs default 0.04 plastic)
         mat.extensions['KHR_materials_ior'] = { ior: 1.45 };
+        mat.extensions['KHR_materials_specular'] = { specularFactor: 0.38 };
 
         // NOTE: KHR_materials_sheen is omitted on skin to prevent Blender Principled BSDF
         // from applying a 100% white Charlie sheen (cloth/velvet fuzz) across human skin.
@@ -216,6 +462,7 @@ export function patchGlbIor(
             ...(json.extensionsUsed ?? []),
             'KHR_materials_subsurface',
             'KHR_materials_ior',
+            'KHR_materials_specular',
           ]),
         ];
       } else if (isHair) {
@@ -225,6 +472,11 @@ export function patchGlbIor(
           mat.alphaCutoff = 0.35;
           mat.doubleSided = true;
         }
+        // Soften hair card specular response so curved crowns keep rich dyed pigment without salt-pepper glare
+        mat.extensions['KHR_materials_specular'] = { specularFactor: 0.25 };
+        json.extensionsUsed = [
+          ...new Set([...(json.extensionsUsed ?? []), 'KHR_materials_specular']),
+        ];
         // NOTE: KHR_materials_anisotropy is omitted when hair cards lack TANGENT vertex
         // attributes, preventing Blender from computing noisy radial white specular glare.
       } else if (isEyes) {
@@ -248,18 +500,14 @@ export function patchGlbIor(
         if (!mat.alphaMode) {
           mat.alphaMode = 'OPAQUE';
         }
-        // Subtle fabric sheen only for matte woven/knit garments; Blender's importer
-        // forces Sheen Weight=1.0 whenever KHR_materials_sheen is present, so sleek
-        // bodysuits/spandex/leather stay rich and saturated without white velvet haze.
+        // Omit KHR_materials_sheen: Blender's glTF importer forces Sheen Weight=1.0
+        // whenever present, washing garment shadows out with white microfiber haze.
+        // Instead use calibrated dielectric specular for non-metallic fabrics.
         const profile = detectFabricProfile(mat.name || '');
-        if (profile.sheen > 0.35) {
-          const factor = Math.min(0.4, profile.sheen * 0.45);
-          mat.extensions['KHR_materials_sheen'] = {
-            sheenColorFactor: [factor, factor, factor],
-            sheenRoughnessFactor: profile.sheenRoughness,
-          };
+        if (profile.metalness <= 0.5) {
+          mat.extensions['KHR_materials_specular'] = { specularFactor: 0.28 };
           json.extensionsUsed = [
-            ...new Set([...(json.extensionsUsed ?? []), 'KHR_materials_sheen']),
+            ...new Set([...(json.extensionsUsed ?? []), 'KHR_materials_specular']),
           ];
         }
       }
@@ -351,7 +599,7 @@ export function patchGlbIor(
           name: 'Fill Light',
           type: 'point',
           color: [1.0, 1.0, 1.0],
-          intensity: 2700.0,
+          intensity: 3800.0,
         },
       ],
     };
@@ -382,7 +630,7 @@ export function patchGlbIor(
       const fillIdx = json.nodes.length;
       json.nodes.push({
         name: 'Fill_StudioLight',
-        translation: [-1.8, 1.4, -2.0],
+        translation: [-1.6, 1.35, -2.2],
         extensions: { KHR_lights_punctual: { light: 2 } },
       });
 
@@ -391,7 +639,7 @@ export function patchGlbIor(
   }
 
   if (transform && json.nodes && json.nodes.length > 0) {
-    let rootNode: { name?: string; translation?: number[]; rotation?: number[]; [key: string]: unknown } | undefined;
+    let rootNode: GltfNode | undefined;
     if (transform.rootName) {
       rootNode = json.nodes.find((n) => n.name === transform.rootName);
     }
@@ -413,7 +661,7 @@ export function patchGlbIor(
            the lift, so the correct soles-at-0 translation is the lift plus the
            measured offset. Overwriting dropped the lift and sank the character
            by `footDrop`. */
-        const existing = (rootNode.translation as number[] | undefined) ?? [0, 0, 0];
+        const existing = rootNode.translation ?? [0, 0, 0];
         rootNode.translation = [
           (existing[0] ?? 0) + transform.translation[0],
           (existing[1] ?? 0) + transform.translation[1],
@@ -429,17 +677,25 @@ export function patchGlbIor(
     }
   }
 
+  // BIN chunk starts right after the original JSON chunk (8-byte header + buffer payload)
+  const binChunkStart = jsonStart + jsonLen;
+  const binChunkCopy = new Uint8Array(glbBuffer.slice(binChunkStart));
+  if (binChunkCopy.byteLength > 8) {
+    const binPayloadView = new DataView(
+      binChunkCopy.buffer,
+      binChunkCopy.byteOffset + 8,
+      binChunkCopy.byteLength - 8,
+    );
+    normalizeSkeletonsForPositiveDet(json, binPayloadView);
+  }
+
   const newJsonEncoded = new TextEncoder().encode(JSON.stringify(json));
   // Pad to 4-byte alignment with spaces (0x20) as required by glTF spec
   const paddedLen = Math.ceil(newJsonEncoded.length / 4) * 4;
   const paddedJson = new Uint8Array(paddedLen).fill(0x20);
   paddedJson.set(newJsonEncoded);
 
-  // BIN chunk starts right after the original JSON chunk
-  const binChunkStart = jsonStart + jsonLen;
-  const binChunk = new Uint8Array(glbBuffer, binChunkStart);
-
-  const newTotal = 12 + 8 + paddedLen + binChunk.length;
+  const newTotal = 12 + 8 + paddedLen + binChunkCopy.length;
   const out = new ArrayBuffer(newTotal);
   const outView = new DataView(out);
   const outBytes = new Uint8Array(out);
@@ -454,8 +710,8 @@ export function patchGlbIor(
   outView.setUint32(16, 0x4e4f534a, true); // chunk type JSON
   outBytes.set(paddedJson, 20);
 
-  // BIN chunk (copy verbatim)
-  outBytes.set(binChunk, 20 + paddedLen);
+  // BIN chunk (header + normalized binary buffer)
+  outBytes.set(binChunkCopy, 20 + paddedLen);
 
   return out;
 }
@@ -837,7 +1093,7 @@ export function createHeadSkinnedMesh(
   const isSkin = name === 'Face' || name === 'Head' || name === 'Mouth';
   const isEyes = name === 'Eyes';
   const isAlpha = name === 'Lashes' || name === 'Brows';
-  const defaultR = isEyes ? 0.04 : (isSkin ? 0.48 : (origMat?.roughness ?? 0.6));
+  const defaultR = isEyes ? 0.04 : (isSkin ? 0.55 : (origMat?.roughness ?? 0.6));
 
   const mat = new THREE.MeshStandardMaterial({
     name,
@@ -1064,64 +1320,16 @@ export async function exportCharacterScene(
           if (!(m as any).isMeshStandardMaterial && !(m as any).isMeshPhysicalMaterial) return m;
           const std = m as THREE.MeshStandardMaterial;
           const matName = std.name || mesh.name || '';
-          const lower = matName.toLowerCase();
-          const isLashesOrBrows = lower.includes('lash') || lower.includes('brow');
-          const isClothingKeyword =
-            lower.includes('suit') ||
-            lower.includes('cloth') ||
-            lower.includes('garment') ||
-            lower.includes('armor') ||
-            lower.includes('dress') ||
-            lower.includes('pant') ||
-            lower.includes('shirt') ||
-            lower.includes('jean') ||
-            lower.includes('jacket') ||
-            lower.includes('boot') ||
-            lower.includes('shoe') ||
-            lower.includes('skirt') ||
-            lower.includes('bra') ||
-            lower.includes('panties') ||
-            lower.includes('lingerie') ||
-            lower.includes('bikini') ||
-            lower.includes('sock') ||
-            lower.includes('stocking') ||
-            lower.includes('tight');
-          const isSkin =
-            !isLashesOrBrows &&
-            !isClothingKeyword &&
-            (lower === 'body' ||
-              lower.includes('femalebody') ||
-              lower.includes('malebody') ||
-              lower.includes('base') ||
-              lower.includes('hand') ||
-              lower.includes('feet') ||
-              lower.includes('foot') ||
-              lower.includes('head') ||
-              lower.includes('face') ||
-              lower.includes('mouth'));
-          const isEyes = !isLashesOrBrows && !isSkin && lower.includes('eye');
-          const isHair =
-            !isLashesOrBrows &&
-            !isSkin &&
-            !isEyes &&
-            !isClothingKeyword &&
-            (lower.includes('hair') ||
-              lower.includes('s4studio') ||
-              lower.includes('shadow') ||
-              lower.includes('empressof') ||
-              lower.includes('asterion') ||
-              /\bace\b/.test(lower) ||
-              /^1?[hlr]|^[1-9][lr]_/i.test(matName) ||
-              /^mat_([1-9]?[hlr]|a\d|top|braid|brf)/i.test(matName) ||
-              Boolean(std.transparent || std.alphaTest > 0));
-          const isGarment = !isSkin && !isHair && !isEyes && !isLashesOrBrows;
+          const { lower, isLashesOrBrows, isSkin, isEyes, isHair, isGarment } = classifyExportMaterial(matName, {
+            alphaMasked: Boolean(std.transparent || std.alphaTest > 0),
+          });
           const fabric = isGarment ? detectFabricProfile(matName) : null;
           const defaultR = isEyes
             ? 0.04
             : isSkin
-            ? 0.48
-            : isHair
             ? 0.55
+            : isHair
+            ? 0.62
             : isLashesOrBrows
             ? 0.72
             : fabric?.roughness ?? std.roughness ?? 0.55;
@@ -1177,7 +1385,7 @@ export async function exportCharacterScene(
           // Hair cards ship without TANGENT vertex attributes; moderate normal scale avoids foil glare in Blender.
           const normalScale = std.normalScale ? std.normalScale.clone() : new THREE.Vector2(1, 1);
           if (isHair && std.normalMap) {
-            normalScale.set(Math.min(0.45, Math.abs(normalScale.x)), Math.min(0.45, Math.abs(normalScale.y)));
+            normalScale.set(Math.min(0.35, Math.abs(normalScale.x)), Math.min(0.35, Math.abs(normalScale.y)));
           }
 
           return new THREE.MeshStandardMaterial({
