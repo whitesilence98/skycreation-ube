@@ -68,8 +68,8 @@ export interface RiggedExportOptions {
   includeVrmExtension?: boolean;
 
   /**
-   * Inject KHR_materials_ior (ior = 1.0) for Blender skin compatibility.
-   * Default: true.
+   * Inject KHR_materials_ior (ior = 1.0).
+   * Default: false (Blender defaults to 1.5).
    */
   patchIor?: boolean;
 
@@ -379,7 +379,7 @@ export async function exportRiggedGlb(
   const rawName       = (options.name ?? 'Character').trim();
   const characterName = rawName.replace(/[^a-zA-Z0-9_\-]/g, '_') || 'Character';
   const includeVrm    = options.includeVrmExtension ?? true;
-  const patchIor      = options.patchIor            ?? true;
+  const patchIor      = options.patchIor            ?? false;
   const maxTexture    = options.maxTextureSize       ?? 4096;
   const doDownload    = options.download             ?? true;
   const vrmAuthor     = options.vrmAuthor            ?? 'CC-Kit Auto-Rigger';

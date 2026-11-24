@@ -6,12 +6,6 @@ import { GLTFExporter } from 'three-stdlib';
 import * as THREE from 'three';
 import { useCharacter } from '@/lib/store';
 import { buildExportClips, restInverses } from '@/lib/character/animation';
-import {
-  registerPackageExportHandler,
-  unregisterPackageExportHandler,
-  exportCharacterPackageScene,
-  type PackageExportOptions,
-} from '@/lib/exportPackage';
 
 export interface ExportOptions {
   /** Include the `Pose` + `Idle` clips. `false` (or omitted) is a static mesh. */
@@ -31,19 +25,28 @@ export interface ExportTransform {
 }
 
 /**
- * Injects `KHR_materials_ior` (ior=1.0) into every material of a GLB binary so
- * Blender's Principled BSDF uses IOR=1.0 instead of its 1.5 default.
- * Without this extension Blender adds extra specular that makes skin look plastic.
- *
- * Also injects root elevation (soles at Y=0.0) and front-facing rotation directly
- * into the glTF root node, eliminating the need to mutate the live character in
- * the Three.js viewport (which would cause the camera to snap/look down at the feet).
+ * Post-processes GLB binary:
+ * - If a custom IOR is explicitly provided (and not 1.5), injects `KHR_materials_ior`.
+ *   Otherwise, standard glTF 2.0 / Blender default IOR (1.5) is preserved.
+ * - Injects root elevation (soles at Y=0.0) and front-facing rotation directly
+ *   into the glTF root node, eliminating the need to mutate the live character in
+ *   the Three.js viewport (which would cause the camera to snap/look down at the feet).
  */
 export function patchGlbIor(
   glbBuffer: ArrayBuffer,
-  ior = 1.0,
-  transform?: ExportTransform,
+  iorOrTransform?: number | ExportTransform,
+  transformArg?: ExportTransform,
 ): ArrayBuffer {
+  let ior: number | undefined;
+  let transform: ExportTransform | undefined;
+
+  if (typeof iorOrTransform === 'number') {
+    ior = iorOrTransform;
+    transform = transformArg;
+  } else {
+    transform = iorOrTransform;
+  }
+
   const view = new DataView(glbBuffer);
   const jsonLen = view.getUint32(12, true);
   const jsonStart = 20;
@@ -56,15 +59,15 @@ export function patchGlbIor(
     scene?: number;
   };
 
-  if (json.materials) {
+  if (ior !== undefined && ior !== 1.5 && json.materials) {
     for (const mat of json.materials) {
       mat.extensions = mat.extensions ?? {};
       mat.extensions['KHR_materials_ior'] = { ior };
     }
+    json.extensionsUsed = [
+      ...new Set([...(json.extensionsUsed ?? []), 'KHR_materials_ior']),
+    ];
   }
-  json.extensionsUsed = [
-    ...new Set([...(json.extensionsUsed ?? []), 'KHR_materials_ior']),
-  ];
 
   if (transform && json.nodes && json.nodes.length > 0) {
     let rootNode: { name?: string; translation?: number[]; rotation?: number[]; [key: string]: unknown } | undefined;
@@ -637,7 +640,7 @@ export async function exportCharacterScene(
 
     const blob = new Blob(
       [
-        patchGlbIor(gltf as ArrayBuffer, 1.0, {
+        patchGlbIor(gltf as ArrayBuffer, {
           translation: [0, groundOffset, 0],
           rotation: [0, 1, 0, 0],
           rootName: safeName,
@@ -700,14 +703,10 @@ export function GlbExportBridge() {
   useEffect(() => {
     const handler = (customName?: string, options?: ExportOptions) =>
       exportCharacterScene(scene as THREE.Scene, customName || name, options);
-    const pkgHandler = (customName?: string, options?: PackageExportOptions) =>
-      exportCharacterPackageScene(scene as THREE.Scene, customName || name, options);
 
     registerExportHandler(handler);
-    registerPackageExportHandler(pkgHandler);
     return () => {
       unregisterExportHandler();
-      unregisterPackageExportHandler();
     };
   }, [scene, name]);
 
