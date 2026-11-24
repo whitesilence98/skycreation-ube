@@ -530,13 +530,14 @@ export function patchGlbIor(
     }
   }
 
-  // 2. Semantic Texture & Image Naming (matching standard PBR conventions: body_basecolor, face_basecolor, hair_basecolor, etc.)
-  if (json.materials && json.textures && json.images) {
+  // 2. Semantic Material, Texture & Image Naming (matching standard PBR conventions: body_basecolor, face_basecolor, hair_basecolor, etc.)
+  if (json.materials) {
     const images = json.images;
     const textures = json.textures;
     for (const mat of json.materials) {
       const matName = cleanPbrPartName(mat.name || '');
       mat.name = matName;
+      if (!textures || !images) continue;
       const pbr = mat.pbrMetallicRoughness;
       if (pbr?.baseColorTexture) {
         const tex = textures[pbr.baseColorTexture.index];
@@ -854,8 +855,15 @@ export function findEssentialBones(
 }
 
 
-/** Cache packed metallic-roughness textures across meshes sharing the same maps (e.g. skin parts) */
+/** Cache packed metallic-roughness textures across meshes sharing the same maps (e.g. skin/hair parts) */
 const packedTextureCache = new Map<THREE.Texture | string, THREE.Texture>();
+
+function textureIdentityKey(tex: THREE.Texture | null | undefined): string {
+  if (!tex) return 'none';
+  const img = tex.image as { src?: string; currentSrc?: string } | null | undefined;
+  const imgKey = img?.currentSrc || img?.src || tex.uuid || tex.name || 'tex';
+  return `${imgKey}|fy:${tex.flipY ? 1 : 0}|ws:${tex.wrapS}|wt:${tex.wrapT}|r:${tex.repeat.x},${tex.repeat.y}|o:${tex.offset.x},${tex.offset.y}`;
+}
 
 /**
  * Bakes material color tint (hair tone, brow color, lash tint, skin tint) directly
@@ -872,7 +880,7 @@ export function buildTintedDiffuseTexture(
   const srgbTint = tint.clone().convertLinearToSRGB();
   if (srgbTint.r >= 0.995 && srgbTint.g >= 0.995 && srgbTint.b >= 0.995) return baseMap;
 
-  const cacheKey = `tinted_${baseMap.uuid || baseMap.name}_${tint.getHexString()}`;
+  const cacheKey = `tinted_${textureIdentityKey(baseMap)}_${tint.getHexString()}`;
   if (packedTextureCache.has(cacheKey)) {
     return packedTextureCache.get(cacheKey)!;
   }
@@ -955,8 +963,12 @@ export function buildPackedMetalRoughnessTexture(
   // If neither texture is provided, return null to use glTF scalar factors
   if (!roughnessMap && !metalnessMap) return null;
 
-  const cacheKey = roughnessMap || metalnessMap;
-  if (cacheKey && packedTextureCache.has(cacheKey)) {
+  const directRef = roughnessMap || metalnessMap;
+  if (directRef && packedTextureCache.has(directRef)) {
+    return packedTextureCache.get(directRef)!;
+  }
+  const cacheKey = `orm_${textureIdentityKey(roughnessMap)}_${textureIdentityKey(metalnessMap)}_${defaultRoughness.toFixed(3)}_${defaultMetalness.toFixed(3)}`;
+  if (packedTextureCache.has(cacheKey)) {
     return packedTextureCache.get(cacheKey)!;
   }
 
@@ -1035,6 +1047,9 @@ export function buildPackedMetalRoughnessTexture(
 
     if (cacheKey) {
       packedTextureCache.set(cacheKey, packed);
+    }
+    if (directRef) {
+      packedTextureCache.set(directRef, packed);
     }
     packedTextureCache.set(packed, packed);
     return packed;
@@ -1123,6 +1138,243 @@ export function createHeadSkinnedMesh(
   return skinned;
 }
 
+const IDENTITY_MATRIX = new THREE.Matrix4();
+const SKIN_BODY_PART_ORDER: Readonly<Record<string, number>> = {
+  Body: 0,
+  Face: 1,
+  Hands: 2,
+  Feet: 3,
+};
+
+function isVisibleInBranch(obj: THREE.Object3D, stopBeforeAncestor: THREE.Object3D | null): boolean {
+  let curr: THREE.Object3D | null = obj;
+  while (curr && curr !== stopBeforeAncestor) {
+    if (!curr.visible) return false;
+    curr = curr.parent;
+  }
+  return true;
+}
+
+function isHairExportCandidate(mesh: THREE.Mesh): boolean {
+  const name = mesh.name || '';
+  if (name === 'Body' || name === 'Face' || name === 'Hands' || name === 'Feet') return false;
+  if (name === 'Clothing' || name === 'Eyes' || name === 'Mouth' || name === 'Lashes' || name === 'Brows') {
+    return false;
+  }
+  if (name === 'HairlineUnderlay' || name === 'Hair') return true;
+  if (classifyExportMaterial(name).isHair) return true;
+
+  const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  const visibleMats = mats.filter((m) => m && m.visible !== false);
+  if (visibleMats.length === 0) return false;
+  return visibleMats.every((m) => {
+    const std = m as THREE.MeshStandardMaterial;
+    const { isHair } = classifyExportMaterial(std.name || name, {
+      alphaMasked: Boolean(std.transparent || std.alphaTest > 0),
+    });
+    return isHair;
+  });
+}
+
+function materialDedupeKey(m: THREE.Material): string {
+  const std = m as THREE.MeshStandardMaterial;
+  const partName = cleanPbrPartName(std.name || '');
+  const col = std.color ? std.color.getHexString() : 'ffffff';
+  const nsx = std.normalScale ? std.normalScale.x.toFixed(3) : '1.000';
+  const nsy = std.normalScale ? std.normalScale.y.toFixed(3) : '1.000';
+  return [
+    partName,
+    col,
+    textureIdentityKey(std.map),
+    textureIdentityKey(std.normalMap),
+    textureIdentityKey(std.roughnessMap),
+    (std.roughness ?? 1).toFixed(3),
+    (std.metalness ?? 0).toFixed(3),
+    (std.alphaTest ?? 0).toFixed(3),
+    (std.opacity ?? 1).toFixed(3),
+    std.side,
+    nsx,
+    nsy,
+  ].join('|');
+}
+
+/**
+ * Merges multiple `SkinnedMesh` parts (e.g. multi-part Hair cards or Body+Face+Hands+Feet)
+ * into one `SkinnedMesh` sharing a unified skeleton and deduplicated material slots so
+ * Blender imports clean consolidated objects without breaking live viewport meshes.
+ */
+function mergeSkinnedMeshesForExport(
+  targetName: string,
+  meshes: THREE.SkinnedMesh[],
+  rootBone: THREE.Bone,
+): { mergedMesh: THREE.SkinnedMesh; mergedSkeleton: THREE.Skeleton } {
+  const boneToUnion = new Map<THREE.Bone, number>();
+  const unionBones: THREE.Bone[] = [];
+  const inverseByBone = new Map<THREE.Bone, THREE.Matrix4>();
+
+  const registerBone = (bone: THREE.Bone, fallbackInv?: THREE.Matrix4) => {
+    if (boneToUnion.has(bone)) return;
+    boneToUnion.set(bone, unionBones.length);
+    unionBones.push(bone);
+    const restWorld = bone.userData.__boneRest?.world as THREE.Matrix4 | undefined;
+    const inv = restWorld
+      ? restWorld.clone().invert()
+      : fallbackInv
+      ? fallbackInv.clone()
+      : bone.matrixWorld.clone().invert();
+    inverseByBone.set(bone, inv);
+  };
+
+  registerBone(rootBone);
+
+  let totalVerts = 0;
+  let anySkinCavity = false;
+  for (const m of meshes) {
+    const pos = m.geometry.getAttribute('position');
+    if (!pos) continue;
+    totalVerts += pos.count;
+    if (m.geometry.getAttribute('_skincavity')) anySkinCavity = true;
+    const bones = m.skeleton?.bones ?? [];
+    const inverses = m.skeleton?.boneInverses ?? [];
+    for (let i = 0; i < bones.length; i++) {
+      registerBone(bones[i], inverses[i]);
+    }
+  }
+
+  const posOut = new Float32Array(totalVerts * 3);
+  const normOut = new Float32Array(totalVerts * 3);
+  const uvOut = new Float32Array(totalVerts * 2);
+  const skinIdxOut = new Uint16Array(totalVerts * 4);
+  const skinWtOut = new Float32Array(totalVerts * 4);
+  const cavityOut = anySkinCavity ? new Float32Array(totalVerts) : null;
+
+  const uniqueMaterials: THREE.Material[] = [];
+  const matKeyToSlot = new Map<string, number>();
+  const indicesBySlot: number[][] = [];
+
+  const getSlotForMaterial = (mat: THREE.Material): number => {
+    const key = materialDedupeKey(mat);
+    const existing = matKeyToSlot.get(key);
+    if (existing !== undefined) return existing;
+    const idx = uniqueMaterials.length;
+    matKeyToSlot.set(key, idx);
+    uniqueMaterials.push(mat);
+    indicesBySlot.push([]);
+    return idx;
+  };
+
+  let vertOffset = 0;
+  for (const m of meshes) {
+    const geo = m.geometry;
+    const posAttr = geo.getAttribute('position');
+    if (!posAttr) continue;
+    const vCount = posAttr.count;
+
+    let normAttr = geo.getAttribute('normal');
+    let tempNormGeo: THREE.BufferGeometry | null = null;
+    if (!normAttr) {
+      tempNormGeo = geo.clone();
+      tempNormGeo.computeVertexNormals();
+      normAttr = tempNormGeo.getAttribute('normal');
+    }
+
+    const uvAttr = geo.getAttribute('uv');
+    const cavityAttr = geo.getAttribute('_skincavity');
+    const sIdxAttr = geo.getAttribute('skinIndex');
+    const sWtAttr = geo.getAttribute('skinWeight');
+    const srcBones = m.skeleton?.bones ?? [];
+
+    for (let i = 0; i < vCount; i++) {
+      const vo3 = (vertOffset + i) * 3;
+      posOut[vo3] = posAttr.getX(i);
+      posOut[vo3 + 1] = posAttr.getY(i);
+      posOut[vo3 + 2] = posAttr.getZ(i);
+
+      normOut[vo3] = normAttr ? normAttr.getX(i) : 0;
+      normOut[vo3 + 1] = normAttr ? normAttr.getY(i) : 1;
+      normOut[vo3 + 2] = normAttr ? normAttr.getZ(i) : 0;
+
+      const vo2 = (vertOffset + i) * 2;
+      uvOut[vo2] = uvAttr ? uvAttr.getX(i) : 0;
+      uvOut[vo2 + 1] = uvAttr ? uvAttr.getY(i) : 0;
+
+      if (cavityOut) {
+        cavityOut[vertOffset + i] = cavityAttr ? cavityAttr.getX(i) : 0;
+      }
+
+      const vo4 = (vertOffset + i) * 4;
+      for (let k = 0; k < 4; k++) {
+        const w = sWtAttr ? sWtAttr.getComponent(i, k) : k === 0 ? 1 : 0;
+        const oldB = sIdxAttr ? Math.round(sIdxAttr.getComponent(i, k)) : 0;
+        const bone = srcBones[oldB];
+        skinWtOut[vo4 + k] = w;
+        skinIdxOut[vo4 + k] = w > 0.0001 && bone ? boneToUnion.get(bone) ?? 0 : 0;
+      }
+    }
+    tempNormGeo?.dispose();
+
+    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    const indexAttr = geo.index;
+    const rawCount = indexAttr ? indexAttr.count : vCount;
+    const groups =
+      geo.groups && geo.groups.length > 0
+        ? geo.groups
+        : [{ start: 0, count: rawCount, materialIndex: 0 }];
+
+    for (const g of groups) {
+      const mat = mats[g.materialIndex ?? 0];
+      if (!mat || mat.visible === false) continue;
+      const slot = getSlotForMaterial(mat);
+      const bucket = indicesBySlot[slot];
+      const end = Math.min(g.start + g.count, rawCount);
+      for (let idx = g.start; idx < end; idx++) {
+        const vi = indexAttr ? indexAttr.getX(idx) : idx;
+        bucket.push(vertOffset + vi);
+      }
+    }
+
+    vertOffset += vCount;
+  }
+
+  const totalIndices = indicesBySlot.reduce((acc, arr) => acc + arr.length, 0);
+  const indexArray = totalVerts > 65535 ? new Uint32Array(totalIndices) : new Uint16Array(totalIndices);
+
+  const mergedGeo = new THREE.BufferGeometry();
+  mergedGeo.setAttribute('position', new THREE.BufferAttribute(posOut, 3));
+  mergedGeo.setAttribute('normal', new THREE.BufferAttribute(normOut, 3));
+  mergedGeo.setAttribute('uv', new THREE.BufferAttribute(uvOut, 2));
+  mergedGeo.setAttribute('skinIndex', new THREE.BufferAttribute(skinIdxOut, 4));
+  mergedGeo.setAttribute('skinWeight', new THREE.BufferAttribute(skinWtOut, 4));
+  if (cavityOut) {
+    mergedGeo.setAttribute('_skincavity', new THREE.BufferAttribute(cavityOut, 1));
+  }
+
+  let cursor = 0;
+  for (let slot = 0; slot < indicesBySlot.length; slot++) {
+    const bucket = indicesBySlot[slot];
+    if (bucket.length === 0) continue;
+    for (let i = 0; i < bucket.length; i++) {
+      indexArray[cursor + i] = bucket[i];
+    }
+    mergedGeo.addGroup(cursor, bucket.length, slot);
+    cursor += bucket.length;
+  }
+  mergedGeo.setIndex(new THREE.BufferAttribute(indexArray, 1));
+  mergedGeo.computeBoundingBox();
+  mergedGeo.computeBoundingSphere();
+
+  const unionInverses = unionBones.map((b) => inverseByBone.get(b)!);
+  const mergedSkeleton = new THREE.Skeleton(unionBones, unionInverses);
+  const finalMaterial = uniqueMaterials.length === 1 ? uniqueMaterials[0] : uniqueMaterials;
+  const mergedMesh = new THREE.SkinnedMesh(mergedGeo, finalMaterial);
+  mergedMesh.name = targetName;
+  mergedMesh.castShadow = true;
+  mergedMesh.receiveShadow = true;
+  mergedMesh.bind(mergedSkeleton, new THREE.Matrix4());
+
+  return { mergedMesh, mergedSkeleton };
+}
+
 /**
  * Export the character scene to `.glb`, mutating the live scene only inside a
  * single `try`, with every mutation undone by `finally`.
@@ -1201,6 +1453,8 @@ export async function exportCharacterScene(
   };
   const restoreMeshSkeletons: (() => void)[] = [];
   const tempFacialMeshes: THREE.SkinnedMesh[] = [];
+  const tempMergedEntries: Array<{ mesh: THREE.SkinnedMesh; skeleton: THREE.Skeleton }> = [];
+  const restoreNames: Array<{ object: THREE.Object3D; origName: string }> = [];
   const restoreMaterials: Array<{ mesh: THREE.Mesh; origMaterial: THREE.Material | THREE.Material[] }> = [];
   const restoreGroups: Array<{ mesh: THREE.Mesh; origGroups: THREE.BufferGeometry['groups'] }> = [];
   const tempTextures: THREE.Texture[] = [];
@@ -1267,25 +1521,52 @@ export async function exportCharacterScene(
     // 3. Hide the separate SkyrimHeadRoot and attach its facial meshes to the
     //    unified skeleton, recording the root's ORIGINAL visibility.
     if (headRoot) {
+      headRoot.updateMatrixWorld(true);
+      const invHeadRootWorld = headRoot.matrixWorld.clone().invert();
       /* Facial meshes are still rebuilt and added when the root was already
          hidden — only the visibility change itself is conditional, so the
          facial geometry never silently vanishes from an export. */
       if (headRoot.visible) hide(headRoot);
       headRoot.traverse((child) => {
-        if ((child as any).isMesh && child.name && child.name !== 'SkyrimHeadRoot') {
-          const mesh = child as THREE.Mesh;
-          const semanticName =
-            mesh.name === 'FemaleHead_hph' || mesh.name === 'Head' ? 'Face' : mesh.name;
-          const tempMesh = createHeadSkinnedMesh(
-            mesh,
-            semanticName,
-            rootBone!,
-            headBone,
-            restHeadWorld,
-          );
-          tempFacialMeshes.push(tempMesh);
-          character.add(tempMesh);
+        if (!(child as any).isMesh || child === headRoot) return;
+        if (!isVisibleInBranch(child, headRoot)) return;
+
+        const mesh = child as THREE.Mesh;
+        const firstMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        const matName = firstMat?.name || '';
+        const alphaMasked = Boolean((firstMat as any)?.transparent || (firstMat as any)?.alphaTest > 0);
+        const hairClass = classifyExportMaterial(mesh.name || matName, { alphaMasked }).isHair
+          || classifyExportMaterial(matName, { alphaMasked }).isHair;
+        const rawName = mesh.name || matName;
+        if (!rawName && !hairClass) {
+          return;
         }
+        const semanticName =
+          rawName === 'FemaleHead_hph' || rawName === 'Head'
+            ? 'Face'
+            : rawName === 'HairlineUnderlay'
+            ? 'HairlineUnderlay'
+            : hairClass && rawName !== 'Lashes' && rawName !== 'Brows'
+            ? 'Hair'
+            : rawName || 'Hair';
+        const tempMesh = createHeadSkinnedMesh(
+          mesh,
+          semanticName,
+          rootBone!,
+          headBone,
+          restHeadWorld,
+        );
+        if (Array.isArray(mesh.material) && mesh.material.length > 1) {
+          tempMesh.material = mesh.material.map((m) => m.clone());
+        }
+        if (!(mesh as THREE.SkinnedMesh).isSkinnedMesh) {
+          const relMatrix = invHeadRootWorld.clone().multiply(mesh.matrixWorld);
+          if (!relMatrix.equals(IDENTITY_MATRIX)) {
+            tempMesh.geometry.applyMatrix4(relMatrix);
+          }
+        }
+        tempFacialMeshes.push(tempMesh);
+        character.add(tempMesh);
       });
     }
 
@@ -1428,6 +1709,44 @@ export async function exportCharacterScene(
       }
     });
 
+    // 4.75. Consolidate visible skin body parts (Body+Face+Hands+Feet -> Body) and
+    //       multi-part hairstyles (... + HairlineUnderlay -> Hair) into clean single meshes.
+    const skinBodyParts: THREE.SkinnedMesh[] = [];
+    const hairParts: THREE.SkinnedMesh[] = [];
+    character.traverse((child) => {
+      if (!(child as any).isSkinnedMesh) return;
+      if (!isVisibleInBranch(child, character)) return;
+      const sm = child as THREE.SkinnedMesh;
+      if (SKIN_BODY_PART_ORDER[sm.name] !== undefined) {
+        skinBodyParts.push(sm);
+      } else if (isHairExportCandidate(sm)) {
+        hairParts.push(sm);
+      }
+    });
+
+    skinBodyParts.sort(
+      (a, b) => (SKIN_BODY_PART_ORDER[a.name] ?? 99) - (SKIN_BODY_PART_ORDER[b.name] ?? 99),
+    );
+    hairParts.sort((a, b) => (a.name === 'HairlineUnderlay' ? 1 : 0) - (b.name === 'HairlineUnderlay' ? 1 : 0));
+
+    if (skinBodyParts.length >= 2) {
+      const merged = mergeSkinnedMeshesForExport('Body', skinBodyParts, rootBone!);
+      for (const part of skinBodyParts) hide(part);
+      tempMergedEntries.push({ mesh: merged.mergedMesh, skeleton: merged.mergedSkeleton });
+      character.add(merged.mergedMesh);
+    }
+
+    if (hairParts.length >= 2) {
+      const merged = mergeSkinnedMeshesForExport('Hair', hairParts, rootBone!);
+      for (const part of hairParts) hide(part);
+      tempMergedEntries.push({ mesh: merged.mergedMesh, skeleton: merged.mergedSkeleton });
+      character.add(merged.mergedMesh);
+    } else if (hairParts.length === 1 && hairParts[0].name !== 'Hair') {
+      restoreNames.push({ object: hairParts[0], origName: hairParts[0].name });
+      hairParts[0].name = 'Hair';
+    }
+    character.updateMatrixWorld(true);
+
     // 5. Prepare safe export name and compute ground elevation (feet soles at Y = 0.0).
     // Note: We do NOT mutate character.position or character.rotation in the live scene!
     // Mutating live scene transforms during export caused the viewport to elevate +1.55m
@@ -1483,6 +1802,18 @@ export async function exportCharacterScene(
     character.updateMatrixWorld(true);
     // Cleanup is itself failure-tolerant: one bad restore must not leave the
     // rest un-undone, so each step is isolated.
+    for (const entry of tempMergedEntries) {
+      try {
+        character.remove(entry.mesh);
+        entry.mesh.geometry.dispose();
+        entry.skeleton.dispose();
+      } catch {
+        /* keep cleaning up */
+      }
+    }
+    for (const item of restoreNames) {
+      item.object.name = item.origName;
+    }
     for (const { mesh, origMaterial } of restoreMaterials) {
       mesh.material = origMaterial;
     }
