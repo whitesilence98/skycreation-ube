@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { useRiggerStore } from '@/lib/rigger/store';
 import { exportRiggedGlb, exportSummary } from '@/lib/rigger/exportRiggedGlb';
 import { exportRiggedFbx, type FbxAnimationClipOption } from '@/lib/rigger/exportRiggedFbx';
+import { getEngineProfile } from '@/lib/rigger/engineProfiles';
+import { TargetEngineSelector } from '@/components/rigger/TargetEngineSelector';
 import { isVrmBoneName } from '@/lib/rigger/vrmSkeleton';
 import type { TestAnimationMode } from '@/lib/rigger/testAnimations';
 
@@ -48,6 +50,7 @@ export function ExportPanel() {
   const smoothWeights = useRiggerStore((s) => s.smoothWeights);
   const rawWeights = useRiggerStore((s) => s.rawWeights);
   const characterName = useRiggerStore((s) => s.characterName);
+  const exportTarget = useRiggerStore((s) => s.exportTarget);
   const includeVrm = useRiggerStore((s) => s.includeVrm);
   const testAnimation = useRiggerStore((s) => s.testAnimation);
   const showSkeleton = useRiggerStore((s) => s.showSkeleton);
@@ -78,6 +81,8 @@ export function ExportPanel() {
   }
 
   const safeName = characterName.trim() || 'Character';
+  const activeProfile = getEngineProfile(exportTarget);
+  const preferFbx = exportTarget === 'unity' || exportTarget === 'ue5';
   const vrmCount = fitResult.built.bones.filter((b) => isVrmBoneName(b.name)).length;
   const secCount = fitResult.built.bones.length - vrmCount;
 
@@ -116,6 +121,7 @@ export function ExportPanel() {
       await withCleanExportAssets(meshGeometry, meshMaterial, async (geo, mat) => {
         const res = await exportRiggedFbx(geo, mat, fitResult, weights, {
           name: safeName,
+          target: exportTarget,
           includeAnimation: false,
           download: true,
         });
@@ -136,6 +142,7 @@ export function ExportPanel() {
       await withCleanExportAssets(meshGeometry, meshMaterial, async (geo, mat) => {
         const res = await exportRiggedFbx(geo, mat, fitResult, weights, {
           name: safeName,
+          target: exportTarget,
           includeAnimation: true,
           animationClip: animClip,
           download: true,
@@ -149,6 +156,131 @@ export function ExportPanel() {
       setBusyAction(null);
     }
   };
+
+  const glbCard = (
+    <div
+      key="glb"
+      className={`rounded-xl border p-3 flex flex-col gap-2 ${
+        !preferFbx ? 'border-emerald-500/40 bg-emerald-950/15' : 'border-zinc-800 bg-zinc-900/50'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-zinc-100">GLB · Binary glTF</span>
+        <span className="text-[10px] text-sky-400 bg-sky-950/60 border border-sky-800/60 px-1.5 py-0.5 rounded">
+          {!preferFbx ? 'Recommended · VRM' : 'VRM / Blender'}
+        </span>
+      </div>
+      <label className="min-h-[24px] flex items-center justify-between cursor-pointer">
+        <span className="text-[10px] text-zinc-300">Include VRM 1.0 Metadata</span>
+        <input
+          type="checkbox"
+          checked={includeVrm}
+          onChange={(e) => setOption('includeVrm', e.target.checked)}
+          className="accent-sky-500 h-3.5 w-3.5"
+        />
+      </label>
+      <button
+        type="button"
+        disabled={busyAction !== null}
+        onClick={handleDownloadGlb}
+        className="w-full min-h-[34px] py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+      >
+        <span>{busyAction === 'glb' ? '⏳ Packing GLB…' : '⬇ Download GLB (VRM 1.0)'}</span>
+      </button>
+      {lastGlbSummary && (
+        <pre className="text-[10px] text-emerald-400/90 font-mono whitespace-pre-wrap leading-tight border-t border-zinc-800 pt-1.5">
+          {lastGlbSummary}
+        </pre>
+      )}
+    </div>
+  );
+
+  const fbxSkeletonCard = (
+    <div
+      key="fbx-skel"
+      className={`rounded-xl border p-3 flex flex-col gap-2 ${
+        preferFbx ? 'border-sky-500/40 bg-sky-950/15' : 'border-zinc-800 bg-zinc-900/50'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-zinc-100">FBX · Skeleton Only</span>
+        <span className="text-[10px] text-amber-300 bg-amber-950/50 border border-amber-800/50 px-1.5 py-0.5 rounded">
+          {activeProfile.label}
+        </span>
+      </div>
+      <p className="text-[10px] text-zinc-400 leading-snug">
+        Bind-pose {activeProfile.rootBoneLabel} hierarchy in {activeProfile.unitLabel} for{' '}
+        <span className="font-mono text-zinc-300">{safeName}_{activeProfile.fbxSuffixTag}_skeleton.fbx</span>.
+      </p>
+      <button
+        type="button"
+        disabled={busyAction !== null}
+        onClick={handleDownloadFbxSkeleton}
+        className="w-full min-h-[34px] py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+      >
+        <span>
+          {busyAction === 'fbx-skel'
+            ? '⏳ Writing FBX…'
+            : `⬇ Download FBX (${activeProfile.shortLabel})`}
+        </span>
+      </button>
+      {lastFbxSkelInfo && (
+        <div className="text-[10px] font-mono text-sky-300 truncate">{lastFbxSkelInfo}</div>
+      )}
+    </div>
+  );
+
+  const fbxAnimCard = (
+    <div
+      key="fbx-anim"
+      className={`rounded-xl border p-3 flex flex-col gap-2 ${
+        preferFbx ? 'border-purple-500/40 bg-purple-950/15' : 'border-zinc-800 bg-zinc-900/50'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-zinc-100">FBX · With Animation</span>
+        <span className="text-[10px] text-purple-300 bg-purple-950/50 border border-purple-800/50 px-1.5 py-0.5 rounded">
+          {activeProfile.badgeText} · 30 FPS
+        </span>
+      </div>
+      <div className="grid grid-cols-4 gap-1">
+        {([
+          ['idle', 'Idle'],
+          ['walk', 'Walk'],
+          ['run',  'Run'],
+          ['all',  'All 3'],
+        ] as [FbxAnimationClipOption, string][]).map(([val, label]) => (
+          <button
+            key={val}
+            type="button"
+            onClick={() => handleSelectAnimClip(val)}
+            className={`min-h-[26px] py-1 text-[10px] font-semibold rounded-lg border transition-all ${
+              animClip === val
+                ? 'border-purple-400 bg-purple-950/60 text-purple-200'
+                : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        disabled={busyAction !== null}
+        onClick={handleDownloadFbxAnim}
+        className="w-full min-h-[34px] py-2 px-3 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+      >
+        <span>
+          {busyAction === 'fbx-anim'
+            ? '⏳ Baking Animation FBX…'
+            : `⬇ Download ${activeProfile.shortLabel} FBX + ${animClip === 'all' ? 'All Clips' : animClip.charAt(0).toUpperCase() + animClip.slice(1)}`}
+        </span>
+      </button>
+      {lastFbxAnimInfo && (
+        <div className="text-[10px] font-mono text-purple-300 break-all">{lastFbxAnimInfo}</div>
+      )}
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-3">
@@ -181,6 +313,14 @@ export function ExportPanel() {
           </div>
         </div>
       </div>
+
+      {/* ── Engine target selector (switchable without re-rigging) ──────────── */}
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 flex flex-col gap-2">
+        <TargetEngineSelector variant="detailed" />
+      </div>
+
+      {/* ── Primary engine export cards first, GLB fallback when FBX preferred ── */}
+      {preferFbx ? [fbxSkeletonCard, fbxAnimCard, glbCard] : [glbCard, fbxSkeletonCard, fbxAnimCard]}
 
       {/* ── Export name + quick preview sync ────────────────────────────────── */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 flex flex-col gap-2.5">
@@ -234,108 +374,6 @@ export function ExportPanel() {
             </button>
           </div>
         </div>
-      </div>
-
-      {/* ── Option 1: GLB (VRM 1.0) ─────────────────────────────────────────── */}
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-zinc-100">GLB · Binary glTF</span>
-          <span className="text-[10px] text-sky-400 bg-sky-950/60 border border-sky-800/60 px-1.5 py-0.5 rounded">
-            VRM / Blender / Web
-          </span>
-        </div>
-        <label className="min-h-[24px] flex items-center justify-between cursor-pointer">
-          <span className="text-[10px] text-zinc-300">Include VRM 1.0 Metadata</span>
-          <input
-            type="checkbox"
-            checked={includeVrm}
-            onChange={(e) => setOption('includeVrm', e.target.checked)}
-            className="accent-sky-500 h-3.5 w-3.5"
-          />
-        </label>
-        <button
-          type="button"
-          disabled={busyAction !== null}
-          onClick={handleDownloadGlb}
-          className="w-full min-h-[34px] py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-        >
-          <span>{busyAction === 'glb' ? '⏳ Packing GLB…' : '⬇ Download GLB (VRM 1.0)'}</span>
-        </button>
-        {lastGlbSummary && (
-          <pre className="text-[10px] text-emerald-400/90 font-mono whitespace-pre-wrap leading-tight border-t border-zinc-800 pt-1.5">
-            {lastGlbSummary}
-          </pre>
-        )}
-      </div>
-
-      {/* ── Option 2: FBX Skeleton Only ─────────────────────────────────────── */}
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-zinc-100">FBX · Skeleton Only</span>
-          <span className="text-[10px] text-amber-300 bg-amber-950/50 border border-amber-800/50 px-1.5 py-0.5 rounded">
-            UE5 / Unity / Blender
-          </span>
-        </div>
-        <p className="text-[10px] text-zinc-400 leading-snug">
-          Clean bind-pose armature, mesh, textures and skin weights without keyframes.
-        </p>
-        <button
-          type="button"
-          disabled={busyAction !== null}
-          onClick={handleDownloadFbxSkeleton}
-          className="w-full min-h-[34px] py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-        >
-          <span>{busyAction === 'fbx-skel' ? '⏳ Writing FBX…' : '⬇ Download FBX — Skeleton'}</span>
-        </button>
-        {lastFbxSkelInfo && (
-          <div className="text-[10px] font-mono text-sky-300 truncate">{lastFbxSkelInfo}</div>
-        )}
-      </div>
-
-      {/* ── Option 3: FBX With Animation ────────────────────────────────────── */}
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-zinc-100">FBX · With Animation</span>
-          <span className="text-[10px] text-purple-300 bg-purple-950/50 border border-purple-800/50 px-1.5 py-0.5 rounded">
-            30 FPS Baked
-          </span>
-        </div>
-        <div className="grid grid-cols-4 gap-1">
-          {([
-            ['idle', 'Idle'],
-            ['walk', 'Walk'],
-            ['run',  'Run'],
-            ['all',  'All 3'],
-          ] as [FbxAnimationClipOption, string][]).map(([val, label]) => (
-            <button
-              key={val}
-              type="button"
-              onClick={() => handleSelectAnimClip(val)}
-              className={`min-h-[26px] py-1 text-[10px] font-semibold rounded-lg border transition-all ${
-                animClip === val
-                  ? 'border-purple-400 bg-purple-950/60 text-purple-200'
-                  : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          disabled={busyAction !== null}
-          onClick={handleDownloadFbxAnim}
-          className="w-full min-h-[34px] py-2 px-3 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-        >
-          <span>
-            {busyAction === 'fbx-anim'
-              ? '⏳ Baking Animation FBX…'
-              : `⬇ Download FBX + ${animClip === 'all' ? 'All Clips' : animClip.charAt(0).toUpperCase() + animClip.slice(1)}`}
-          </span>
-        </button>
-        {lastFbxAnimInfo && (
-          <div className="text-[10px] font-mono text-purple-300 break-all">{lastFbxAnimInfo}</div>
-        )}
       </div>
     </div>
   );

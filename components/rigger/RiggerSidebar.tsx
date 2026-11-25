@@ -12,6 +12,8 @@ import {
 } from '@/lib/rigger/vrmSkeleton';
 import { LANDMARK_META } from '@/components/rigger/LandmarkEditor';
 import { ExportPanel } from '@/components/rigger/ExportPanel';
+import { TargetEngineSelector } from '@/components/rigger/TargetEngineSelector';
+import { getEngineProfile } from '@/lib/rigger/engineProfiles';
 import { fitSkeletonToLandmarks, estimateLandmarksFromBounds, validateLandmarks } from '@/lib/rigger/templateFitter';
 import { transferWeightsAsync } from '@/lib/rigger/weightTransfer';
 import { diffuseWeightsAsync } from '@/lib/rigger/heatDiffusion';
@@ -74,6 +76,7 @@ export function RiggerSidebar() {
   const progress              = useRiggerStore((s) => s.progress);
   const error                 = useRiggerStore((s) => s.error);
   const characterName         = useRiggerStore((s) => s.characterName);
+  const exportTarget          = useRiggerStore((s) => s.exportTarget);
   const useSymmetry           = useRiggerStore((s) => s.useSymmetry);
   const diffuseIterations     = useRiggerStore((s) => s.diffuseIterations);
   const bilateralStrength     = useRiggerStore((s) => s.bilateralStrength);
@@ -105,6 +108,7 @@ export function RiggerSidebar() {
 
   const phaseStep: 1 | 2 | 3 =
     uiPhase === 'export' ? 3 : uiPhase === 'preview' ? 2 : 1;
+  const activeProfile = getEngineProfile(exportTarget);
 
   const activeLandmarkIds = getLandmarkIdsForPreset(landmarkPreset);
   const placedActiveCount = activeLandmarkIds.filter((id) => Boolean(landmarks[id])).length;
@@ -208,7 +212,9 @@ export function RiggerSidebar() {
           <h1 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
             <span className="text-base">🦴</span>
             <span>Auto-Rigger Studio</span>
-            <span className="text-[10px] font-normal text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded">VRM 1.0</span>
+            <span className="text-[10px] font-normal text-zinc-300 bg-zinc-800 px-1.5 py-0.5 rounded">
+              {activeProfile.badgeText}
+            </span>
           </h1>
           <p className="text-[10px] text-zinc-500 mt-0.5">Rig → Preview → Export (GLB &amp; FBX)</p>
         </div>
@@ -520,7 +526,9 @@ export function RiggerSidebar() {
                   3 · Rig Options
                 </span>
 
-                <div className="flex flex-col gap-1">
+                <TargetEngineSelector variant="compact" />
+
+                <div className="flex flex-col gap-1 border-t border-zinc-800 pt-2">
                   <label className="text-[10px] text-zinc-400">Character Name</label>
                   <input
                     type="text"

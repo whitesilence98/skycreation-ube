@@ -22,6 +22,11 @@ import {
   driveTestAnimation,
   type TestAnimationMode,
 } from '@/lib/rigger/testAnimations';
+import {
+  getEngineProfile,
+  mapBoneNameForTarget,
+  type ExportTarget,
+} from '@/lib/rigger/engineProfiles';
 import type { VrmBoneName } from '@/lib/rigger/vrmSkeleton';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,6 +42,8 @@ export type FbxAnimationClipOption = 'idle' | 'walk' | 'run' | 'all';
 export interface RiggedFbxExportOptions {
   /** Character / root name written inside the FBX scene graph. Default: 'Character'. */
   name?: string;
+  /** Target game engine / DCC rig convention. Default: 'vrm'. */
+  target?: ExportTarget;
   /** Whether to bake animation curve stack(s) into the FBX. Default: false. */
   includeAnimation?: boolean;
   /** Which procedural test clip(s) to bake when `includeAnimation` is true. Default: 'walk'. */
@@ -364,21 +371,62 @@ export function buildRiggedFbxString(
   options: RiggedFbxExportOptions = {},
 ): { text: string; filename: string; clipNames: string[] } {
   const charName = sanitizeFbxName(options.name ?? 'Character', 'Character');
+  const target: ExportTarget = options.target ?? 'vrm';
+  const profile = getEngineProfile(target);
+  const scaleFactor = profile.scaleFactor;
+  const unitScaleFactor = profile.unitScaleFactor;
   const includeAnimation = options.includeAnimation ?? false;
   const animOption: FbxAnimationClipOption = options.animationClip ?? 'walk';
   const doAnim = includeAnimation;
 
-  // Work on isolated rest-pose clone of fitResult so live canvas preview is never mutated
+  // Work on isolated rest-pose clone of fitResult so live canvas preview is never mutated.
+  // Animation baking runs BEFORE unit scaling, root-bone injection, or engine bone renaming
+  // because `bakeTakes` drives the internal VRM 1.0 skeleton in metres.
   const fitClone = cloneRestFitResult(fitResult);
-  const { bones } = fitClone.built;
-  const numBones = bones.length;
+  const vrmBones = fitClone.built.bones;
+  const numVrmBones = vrmBones.length;
 
-  // Bake animation takes (rest pose is restored after each take)
   const takes = doAnim ? bakeTakes(fitClone, animOption) : [];
+
+  // Convert local positions + baked translation tracks into target engine units (e.g. cm for UE5)
+  if (scaleFactor !== 1) {
+    for (const b of vrmBones) {
+      b.position.multiplyScalar(scaleFactor);
+    }
+    for (const take of takes) {
+      for (const ch of take.channels) {
+        if (ch.property === 'Lcl Translation') {
+          ch.x = ch.x.map((v) => v * scaleFactor);
+          ch.y = ch.y.map((v) => v * scaleFactor);
+          ch.z = ch.z.map((v) => v * scaleFactor);
+        }
+      }
+    }
+  }
+
+  // Optionally prepend a grounded `root` bone at world (0,0,0) above hips/pelvis (UE5 Mannequin)
+  const animBoneOffset = profile.addRootBone ? 1 : 0;
+  let exportBones: THREE.Bone[] = vrmBones;
+  if (profile.addRootBone) {
+    const rootBone = new THREE.Bone();
+    rootBone.name = 'root';
+    rootBone.position.set(0, 0, 0);
+    const prevTop = fitClone.built.root;
+    rootBone.add(prevTop);
+    fitClone.built.root = rootBone;
+    exportBones = [rootBone, ...vrmBones];
+  }
+
+  // Remap exported bone names to target engine convention without altering VRM hierarchy math
+  for (const b of exportBones) {
+    if (profile.addRootBone && b === exportBones[0]) continue;
+    b.name = mapBoneNameForTarget(b.name, target);
+  }
+  const numBones = exportBones.length;
 
   // Re-ensure clean rest world matrices for TransformLink & BindPose
   fitClone.built.root.updateMatrixWorld(true);
-  for (const b of bones) b.updateMatrixWorld(true);
+  for (const b of exportBones) b.updateMatrixWorld(true);
 
   // Extract triangle geometry cleanly in original vertex indexing
   const geo = geometry.clone();
@@ -435,7 +483,8 @@ export function buildRiggedFbxString(
     }
   }
 
-  // Accumulate per-bone vertex weights from interleaved skinIndex / skinWeight
+  // Accumulate per-bone vertex weights from interleaved skinIndex / skinWeight.
+  // Offset by `animBoneOffset` when a grounded `root` bone sits at index 0 with 0 skinned weights.
   const clusterIndices: number[][] = Array.from({ length: numBones }, () => []);
   const clusterWeights: number[][] = Array.from({ length: numBones }, () => []);
   const skinIdx = weights.skinIndex;
@@ -445,9 +494,10 @@ export function buildRiggedFbxString(
     for (let k = 0; k < 4; k++) {
       const b = skinIdx[base + k]!;
       const w = skinWt[base + k]!;
-      if (w > 1e-6 && b < numBones) {
-        clusterIndices[b]!.push(v);
-        clusterWeights[b]!.push(w);
+      if (w > 1e-6 && b < numVrmBones) {
+        const exportIdx = b + animBoneOffset;
+        clusterIndices[exportIdx]!.push(v);
+        clusterWeights[exportIdx]!.push(w);
       }
     }
   }
@@ -462,9 +512,9 @@ export function buildRiggedFbxString(
   const poseId = allocId();
   const skinId = allocId();
 
-  const boneIds = bones.map(() => allocId());
-  const boneAttrIds = bones.map(() => allocId());
-  const clusterIds = bones.map(() => allocId());
+  const boneIds = exportBones.map(() => allocId());
+  const boneAttrIds = exportBones.map(() => allocId());
+  const clusterIds = exportBones.map(() => allocId());
 
   const matIds = materials.map(() => allocId());
   const texIds = materials.map((m) => (m.diffuseTex ? allocId() : null));
@@ -541,8 +591,8 @@ GlobalSettings:  {
 \t\tP: "CoordAxisSign", "int", "Integer", "",1
 \t\tP: "OriginalUpAxis", "int", "Integer", "",1
 \t\tP: "OriginalUpAxisSign", "int", "Integer", "",1
-\t\tP: "UnitScaleFactor", "double", "Number", "",100
-\t\tP: "OriginalUnitScaleFactor", "double", "Number", "",100
+\t\tP: "UnitScaleFactor", "double", "Number", "",${unitScaleFactor}
+\t\tP: "OriginalUnitScaleFactor", "double", "Number", "",${unitScaleFactor}
 \t\tP: "AmbientColor", "ColorRGB", "Color", "",0,0,0
 \t\tP: "DefaultCamera", "KString", "", "", "Producer Perspective"
 \t\tP: "TimeMode", "enum", "", "",6
@@ -621,12 +671,15 @@ Objects:  {`);
 
   // ── 1. Geometry ───────────────────────────────────────────────────────────
   const posArr = posAttr.array as Float32Array;
+  const scaledPosArr = scaleFactor === 1
+    ? posArr.subarray(0, vertexCount * 3)
+    : Float32Array.from(posArr.subarray(0, vertexCount * 3), (v) => v * scaleFactor);
   const normArr = normAttr.array as Float32Array;
   const hasUV = Boolean(uvArray && uvArray.length === vertexCount * 2);
 
   push(`\tGeometry: ${geoId}, "Geometry::${charName}_Geo", "Mesh" {
 \t\tVertices: *${vertexCount * 3} {`);
-  push(formatNumberArrayProperty('\t\t\t', posArr.subarray(0, vertexCount * 3)));
+  push(formatNumberArrayProperty('\t\t\t', scaledPosArr));
   push(`\t\t}
 \t\tPolygonVertexIndex: *${polygonVertexIndices.length} {`);
   push(formatIntArrayProperty('\t\t\t', polygonVertexIndices));
@@ -723,12 +776,12 @@ Objects:  {`);
 \t}`);
 
   for (let i = 0; i < numBones; i++) {
-    const bone = bones[i]!;
+    const bone = exportBones[i]!;
     const attrId = boneAttrIds[i]!;
     const boneId = boneIds[i]!;
     push(`\tNodeAttribute: ${attrId}, "NodeAttribute::${bone.name}", "LimbNode" {
 \t\tProperties70:  {
-\t\t\tP: "Size", "double", "Number", "",0.05
+\t\t\tP: "Size", "double", "Number", "",${fmt(0.05 * scaleFactor)}
 \t\t}
 \t\tTypeFlags: "Skeleton"
 \t}`);
@@ -756,7 +809,7 @@ Objects:  {`);
 
   const identityStr = '1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1';
   for (let i = 0; i < numBones; i++) {
-    const bone = bones[i]!;
+    const bone = exportBones[i]!;
     const clusterId = clusterIds[i]!;
     const idxs = clusterIndices[i]!;
     const wts = clusterWeights[i]!;
@@ -802,7 +855,7 @@ Objects:  {`);
     push(`\t\tPoseNode:  {
 \t\t\tNode: ${boneIds[i]!}
 \t\t\tMatrix: *16 {
-\t\t\t\ta: ${fmtMat4(bones[i]!.matrixWorld)}
+\t\t\t\ta: ${fmtMat4(exportBones[i]!.matrixWorld)}
 \t\t\t}
 \t\t}`);
   }
@@ -930,17 +983,17 @@ Connections:  {`);
   }
 
   // Bone hierarchy & Skin deformer
-  const boneIndexByName = new Map<string, number>();
-  bones.forEach((b, i) => boneIndexByName.set(b.name, i));
+  const boneIndexByBone = new Map<THREE.Bone, number>();
+  exportBones.forEach((b, i) => boneIndexByBone.set(b, i));
 
   push(`\tC: "OO",${skinId},${geoId}`);
   for (let i = 0; i < numBones; i++) {
-    const bone = bones[i]!;
+    const bone = exportBones[i]!;
     const boneId = boneIds[i]!;
     const attrId = boneAttrIds[i]!;
     const clusterId = clusterIds[i]!;
     const parentIdx = bone.parent && (bone.parent as THREE.Bone).isBone
-      ? boneIndexByName.get(bone.parent.name)
+      ? boneIndexByBone.get(bone.parent as THREE.Bone)
       : undefined;
     const parentId = parentIdx !== undefined ? boneIds[parentIdx]! : armatureId;
 
@@ -955,7 +1008,7 @@ Connections:  {`);
     const aids = animIdList[ti]!;
     push(`\tC: "OO",${aids.layerId},${aids.stackId}`);
     for (const item of aids.curves) {
-      const boneId = boneIds[item.channel.boneIndex]!;
+      const boneId = boneIds[item.channel.boneIndex + animBoneOffset]!;
       push(`\tC: "OO",${item.curveNodeId},${aids.layerId}`);
       push(`\tC: "OP",${item.curveNodeId},${boneId}, "${item.channel.property}"`);
       push(`\tC: "OP",${item.curveXId},${item.curveNodeId}, "d|X"`);
@@ -968,7 +1021,10 @@ Connections:  {`);
 
   geo.dispose();
 
-  const suffix = doAnim ? (animOption === 'all' ? '_rigged_anim.fbx' : `_rigged_${animOption}.fbx`) : '_rigged_skeleton.fbx';
+  const tag = profile.fbxSuffixTag;
+  const suffix = doAnim
+    ? (animOption === 'all' ? `_${tag}_anim.fbx` : `_${tag}_${animOption}.fbx`)
+    : `_${tag}_skeleton.fbx`;
   return {
     text: out.join('\n') + '\n',
     filename: `${charName}${suffix}`,

@@ -23,6 +23,7 @@ import type { FitResult } from '@/lib/rigger/templateFitter';
 import type { WeightTransferResult } from '@/lib/rigger/weightTransfer';
 import type { DiffusionResult } from '@/lib/rigger/heatDiffusion';
 import type { TestAnimationMode } from '@/lib/rigger/testAnimations';
+import type { ExportTarget } from '@/lib/rigger/engineProfiles';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Domain types
@@ -31,6 +32,7 @@ import type { TestAnimationMode } from '@/lib/rigger/testAnimations';
 export type RigStage = 'idle' | 'mesh-loaded' | 'landmarks-ready' | 'rigging' | 'done' | 'error';
 export type UiPhase = 'rig' | 'preview' | 'export';
 export type LandmarkMode = 'auto' | 'manual';
+export type { ExportTarget };
 
 /**
  * The 8 anatomical landmarks required before rigging can proceed. The list
@@ -121,6 +123,7 @@ export interface RiggerState {
 
   // ── Options ─────────────────────────────────────────────────────────────
   characterName: string;
+  exportTarget: ExportTarget;
   includeVrm: boolean;
   diffuseIterations: number;
   bilateralStrength: number;
@@ -157,6 +160,7 @@ export interface RiggerState {
   toggleWeightMap: () => void;
   setTestAnimation: (mode: TestAnimationMode) => void;
   setCharacterName: (n: string) => void;
+  setExportTarget: (target: ExportTarget) => void;
   setOption: <
     K extends keyof Pick<
       RiggerState,
@@ -207,6 +211,7 @@ type RiggerStateData = Omit<
   | 'toggleWeightMap'
   | 'setTestAnimation'
   | 'setCharacterName'
+  | 'setExportTarget'
   | 'setOption'
   | 'reset'
 >;
@@ -243,6 +248,7 @@ const DEFAULT_STATE: RiggerStateData = {
   testAnimation: 'tpose' as TestAnimationMode,
   // Options
   characterName: '',
+  exportTarget: 'vrm',
   includeVrm: true,
   diffuseIterations: 4,
   bilateralStrength: 0.5,
@@ -436,6 +442,8 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
   // ── Options ───────────────────────────────────────────────────────────────
 
   setCharacterName: (n) => set({ characterName: n }),
+
+  setExportTarget: (target) => set({ exportTarget: target }),
 
   setOption: (key, val) => set({ [key]: val } as Pick<RiggerState, typeof key>),
 
