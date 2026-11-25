@@ -7,51 +7,18 @@
  * and by how much, producing the `skinIndex` and `skinWeight` buffer
  * attributes required by glTF 2.0 / Three.js SkinnedMesh.
  *
- * ─── Algorithm ───────────────────────────────────────────────────────────────
- *
- *  Stage A  Pre-compute
- *    For each bone: cache its world-space segment (start → end),
- *    its anatomical region, and bilateral side (left / right / centre).
- *
- *  Stage B  Per-vertex scoring
- *    For each vertex:
- *      1. Transform vertex to world space (via mesh.matrixWorld).
- *      2. For each bone compute the distance from the vertex to the
- *         closest point on the bone's segment.
- *      3. Apply a soft inverse-distance score:
- *           score = 1 / (d^falloff + ε)
- *      4. Multiply by a bilateral mask:
- *           left bones are penalised when the vertex is on the right side,
- *           right bones when on the left — prevents cross-contamination.
- *      5. Multiply by a region-affinity mask:
- *           spine bones shrink when far from the spine axis;
- *           arm/leg bones shrink when far from their own chain.
- *
- *  Stage C  Selection & normalisation
- *    1. Keep the top `maxInfluences` (≤ 4) bones by score.
- *    2. Zero-out any weight below `minWeight`.
- *    3. Normalise so the remaining weights sum to 1.0.
- *    4. Pack into interleaved Uint16Array (indices) + Float32Array (weights).
- *
- * ─── Performance ─────────────────────────────────────────────────────────────
- *
- *  O(V × B) where V = vertex count, B = bone count (max 54).
- *  For a typical 15k-vertex body mesh: ~810k operations → < 50 ms in browser.
- *  For 100k-vertex dense meshes the caller should run this in a Web Worker;
- *  a helper `transferWeightsAsync` is provided for that path.
- *
- * ─── Legal ───────────────────────────────────────────────────────────────────
- *
- *  Pure geometric algorithm — no ML model weights, no proprietary data.
- *  Distance-to-segment and inverse-distance falloff are public-domain maths.
- *  Bilateral masking concept is standard industry practice, not patented.
+ * Pure geometric algorithm — no ML model weights, no proprietary data.
  *
  * Usage:
  *   import { transferWeights } from '@/lib/rigger/weightTransfer';
  */
 
 import * as THREE from 'three';
-import { VRM_BONE_DEFS, type VrmBoneDef, type VrmBoneName } from '@/lib/rigger/vrmSkeleton';
+import {
+  ALL_RIG_BONE_DEFS,
+  type BoneRegion,
+  type RigBoneName,
+} from '@/lib/rigger/vrmSkeleton';
 import type { FitResult } from '@/lib/rigger/templateFitter';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,69 +106,133 @@ export interface WeightTransferResult {
 // Internal types
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Bilateral side of a bone. */
 type BoneSide = 'left' | 'right' | 'centre';
 
-/** Pre-computed per-bone data used during weight scoring. */
+interface Segment3 {
+  ax: number; ay: number; az: number;
+  dx: number; dy: number; dz: number; // unit direction
+  len: number;
+}
+
 interface BoneCache {
-  index: number;           // position in skeleton.bones[]
-  name: VrmBoneName;
+  index: number;
+  name: RigBoneName;
   side: BoneSide;
-  region: VrmBoneDef['region'];
-  /** World-space segment start (usually the bone's own world position). */
+  region: BoneRegion;
   segStart: THREE.Vector3;
-  /** World-space segment end (child centroid or stub tip). */
-  segEnd:   THREE.Vector3;
-  /** Precomputed segment direction and length for fast projection. */
-  segDir:   THREE.Vector3;  // normalised
-  segLen:   number;         // metres
+  segEnd: THREE.Vector3;
+  segDir: THREE.Vector3;
+  segLen: number;
+}
+
+interface RegionContext {
+  midX: number;
+  hipY: number;
+  groinY: number | undefined;
+  neckY: number;
+  headY: number;
+  shoulderY: number;
+  shoulderWidth: number;
+  hipWidth: number;
+  maxLegX: number;
+  scale: number;
+  leftArmSegs: Segment3[];
+  rightArmSegs: Segment3[];
+  leftLegSegs: Segment3[];
+  rightLegSegs: Segment3[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. Bone cache builder
+// 1. Bone & segment cache builders
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Determine which side of the body a bone belongs to from its name. */
-function getBoneSide(name: VrmBoneName): BoneSide {
-  if (name.startsWith('left'))  return 'left';
+function getBoneSide(name: string): BoneSide {
+  if (name.startsWith('left')) return 'left';
   if (name.startsWith('right')) return 'right';
   return 'centre';
 }
 
+function makeSegment(a: THREE.Vector3, b: THREE.Vector3): Segment3 {
+  const vx = b.x - a.x;
+  const vy = b.y - a.y;
+  const vz = b.z - a.z;
+  const len = Math.hypot(vx, vy, vz);
+  if (len > 1e-6) {
+    return { ax: a.x, ay: a.y, az: a.z, dx: vx / len, dy: vy / len, dz: vz / len, len };
+  }
+  return { ax: a.x, ay: a.y, az: a.z, dx: 0, dy: 1, dz: 0, len: 0 };
+}
+
+function minDistToSegments(px: number, py: number, pz: number, segs: Segment3[]): number {
+  let bestSq = Infinity;
+  for (const s of segs) {
+    const rx = px - s.ax;
+    const ry = py - s.ay;
+    const rz = pz - s.az;
+    const t = Math.max(0, Math.min(s.len, rx * s.dx + ry * s.dy + rz * s.dz));
+    const cx = s.ax + t * s.dx;
+    const cy = s.ay + t * s.dy;
+    const cz = s.az + t * s.dz;
+    const dSq = (px - cx) ** 2 + (py - cy) ** 2 + (pz - cz) ** 2;
+    if (dSq < bestSq) bestSq = dSq;
+  }
+  return Math.sqrt(bestSq);
+}
+
 /**
  * Builds per-bone segment cache from the fitted skeleton's world positions.
- * Segments run from each bone's world position to the centroid of its children.
+ * Segments run from each bone's world position to the centroid of its children,
+ * and leaf bone stubs extend along the parent → bone direction.
  */
 function buildBoneCache(fitResult: FitResult): BoneCache[] {
-  const { built, worldPositions } = fitResult;
+  const { built, worldPositions, scale } = fitResult;
+  const defByName = new Map(ALL_RIG_BONE_DEFS.map((d) => [d.name, d]));
   const cache: BoneCache[] = [];
 
   for (let i = 0; i < built.bones.length; i++) {
-    const bone = built.bones[i];
-    const name  = bone.name as VrmBoneName;
-    const def   = VRM_BONE_DEFS.find((d) => d.name === name);
+    const bone = built.bones[i]!;
+    const name = bone.name as RigBoneName;
+    const def = defByName.get(name);
     if (!def) continue;
 
     const segStart = worldPositions.get(name) ?? bone.getWorldPosition(new THREE.Vector3());
 
-    // Segment end: centroid of children's world positions
-    const childBones = built.bones.filter((b) => {
-      const childDef = VRM_BONE_DEFS.find((d) => d.name === b.name);
-      return childDef?.parent === name;
+    // Prefer non-secondary children for core VRM bone segment direction so
+    // optional breast/glute attachments don't skew spine/upperChest segments.
+    const childBones = bone.children.filter((c): c is THREE.Bone => {
+      if (!(c as THREE.Bone).isBone) return false;
+      if (def.region !== 'secondary') {
+        const cDef = defByName.get(c.name as RigBoneName);
+        if (cDef?.region === 'secondary') return false;
+      }
+      return true;
     });
 
     let segEnd: THREE.Vector3;
     if (childBones.length > 0) {
       segEnd = new THREE.Vector3();
       for (const child of childBones) {
-        const childPos = worldPositions.get(child.name as VrmBoneName)
+        const childPos = worldPositions.get(child.name as RigBoneName)
           ?? child.getWorldPosition(new THREE.Vector3());
         segEnd.add(childPos);
       }
       segEnd.divideScalar(childBones.length);
     } else {
-      // Leaf bone: tiny stub (3 cm) so it still has a segment length > 0
-      segEnd = segStart.clone().add(new THREE.Vector3(0, 0.03, 0));
+      // Leaf bone: orient stub along parent -> bone direction so A-pose hands/fingers/toes
+      // extend cleanly along the actual limb orientation rather than hardcoded +Y.
+      const dir = new THREE.Vector3(0, 1, 0);
+      if (bone.parent && (bone.parent as THREE.Bone).isBone) {
+        const parentPos = worldPositions.get(bone.parent.name as RigBoneName)
+          ?? bone.parent.getWorldPosition(new THREE.Vector3());
+        const diff = new THREE.Vector3().subVectors(segStart, parentPos);
+        if (diff.lengthSq() > 1e-8) {
+          dir.copy(diff).normalize();
+        }
+      }
+      const stubLen = (name === 'leftHand' || name === 'rightHand' || name === 'head')
+        ? 0.08 * scale
+        : 0.03 * scale;
+      segEnd = segStart.clone().addScaledVector(dir, stubLen);
     }
 
     const segVec = new THREE.Vector3().subVectors(segEnd, segStart);
@@ -214,7 +245,7 @@ function buildBoneCache(fitResult: FitResult): BoneCache[] {
       side: getBoneSide(name),
       region: def.region,
       segStart: segStart.clone(),
-      segEnd:   segEnd.clone(),
+      segEnd: segEnd.clone(),
       segDir,
       segLen,
     });
@@ -223,28 +254,99 @@ function buildBoneCache(fitResult: FitResult): BoneCache[] {
   return cache;
 }
 
+function buildRegionContext(fitResult: FitResult): RegionContext {
+  const wp = fitResult.worldPositions;
+  const hipPos = wp.get('hips');
+  const neckPos = wp.get('neck');
+  const headPos = wp.get('head');
+  const lUpperArm = wp.get('leftUpperArm');
+  const lLowerArm = wp.get('leftLowerArm');
+  const lHand = wp.get('leftHand');
+  const rUpperArm = wp.get('rightUpperArm');
+  const rLowerArm = wp.get('rightLowerArm');
+  const rHand = wp.get('rightHand');
+  const lUpperLeg = wp.get('leftUpperLeg');
+  const lLowerLeg = wp.get('leftLowerLeg');
+  const lFoot = wp.get('leftFoot');
+  const rUpperLeg = wp.get('rightUpperLeg');
+  const rLowerLeg = wp.get('rightLowerLeg');
+  const rFoot = wp.get('rightFoot');
+
+  const midX = hipPos?.x ?? 0;
+  const scale = fitResult.scale;
+
+  const buildArmChain = (
+    upper: THREE.Vector3 | undefined,
+    lower: THREE.Vector3 | undefined,
+    hand: THREE.Vector3 | undefined,
+  ): Segment3[] => {
+    const segs: Segment3[] = [];
+    if (upper && lower) segs.push(makeSegment(upper, lower));
+    if (lower && hand) {
+      segs.push(makeSegment(lower, hand));
+      const tipDir = new THREE.Vector3().subVectors(hand, lower);
+      if (tipDir.lengthSq() > 1e-8) {
+        tipDir.normalize();
+        segs.push(makeSegment(hand, hand.clone().addScaledVector(tipDir, 0.14 * scale)));
+      }
+    }
+    return segs;
+  };
+
+  const buildLegChain = (
+    upper: THREE.Vector3 | undefined,
+    lower: THREE.Vector3 | undefined,
+    foot: THREE.Vector3 | undefined,
+  ): Segment3[] => {
+    const segs: Segment3[] = [];
+    if (upper && lower) segs.push(makeSegment(upper, lower));
+    if (lower && foot) segs.push(makeSegment(lower, foot));
+    return segs;
+  };
+
+  const legXs = [lUpperLeg, lLowerLeg, lFoot, rUpperLeg, rLowerLeg, rFoot]
+    .filter((v): v is THREE.Vector3 => Boolean(v))
+    .map((v) => Math.abs(v.x - midX));
+  const maxLegX = Math.max(fitResult.hipWidth * 0.65, ...(legXs.length > 0 ? legXs : [0.12 * scale])) + 0.07 * scale;
+
+  const shoulderY =
+    lUpperArm && rUpperArm
+      ? (lUpperArm.y + rUpperArm.y) * 0.5
+      : (neckPos?.y ?? 1.4);
+
+  return {
+    midX,
+    hipY: hipPos?.y ?? 0.9,
+    groinY: fitResult.groinY,
+    neckY: neckPos?.y ?? 1.4,
+    headY: headPos?.y ?? 1.6,
+    shoulderY,
+    shoulderWidth: fitResult.shoulderWidth,
+    hipWidth: fitResult.hipWidth,
+    maxLegX,
+    scale,
+    leftArmSegs: buildArmChain(lUpperArm, lLowerArm, lHand),
+    rightArmSegs: buildArmChain(rUpperArm, rLowerArm, rHand),
+    leftLegSegs: buildLegChain(lUpperLeg, lLowerLeg, lFoot),
+    rightLegSegs: buildLegChain(rUpperLeg, rLowerLeg, rFoot),
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. Distance to bone segment (core geometry)
+// 2. Distance to bone segment
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Returns the squared distance from point `p` to the closest point on the
- * segment defined by `bc.segStart` → `bc.segEnd`.
- *
- * Squared distance avoids a sqrt for the intermediate comparisons — the
- * final score uses the actual distance, computed once after selection.
- */
 function distSqToSegment(
-  px: number, py: number, pz: number,
+  px: number,
+  py: number,
+  pz: number,
   bc: BoneCache,
 ): number {
-  // t = project (p - segStart) onto segDir, clamped to [0, segLen]
   const dx = px - bc.segStart.x;
   const dy = py - bc.segStart.y;
   const dz = pz - bc.segStart.z;
-  const t  = Math.max(0, Math.min(bc.segLen, dx * bc.segDir.x + dy * bc.segDir.y + dz * bc.segDir.z));
+  const t = Math.max(0, Math.min(bc.segLen, dx * bc.segDir.x + dy * bc.segDir.y + dz * bc.segDir.z));
 
-  // Closest point on segment
   const cx = bc.segStart.x + t * bc.segDir.x;
   const cy = bc.segStart.y + t * bc.segDir.y;
   const cz = bc.segStart.z + t * bc.segDir.z;
@@ -259,303 +361,394 @@ function distSqToSegment(
 // 3. Bilateral mask
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Returns a multiplier [0, 1] that penalises a bone for influencing a vertex
- * that is on the wrong side of the body's midplane.
- *
- * Uses a smooth step across a transition band of `bandWidth` metres
- * centred on X = 0 (the sagittal plane). This avoids a hard cutoff and
- * keeps weights clean near the midline (spine, sternum).
- *
- * @param vertexX     The vertex's X coordinate in world space.
- * @param side        Which side the bone belongs to.
- * @param strength    How strongly to enforce bilateral symmetry [0–1].
- * @param hipWidth    Used to derive a sensible transition band width.
- */
 function bilateralMask(
   vertexX: number,
+  midX: number,
   side: BoneSide,
   strength: number,
   hipWidth: number,
 ): number {
   if (side === 'centre' || strength <= 0) return 1.0;
 
-  // Transition band: 20% of half-hip-width (empirically good)
   const band = Math.max(0.02, hipWidth * 0.1);
-
-  // smoothstep: 0 at the wrong side, 1 well into the correct side
-  const signed = side === 'left' ? vertexX : -vertexX; // positive = correct side
+  const relX = vertexX - midX;
+  const signed = side === 'left' ? relX : -relX;
   const t = Math.max(0, Math.min(1, (signed + band) / (2 * band)));
-  const smooth = t * t * (3 - 2 * t);       // classic smoothstep
+  const smooth = t * t * (3 - 2 * t);
 
-  // Lerp between no-penalty (1.0) and full-bilateral (smooth) based on strength
   return 1.0 - strength * (1.0 - smooth);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. Region-affinity mask
+// 4. Region-affinity mask (A-pose & groin aware)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Approximate anatomical region of a vertex, inferred from its world position
- * relative to the skeleton's key measurements.
- */
 type VertexRegion = 'spine' | 'head' | 'leftArm' | 'rightArm' | 'leftLeg' | 'rightLeg';
 
 function classifyVertexRegion(
-  px: number, py: number,
-  hipY: number,
-  neckY: number,
-  headY: number,
-  shoulderWidth: number,
+  px: number,
+  py: number,
+  pz: number,
+  ctx: RegionContext,
 ): VertexRegion {
   // Above neck → head
-  if (py > neckY + (headY - neckY) * 0.3) return 'head';
+  if (py > ctx.neckY + (ctx.headY - ctx.neckY) * 0.3) return 'head';
 
-  // Below hips → leg (determine side by X)
-  if (py < hipY) {
-    return px >= 0 ? 'leftLeg' : 'rightLeg';
+  const relX = px - ctx.midX;
+  const absRelX = Math.abs(relX);
+
+  // Check arm chains FIRST so lowered A-pose arms/elbows/wrists/hands hanging
+  // below hipY are classified as leftArm/rightArm instead of leftLeg/rightLeg,
+  // while requiring proximity to the arm chain so wide flared skirts in T-pose
+  // aren't misclassified as arms.
+  if (py <= ctx.shoulderY + 0.12 * ctx.scale && absRelX > ctx.shoulderWidth * 0.42) {
+    const maxArmReach = 0.28 * ctx.scale;
+    if (relX > 0 && ctx.leftArmSegs.length > 0) {
+      const armDist = minDistToSegments(px, py, pz, ctx.leftArmSegs);
+      const legDist = ctx.leftLegSegs.length > 0 ? minDistToSegments(px, py, pz, ctx.leftLegSegs) : Infinity;
+      if (armDist < maxArmReach && (armDist < legDist * 0.85 || (py >= ctx.hipY && absRelX > ctx.maxLegX))) {
+        return 'leftArm';
+      }
+    } else if (relX < 0 && ctx.rightArmSegs.length > 0) {
+      const armDist = minDistToSegments(px, py, pz, ctx.rightArmSegs);
+      const legDist = ctx.rightLegSegs.length > 0 ? minDistToSegments(px, py, pz, ctx.rightLegSegs) : Infinity;
+      if (armDist < maxArmReach && (armDist < legDist * 0.85 || (py >= ctx.hipY && absRelX > ctx.maxLegX))) {
+        return 'rightArm';
+      }
+    }
   }
 
-  // Torso height band: check if vertex is laterally outside shoulder width / 2
-  const halfShoulder = shoulderWidth * 0.55;
-  if (px >  halfShoulder) return 'leftArm';
-  if (px < -halfShoulder) return 'rightArm';
+  // Pelvis / groin split: when groinY is known, keep midline pelvis above groinY
+  // in 'spine' and classify below groinY (or laterally outside core pelvis) as leg.
+  if (ctx.groinY !== undefined) {
+    if (py < ctx.groinY) {
+      return relX >= 0 ? 'leftLeg' : 'rightLeg';
+    }
+    if (py < ctx.hipY && absRelX > ctx.hipWidth * 0.35) {
+      return relX >= 0 ? 'leftLeg' : 'rightLeg';
+    }
+  } else if (py < ctx.hipY) {
+    return relX >= 0 ? 'leftLeg' : 'rightLeg';
+  }
+
+  const halfShoulder = ctx.shoulderWidth * 0.52;
+  if (relX > halfShoulder) return 'leftArm';
+  if (relX < -halfShoulder) return 'rightArm';
 
   return 'spine';
 }
 
-/** Affinity table: bone region → compatible vertex regions → weight multiplier */
-const REGION_AFFINITY: Record<VrmBoneDef['region'], Partial<Record<VertexRegion, number>>> = {
-  spine:        { spine: 1.0,  head: 0.4,  leftArm: 0.3,  rightArm: 0.3,  leftLeg: 0.3, rightLeg: 0.3 },
-  head:         { head:  1.0,  spine: 0.2 },
-  leftArm:      { leftArm: 1.0,  spine: 0.4 },
-  rightArm:     { rightArm: 1.0, spine: 0.4 },
-  leftLeg:      { leftLeg: 1.0,  spine: 0.3 },
-  rightLeg:     { rightLeg: 1.0, spine: 0.3 },
-  leftFinger:   { leftArm: 1.0 },
-  rightFinger:  { rightArm: 1.0 },
+const REGION_AFFINITY: Record<BoneRegion, Partial<Record<VertexRegion, number>>> = {
+  spine:       { spine: 1.0,  head: 0.4,  leftArm: 0.3,  rightArm: 0.3,  leftLeg: 0.3, rightLeg: 0.3 },
+  head:        { head:  1.0,  spine: 0.2 },
+  leftArm:     { leftArm: 1.0,  spine: 0.4 },
+  rightArm:    { rightArm: 1.0, spine: 0.4 },
+  leftLeg:     { leftLeg: 1.0,  spine: 0.3 },
+  rightLeg:    { rightLeg: 1.0, spine: 0.3 },
+  leftFinger:  { leftArm: 1.0 },
+  rightFinger: { rightArm: 1.0 },
+  secondary:   { spine: 1.0, leftLeg: 0.75, rightLeg: 0.75 },
 };
 
 function regionAffinityMask(
-  boneRegion: VrmBoneDef['region'],
+  boneRegion: BoneRegion,
   vertexRegion: VertexRegion,
   strength: number,
 ): number {
   if (strength <= 0) return 1.0;
-  const affinity = (REGION_AFFINITY[boneRegion]?.[vertexRegion] ?? 0.05);
-  // Lerp between full influence (1.0) and table value based on strength
+  const affinity = REGION_AFFINITY[boneRegion]?.[vertexRegion] ?? 0.05;
   return 1.0 - strength * (1.0 - affinity);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. Per-vertex weight scoring
+// 5. Per-vertex weight scoring & packing (shared by sync and async paths)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Scores every bone for a single vertex, returning an array of
- * `[boneIndex, score]` sorted descending by score.
- */
-function scoreBonesForVertex(
-  px: number, py: number, pz: number,
-  boneCache: BoneCache[],
-  falloffExp: number,
-  bilateralStrength: number,
-  regionAffinityStrength: number,
-  hipWidth: number,
-  hipY: number,
-  neckY: number,
-  headY: number,
-  shoulderWidth: number,
-): Array<[index: number, score: number]> {
-  const EPS = 1e-6;
+// Module-level fixed-capacity scratch buffers for zero-GC top-K scoring per vertex.
+const _topBoneIdx = new Int32Array(4);
+const _topScore   = new Float64Array(4);
 
-  const vertexRegion = classifyVertexRegion(px, py, hipY, neckY, headY, shoulderWidth);
+const VREGION_INDEX: Readonly<Record<VertexRegion, number>> = {
+  spine: 0,
+  head: 1,
+  leftArm: 2,
+  rightArm: 3,
+  leftLeg: 4,
+  rightLeg: 5,
+};
 
-  const scores: Array<[number, number]> = [];
+interface FlatBoneArrays {
+  count: number;
+  boneIndex: Uint16Array;
+  sideCode: Uint8Array; // 0 = centre, 1 = left, 2 = right
+  segAx: Float64Array;
+  segAy: Float64Array;
+  segAz: Float64Array;
+  segDx: Float64Array;
+  segDy: Float64Array;
+  segDz: Float64Array;
+  segLen: Float64Array;
+  /** Precomputed affinity table [bi * 6 + vRegionIdx] for zero lookups inside hot loop. */
+  affinityTable: Float64Array;
+}
 
-  for (const bc of boneCache) {
-    const distSq = distSqToSegment(px, py, pz, bc);
-    const dist   = Math.sqrt(distSq);
+function flattenBoneCache(boneCache: BoneCache[], regionStrength: number): FlatBoneArrays {
+  const count = boneCache.length;
+  const boneIndex = new Uint16Array(count);
+  const sideCode = new Uint8Array(count);
+  const segAx = new Float64Array(count);
+  const segAy = new Float64Array(count);
+  const segAz = new Float64Array(count);
+  const segDx = new Float64Array(count);
+  const segDy = new Float64Array(count);
+  const segDz = new Float64Array(count);
+  const segLen = new Float64Array(count);
+  const affinityTable = new Float64Array(count * 6);
+  const regions: VertexRegion[] = ['spine', 'head', 'leftArm', 'rightArm', 'leftLeg', 'rightLeg'];
 
-    // Inverse-distance score with configurable exponent
-    let score = 1.0 / (Math.pow(dist, falloffExp) + EPS);
-
-    // Bilateral mask
-    score *= bilateralMask(px, bc.side, bilateralStrength, hipWidth);
-
-    // Region-affinity mask
-    score *= regionAffinityMask(bc.region, vertexRegion, regionAffinityStrength);
-
-    if (score > EPS) {
-      scores.push([bc.index, score]);
+  for (let i = 0; i < count; i++) {
+    const bc = boneCache[i]!;
+    boneIndex[i] = bc.index;
+    sideCode[i] = bc.side === 'left' ? 1 : bc.side === 'right' ? 2 : 0;
+    segAx[i] = bc.segStart.x;
+    segAy[i] = bc.segStart.y;
+    segAz[i] = bc.segStart.z;
+    segDx[i] = bc.segDir.x;
+    segDy[i] = bc.segDir.y;
+    segDz[i] = bc.segDir.z;
+    segLen[i] = bc.segLen;
+    for (let r = 0; r < 6; r++) {
+      affinityTable[i * 6 + r] = regionAffinityMask(bc.region, regions[r]!, regionStrength);
     }
   }
 
-  // Sort descending by score (best bones first)
-  scores.sort((a, b) => b[1] - a[1]);
-  return scores;
+  return { count, boneIndex, sideCode, segAx, segAy, segAz, segDx, segDy, segDz, segLen, affinityTable };
+}
+
+function scoreVertexAndPack(
+  vi: number,
+  px: number,
+  py: number,
+  pz: number,
+  flat: FlatBoneArrays,
+  ctx: RegionContext,
+  falloffExp: number,
+  bilateralStrength: number,
+  maxInfluences: number,
+  minWeight: number,
+  skinIndex: Uint16Array,
+  skinWeight: Float32Array,
+  boneVertexCounts: Uint32Array,
+  boneCount: number,
+): void {
+  const EPS = 1e-6;
+  const affBase = VREGION_INDEX[classifyVertexRegion(px, py, pz, ctx)];
+
+  // Precompute left/right bilateral masks once per vertex (independent of bone)
+  let maskLeft = 1.0;
+  let maskRight = 1.0;
+  if (bilateralStrength > 0) {
+    const band = Math.max(0.02, ctx.hipWidth * 0.1);
+    const inv2Band = 1 / (2 * band);
+    const relX = px - ctx.midX;
+
+    const tL = Math.max(0, Math.min(1, (relX + band) * inv2Band));
+    maskLeft = 1.0 - bilateralStrength * (1.0 - tL * tL * (3 - 2 * tL));
+
+    const tR = Math.max(0, Math.min(1, (-relX + band) * inv2Band));
+    maskRight = 1.0 - bilateralStrength * (1.0 - tR * tR * (3 - 2 * tR));
+  }
+
+  const isSqFalloff = Math.abs(falloffExp - 2) < 1e-4;
+  const isLinFalloff = Math.abs(falloffExp - 1) < 1e-4;
+  const halfExp = falloffExp * 0.5;
+
+  const { count, boneIndex, sideCode, segAx, segAy, segAz, segDx, segDy, segDz, segLen, affinityTable } = flat;
+  let topCount = 0;
+
+  for (let bi = 0; bi < count; bi++) {
+    const rx = px - segAx[bi]!;
+    const ry = py - segAy[bi]!;
+    const rz = pz - segAz[bi]!;
+    const dx = segDx[bi]!;
+    const dy = segDy[bi]!;
+    const dz = segDz[bi]!;
+    let t = rx * dx + ry * dy + rz * dz;
+    const len = segLen[bi]!;
+    if (t < 0) t = 0;
+    else if (t > len) t = len;
+
+    const ex = rx - t * dx;
+    const ey = ry - t * dy;
+    const ez = rz - t * dz;
+    const dSq = ex * ex + ey * ey + ez * ez;
+
+    const distPow = isSqFalloff ? dSq : isLinFalloff ? Math.sqrt(dSq) : Math.pow(dSq, halfExp);
+    const side = sideCode[bi]!;
+    const bMask = side === 1 ? maskLeft : side === 2 ? maskRight : 1.0;
+    const score = (bMask * affinityTable[bi * 6 + affBase]!) / (distPow + EPS);
+    if (score <= EPS) continue;
+
+    if (topCount < maxInfluences) {
+      let pos = topCount++;
+      while (pos > 0 && _topScore[pos - 1]! < score) {
+        _topScore[pos] = _topScore[pos - 1]!;
+        _topBoneIdx[pos] = _topBoneIdx[pos - 1]!;
+        pos--;
+      }
+      _topScore[pos] = score;
+      _topBoneIdx[pos] = boneIndex[bi]!;
+    } else if (score > _topScore[maxInfluences - 1]!) {
+      let pos = maxInfluences - 1;
+      while (pos > 0 && _topScore[pos - 1]! < score) {
+        _topScore[pos] = _topScore[pos - 1]!;
+        _topBoneIdx[pos] = _topBoneIdx[pos - 1]!;
+        pos--;
+      }
+      _topScore[pos] = score;
+      _topBoneIdx[pos] = boneIndex[bi]!;
+    }
+  }
+
+  let weightSum = 0;
+  for (let s = 0; s < topCount; s++) weightSum += _topScore[s]!;
+
+  const base = vi * 4;
+  let primaryBone = 0;
+  let primaryWeight = 0;
+
+  for (let s = 0; s < topCount; s++) {
+    let w = weightSum > 0 ? _topScore[s]! / weightSum : 0;
+    if (w < minWeight) w = 0;
+    const boneIdx = _topBoneIdx[s]!;
+    skinIndex[base + s] = boneIdx;
+    skinWeight[base + s] = w;
+    if (w > primaryWeight) {
+      primaryWeight = w;
+      primaryBone = boneIdx;
+    }
+  }
+
+  for (let s = topCount; s < 4; s++) {
+    skinIndex[base + s] = 0;
+    skinWeight[base + s] = 0;
+  }
+
+  let finalSum = 0;
+  for (let s = 0; s < 4; s++) finalSum += skinWeight[base + s]!;
+  if (finalSum > 0) {
+    const invSum = 1 / finalSum;
+    for (let s = 0; s < 4; s++) skinWeight[base + s]! *= invSum;
+  } else {
+    skinIndex[base] = 0;
+    skinWeight[base] = 1.0;
+    primaryBone = 0;
+  }
+
+  if (primaryBone < boneCount) {
+    boneVertexCounts[primaryBone]!++;
+  }
+}
+
+function prepareTransferParams(
+  geometry: THREE.BufferGeometry,
+  fitResult: FitResult,
+  options: WeightTransferOptions,
+) {
+  const posAttr = geometry.getAttribute('position');
+  if (!posAttr) {
+    throw new Error('[weightTransfer] Geometry has no position attribute.');
+  }
+
+  const maxInfluences = Math.min(4, Math.max(1, options.maxInfluences ?? 4));
+  const falloffExp = Math.max(0.5, options.falloffExponent ?? 2);
+  const minWeight = options.minWeight ?? 0.001;
+  const bilateralStrength = Math.max(0, Math.min(1, options.bilateralStrength ?? 0.85));
+  const regionStrength = Math.max(0, Math.min(1, options.regionAffinityStrength ?? 0.6));
+  const vertexCount = posAttr.count;
+  const batchSize = options.batchSize ?? (vertexCount > 100000 ? 15000 : 4000);
+  const onProgress = options.onProgress;
+
+  const boneCache = buildBoneCache(fitResult);
+  const flatBones = flattenBoneCache(boneCache, regionStrength);
+  const boneCount = fitResult.built.bones.length;
+  const ctx = buildRegionContext(fitResult);
+
+  const skinIndex = new Uint16Array(vertexCount * 4);
+  const skinWeight = new Float32Array(vertexCount * 4);
+  const boneVertexCounts = new Uint32Array(boneCount);
+
+  return {
+    posAttr,
+    maxInfluences,
+    falloffExp,
+    minWeight,
+    bilateralStrength,
+    batchSize,
+    onProgress,
+    flatBones,
+    boneCount,
+    ctx,
+    vertexCount,
+    skinIndex,
+    skinWeight,
+    boneVertexCounts,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 6. Main weight transfer function
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Computes skin weights for every vertex in a mesh geometry relative to
- * the fitted skeleton from `fitSkeletonToLandmarks()`.
- *
- * The input geometry must have its `position` attribute populated.
- * If the mesh has a `matrixWorld` applied, pass it via `meshWorldMatrix`
- * so vertex positions are evaluated in the same space as the skeleton.
- *
- * @param geometry        The source mesh geometry (positions read-only).
- * @param fitResult       The fitted skeleton from `templateFitter.ts`.
- * @param meshWorldMatrix World matrix of the mesh (default: identity).
- * @param options         Tuning options.
- */
 export function transferWeights(
   geometry: THREE.BufferGeometry,
   fitResult: FitResult,
   meshWorldMatrix: THREE.Matrix4 = new THREE.Matrix4(),
   options: WeightTransferOptions = {},
 ): WeightTransferResult {
-  const maxInfluences        = Math.min(4, Math.max(1, options.maxInfluences ?? 4));
-  const falloffExp           = Math.max(0.5, options.falloffExponent ?? 2);
-  const minWeight            = options.minWeight ?? 0.001;
-  const bilateralStrength    = Math.max(0, Math.min(1, options.bilateralStrength ?? 0.85));
-  const regionStrength       = Math.max(0, Math.min(1, options.regionAffinityStrength ?? 0.6));
-  const batchSize            = options.batchSize ?? 2000;
-  const onProgress           = options.onProgress;
-
-  // ── Pre-compute bone cache ─────────────────────────────────────────────────
-  const boneCache = buildBoneCache(fitResult);
-  const boneCount = fitResult.built.bones.length;
-
-  // ── Derive skeleton measurements for region classification ─────────────────
-  const hipPos  = fitResult.worldPositions.get('hips');
-  const neckPos = fitResult.worldPositions.get('neck');
-  const headPos = fitResult.worldPositions.get('head');
-
-  const hipY          = hipPos?.y  ?? 0.9;
-  const neckY         = neckPos?.y ?? 1.4;
-  const headY         = headPos?.y ?? 1.6;
-  const shoulderWidth = fitResult.shoulderWidth;
-  const hipWidth      = fitResult.hipWidth;
-
-  // ── Vertex buffer ──────────────────────────────────────────────────────────
-  const posAttr = geometry.getAttribute('position');
-  if (!posAttr) {
-    throw new Error('[weightTransfer] Geometry has no position attribute.');
-  }
-  const vertexCount = posAttr.count;
-
-  // Output buffers: 4 slots per vertex
-  const skinIndex  = new Uint16Array(vertexCount * 4);
-  const skinWeight = new Float32Array(vertexCount * 4);
-
-  // Per-bone stat: how many vertices is each bone the primary influence for
-  const boneVertexCounts = new Uint32Array(boneCount);
-
-  // Reusable vertex transform
+  const p = prepareTransferParams(geometry, fitResult, options);
   const vWorld = new THREE.Vector3();
 
-  // ── Main loop ──────────────────────────────────────────────────────────────
-  for (let vi = 0; vi < vertexCount; vi++) {
-    // Transform vertex to world space
-    vWorld.fromBufferAttribute(posAttr, vi).applyMatrix4(meshWorldMatrix);
-
-    // Score all bones for this vertex
-    const scores = scoreBonesForVertex(
-      vWorld.x, vWorld.y, vWorld.z,
-      boneCache,
-      falloffExp,
-      bilateralStrength,
-      regionStrength,
-      hipWidth,
-      hipY, neckY, headY,
-      shoulderWidth,
+  for (let vi = 0; vi < p.vertexCount; vi++) {
+    vWorld.fromBufferAttribute(p.posAttr, vi).applyMatrix4(meshWorldMatrix);
+    scoreVertexAndPack(
+      vi,
+      vWorld.x,
+      vWorld.y,
+      vWorld.z,
+      p.flatBones,
+      p.ctx,
+      p.falloffExp,
+      p.bilateralStrength,
+      p.maxInfluences,
+      p.minWeight,
+      p.skinIndex,
+      p.skinWeight,
+      p.boneVertexCounts,
+      p.boneCount,
     );
 
-    // Keep top maxInfluences
-    const topN = scores.slice(0, maxInfluences);
-
-    // Raw weight sum for normalisation
-    let weightSum = 0;
-    for (const [, score] of topN) {
-      weightSum += score;
-    }
-
-    // Write to output buffers
-    const base = vi * 4;
-    let primaryBone = 0;
-    let primaryWeight = 0;
-    let slot = 0;
-
-    for (const [boneIdx, score] of topN) {
-      let w = weightSum > 0 ? score / weightSum : 0;
-      if (w < minWeight) w = 0;
-
-      skinIndex [base + slot] = boneIdx;
-      skinWeight[base + slot] = w;
-
-      if (w > primaryWeight) {
-        primaryWeight = w;
-        primaryBone   = boneIdx;
-      }
-      slot++;
-    }
-
-    // Fill unused slots with zeros
-    for (let s = slot; s < 4; s++) {
-      skinIndex [base + s] = 0;
-      skinWeight[base + s] = 0;
-    }
-
-    // Re-normalise after minWeight zeroing (weights may no longer sum to 1)
-    let finalSum = 0;
-    for (let s = 0; s < 4; s++) finalSum += skinWeight[base + s];
-    if (finalSum > 0) {
-      for (let s = 0; s < 4; s++) skinWeight[base + s] /= finalSum;
-    } else {
-      // Degenerate vertex (completely outside skeleton bounds) → bind to hips
-      skinIndex [base] = 0;
-      skinWeight[base] = 1.0;
-      primaryBone = 0;
-    }
-
-    // Track primary bone for diagnostics
-    if (primaryBone < boneCount) {
-      boneVertexCounts[primaryBone]++;
-    }
-
-    // Progress callback (every batchSize vertices)
-    if (onProgress && (vi + 1) % batchSize === 0) {
-      onProgress((vi + 1) / vertexCount);
+    if (p.onProgress && (vi + 1) % p.batchSize === 0) {
+      p.onProgress((vi + 1) / p.vertexCount);
     }
   }
 
-  if (onProgress) onProgress(1.0);
+  if (p.onProgress) p.onProgress(1.0);
 
-  // Count how many bones have any weight at all
-  const activeBoneCount = boneVertexCounts.reduce((acc, c) => acc + (c > 0 ? 1 : 0), 0);
-
-  return { skinIndex, skinWeight, vertexCount, activeBoneCount, boneVertexCounts };
+  const activeBoneCount = p.boneVertexCounts.reduce((acc, c) => acc + (c > 0 ? 1 : 0), 0);
+  return {
+    skinIndex: p.skinIndex,
+    skinWeight: p.skinWeight,
+    vertexCount: p.vertexCount,
+    activeBoneCount,
+    boneVertexCounts: p.boneVertexCounts,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 7. Apply weights to a Three.js geometry
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Convenience wrapper: runs `transferWeights` and writes the results directly
- * onto a `THREE.BufferGeometry` as `skinIndex` and `skinWeight` attributes.
- *
- * After calling this you can bind the geometry to a `THREE.SkinnedMesh`
- * and attach `fitResult.built.skeleton` to it.
- *
- * @returns The same geometry, mutated in-place.
- */
 export function applyWeightsToGeometry(
   geometry: THREE.BufferGeometry,
   fitResult: FitResult,
@@ -563,139 +756,74 @@ export function applyWeightsToGeometry(
   options?: WeightTransferOptions,
 ): THREE.BufferGeometry {
   const result = transferWeights(geometry, fitResult, meshWorldMatrix, options);
-
-  geometry.setAttribute(
-    'skinIndex',
-    new THREE.BufferAttribute(result.skinIndex, 4),
-  );
-  geometry.setAttribute(
-    'skinWeight',
-    new THREE.BufferAttribute(result.skinWeight, 4),
-  );
-
+  geometry.setAttribute('skinIndex', new THREE.BufferAttribute(result.skinIndex, 4));
+  geometry.setAttribute('skinWeight', new THREE.BufferAttribute(result.skinWeight, 4));
   return geometry;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. Async wrapper (Web Worker-friendly)
+// 8. Async wrapper (event-loop friendly)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Async version of `transferWeights` that yields to the event loop between
- * batches so the UI stays responsive for large meshes (100k+ vertices).
- *
- * Uses `setTimeout(0)` between batches — no Web Worker required.
- * For true background processing, call the sync version inside a Worker.
- */
 export async function transferWeightsAsync(
   geometry: THREE.BufferGeometry,
   fitResult: FitResult,
   meshWorldMatrix: THREE.Matrix4 = new THREE.Matrix4(),
   options: WeightTransferOptions = {},
 ): Promise<WeightTransferResult> {
-  const batchSize  = options.batchSize ?? 2000;
-  const onProgress = options.onProgress;
-
-  const maxInfluences        = Math.min(4, Math.max(1, options.maxInfluences ?? 4));
-  const falloffExp           = Math.max(0.5, options.falloffExponent ?? 2);
-  const minWeight            = options.minWeight ?? 0.001;
-  const bilateralStrength    = Math.max(0, Math.min(1, options.bilateralStrength ?? 0.85));
-  const regionStrength       = Math.max(0, Math.min(1, options.regionAffinityStrength ?? 0.6));
-
-  const boneCache = buildBoneCache(fitResult);
-  const boneCount = fitResult.built.bones.length;
-
-  const hipPos  = fitResult.worldPositions.get('hips');
-  const neckPos = fitResult.worldPositions.get('neck');
-  const headPos = fitResult.worldPositions.get('head');
-  const hipY         = hipPos?.y  ?? 0.9;
-  const neckY        = neckPos?.y ?? 1.4;
-  const headY        = headPos?.y ?? 1.6;
-  const shoulderWidth = fitResult.shoulderWidth;
-  const hipWidth      = fitResult.hipWidth;
-
-  const posAttr = geometry.getAttribute('position');
-  if (!posAttr) {
-    throw new Error('[weightTransfer] Geometry has no position attribute.');
-  }
-  const vertexCount  = posAttr.count;
-  const skinIndex    = new Uint16Array(vertexCount * 4);
-  const skinWeight   = new Float32Array(vertexCount * 4);
-  const boneVertexCounts = new Uint32Array(boneCount);
+  const p = prepareTransferParams(geometry, fitResult, options);
   const vWorld = new THREE.Vector3();
-
   let vi = 0;
 
   const processBatch = (): boolean => {
-    const end = Math.min(vi + batchSize, vertexCount);
+    const end = Math.min(vi + p.batchSize, p.vertexCount);
     for (; vi < end; vi++) {
-      vWorld.fromBufferAttribute(posAttr, vi).applyMatrix4(meshWorldMatrix);
-
-      const scores = scoreBonesForVertex(
-        vWorld.x, vWorld.y, vWorld.z,
-        boneCache, falloffExp, bilateralStrength, regionStrength,
-        hipWidth, hipY, neckY, headY, shoulderWidth,
+      vWorld.fromBufferAttribute(p.posAttr, vi).applyMatrix4(meshWorldMatrix);
+      scoreVertexAndPack(
+        vi,
+        vWorld.x,
+        vWorld.y,
+        vWorld.z,
+        p.flatBones,
+        p.ctx,
+        p.falloffExp,
+        p.bilateralStrength,
+        p.maxInfluences,
+        p.minWeight,
+        p.skinIndex,
+        p.skinWeight,
+        p.boneVertexCounts,
+        p.boneCount,
       );
-
-      const topN = scores.slice(0, maxInfluences);
-      let weightSum = 0;
-      for (const [, s] of topN) weightSum += s;
-
-      const base = vi * 4;
-      let primaryBone = 0;
-      let primaryWeight = 0;
-      let slot = 0;
-
-      for (const [boneIdx, score] of topN) {
-        let w = weightSum > 0 ? score / weightSum : 0;
-        if (w < minWeight) w = 0;
-        skinIndex [base + slot] = boneIdx;
-        skinWeight[base + slot] = w;
-        if (w > primaryWeight) { primaryWeight = w; primaryBone = boneIdx; }
-        slot++;
-      }
-      for (let s = slot; s < 4; s++) { skinIndex[base + s] = 0; skinWeight[base + s] = 0; }
-
-      let finalSum = 0;
-      for (let s = 0; s < 4; s++) finalSum += skinWeight[base + s];
-      if (finalSum > 0) {
-        for (let s = 0; s < 4; s++) skinWeight[base + s] /= finalSum;
-      } else {
-        skinIndex[base] = 0; skinWeight[base] = 1.0; primaryBone = 0;
-      }
-
-      if (primaryBone < boneCount) boneVertexCounts[primaryBone]++;
     }
-    if (onProgress) onProgress(vi / vertexCount);
-    return vi >= vertexCount;
+    if (p.onProgress) p.onProgress(vi / p.vertexCount);
+    return vi >= p.vertexCount;
   };
 
-  // Yield to the event loop between batches
   await new Promise<void>((resolve) => {
     const tick = () => {
-      const done = processBatch();
-      if (done) { resolve(); } else { setTimeout(tick, 0); }
+      if (processBatch()) resolve();
+      else setTimeout(tick, 0);
     };
     setTimeout(tick, 0);
   });
 
-  if (onProgress) onProgress(1.0);
+  if (p.onProgress) p.onProgress(1.0);
 
-  const activeBoneCount = boneVertexCounts.reduce((acc, c) => acc + (c > 0 ? 1 : 0), 0);
-  return { skinIndex, skinWeight, vertexCount, activeBoneCount, boneVertexCounts };
+  const activeBoneCount = p.boneVertexCounts.reduce((acc, c) => acc + (c > 0 ? 1 : 0), 0);
+  return {
+    skinIndex: p.skinIndex,
+    skinWeight: p.skinWeight,
+    vertexCount: p.vertexCount,
+    activeBoneCount,
+    boneVertexCounts: p.boneVertexCounts,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 9. Diagnostic helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Builds a vertex-colour buffer that visualises bone influence regions as
- * distinct RGB colours — useful for the WeightMapPreview component.
- *
- * Each vertex is coloured by its primary (highest-weight) bone.
- * The colour palette cycles through a hue wheel spread across all bones.
- */
 export function buildWeightHeatmapColors(
   result: Pick<WeightTransferResult, 'skinIndex' | 'skinWeight' | 'vertexCount'>,
   boneCount: number,
@@ -704,16 +832,17 @@ export function buildWeightHeatmapColors(
 
   for (let vi = 0; vi < result.vertexCount; vi++) {
     const base = vi * 4;
-
-    // Find the highest-weight influence
     let bestSlot = 0;
-    let bestW    = skinWeightAt(result.skinWeight, base, 0);
+    let bestW = result.skinWeight[base] ?? 0;
     for (let s = 1; s < 4; s++) {
-      const w = skinWeightAt(result.skinWeight, base, s);
-      if (w > bestW) { bestW = w; bestSlot = s; }
+      const w = result.skinWeight[base + s] ?? 0;
+      if (w > bestW) {
+        bestW = w;
+        bestSlot = s;
+      }
     }
 
-    const primaryBone = result.skinIndex[base + bestSlot];
+    const primaryBone = result.skinIndex[base + bestSlot]!;
     const hue = (primaryBone / Math.max(1, boneCount)) * 360;
     const [r, g, b] = hslToRgb(hue, 0.85, 0.55);
 
@@ -725,11 +854,6 @@ export function buildWeightHeatmapColors(
   return colors;
 }
 
-function skinWeightAt(skinWeight: Float32Array, base: number, slot: number): number {
-  return skinWeight[base + slot] ?? 0;
-}
-
-/** Converts HSL [0–360, 0–1, 0–1] to linear RGB [0–1, 0–1, 0–1]. */
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
@@ -744,15 +868,6 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   return [r + m, g + m, b + m];
 }
 
-/**
- * Returns a human-readable diagnostic summary of a `WeightTransferResult`.
- *
- * Example output:
- *   Vertices:      15420
- *   Active bones:  43 / 54
- *   Avg influences: 3.7
- *   Dead bones:    spine (0 verts), leftEye (0 verts)
- */
 export function weightTransferSummary(
   result: WeightTransferResult,
   boneNames: string[],
@@ -762,12 +877,11 @@ export function weightTransferSummary(
     `Active bones:   ${result.activeBoneCount} / ${boneNames.length}`,
   ];
 
-  // Average number of real (non-zero) influences per vertex
   let totalInfluences = 0;
   for (let vi = 0; vi < result.vertexCount; vi++) {
     const base = vi * 4;
     for (let s = 0; s < 4; s++) {
-      if (result.skinWeight[base + s] > 0) totalInfluences++;
+      if (result.skinWeight[base + s]! > 0) totalInfluences++;
     }
   }
   lines.push(`Avg influences: ${(totalInfluences / Math.max(1, result.vertexCount)).toFixed(1)}`);

@@ -619,23 +619,23 @@ export function patchGlbIor(
       const keyIdx = json.nodes.length;
       json.nodes.push({
         name: 'Key_StudioLight',
-        translation: [0.3, 2.2, -3.2],
-        rotation: [-0.006, 0.9906, 0.1288, 0.0463],
+        translation: [-0.3, 2.2, 3.2],
+        rotation: [-0.1288, -0.0463, -0.006, 0.9906],
         extensions: { KHR_lights_punctual: { light: 0 } },
       });
 
       const rimIdx = json.nodes.length;
       json.nodes.push({
         name: 'Rim_StudioLight',
-        translation: [0.7, 1.8, 2.2],
-        rotation: [-0.095, 0.1527, 0.0147, 0.9836],
+        translation: [-0.7, 1.8, -2.2],
+        rotation: [-0.0147, -0.9836, -0.095, 0.1527],
         extensions: { KHR_lights_punctual: { light: 1 } },
       });
 
       const fillIdx = json.nodes.length;
       json.nodes.push({
         name: 'Fill_StudioLight',
-        translation: [-1.6, 1.35, -2.2],
+        translation: [1.6, 1.35, 2.2],
         extensions: { KHR_lights_punctual: { light: 2 } },
       });
 
@@ -1753,9 +1753,10 @@ export async function exportCharacterScene(
 
     // 5. Prepare safe export name and compute ground elevation (feet soles at Y = 0.0).
     // Note: We do NOT mutate character.position or character.rotation in the live scene!
-    // Mutating live scene transforms during export caused the viewport to elevate +1.55m
-    // and face backwards, snapping the user's camera to the feet during the async export.
-    // Instead, elevation and 180° rotation are cleanly injected into the GLB root node via patchGlbIor.
+    // Mutating live scene transforms during export caused the viewport to elevate +1.55m,
+    // snapping the user's camera to the feet during the async export.
+    // Instead, ground elevation is cleanly injected into the GLB root node via patchGlbIor,
+    // leaving the character facing +Z (standard glTF 2.0 front, matching Creator viewport).
     const rawName = customName || 'Character';
     const safeName = rawName.trim().replace(/[^a-zA-Z0-9_\-]/g, '_') || 'Character';
     character.name = safeName;
@@ -1785,7 +1786,6 @@ export async function exportCharacterScene(
       [
         patchGlbIor(gltf as ArrayBuffer, {
           translation: [0, groundOffset, 0],
-          rotation: [0, 1, 0, 0],
           rootName: safeName,
           includeLighting,
         }),

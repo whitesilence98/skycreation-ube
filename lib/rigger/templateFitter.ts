@@ -3,19 +3,10 @@
  *
  * Template Skeleton Fitter — Phase 2 of the CC-Kit Auto-Rigger pipeline.
  *
- * Takes the VRM T-pose template skeleton (from `vrmSkeleton.ts`) and
- * warps it to match a target humanoid mesh using 7 anatomical landmarks.
- *
- * Algorithm overview:
- *   1. Measure — derive character height + proportional scale from landmarks.
- *   2. Place spine — fit hips → spine → chest → upperChest → neck → head
- *      by lerping between the hip-centre and neck-base landmarks.
- *   3. Place legs — fit upper/lower leg + foot for each side from hip→ankle.
- *   4. Place arms — fit shoulder → upper arm → lower arm → hand, extending
- *      laterally from the shoulder landmark using scaled anatomical ratios.
- *   5. Place fingers & toes — proportional sub-chains off their root joints.
- *   6. Convert world positions → local positions, respecting the bone hierarchy.
- *   7. Recompute matrices and return a skeleton ready for weight transfer.
+ * Takes the VRM template skeleton (from `vrmSkeleton.ts`) and warps it to match
+ * a target humanoid mesh using 8 required core landmarks plus optional limb
+ * (elbows, wrists, knees) and detail (chin, groin) landmarks — supporting
+ * T-pose, A-pose, and bent-limb rest poses cleanly.
  *
  * All maths uses publicly documented anatomical ratios (Winter 1990, De Leva
  * 1996 — public domain). No XPMSE, Bethesda, or Mixamo code.
@@ -26,13 +17,12 @@
 
 import * as THREE from 'three';
 import {
+  ALL_RIG_BONE_DEFS,
   buildTPoseSkeleton,
-  BONE_LANDMARK_BINDINGS,
-  VRM_BONE_BY_NAME,
-  VRM_BONE_DEFS,
   type BuiltSkeleton,
   type LandmarkMap,
-  type VrmBoneName,
+  type LandmarkPreset,
+  type RigBoneName,
 } from '@/lib/rigger/vrmSkeleton';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,7 +33,7 @@ export interface FitOptions {
   /**
    * When true, only required VRM 1.0 bones are created (22 bones — no fingers,
    * no face). Faster; suitable for game characters that don't need finger IK.
-   * Default: false (all 54 bones).
+   * Default: false (all 54 VRM bones).
    */
   requiredOnly?: boolean;
 
@@ -52,6 +42,13 @@ export interface FitOptions {
    * Prevents degenerate skeletons from bad landmarks. Default: true.
    */
   clampScale?: boolean;
+
+  /**
+   * When true (and `requiredOnly` is false), appends optional non-VRM secondary
+   * bones (`pelvisLower`, `leftButt`, `rightButt`, `leftBreast`, `rightBreast`)
+   * for pelvis, glute, and chest deformation. Default: false.
+   */
+  includeSecondaryBones?: boolean;
 }
 
 export interface FitResult {
@@ -71,7 +68,7 @@ export interface FitResult {
    * World-space positions of every bone after fitting.
    * Useful for debugging overlays and weight-transfer queries.
    */
-  worldPositions: Map<VrmBoneName, THREE.Vector3>;
+  worldPositions: Map<RigBoneName, THREE.Vector3>;
 
   /**
    * Shoulder width in metres (distance between the two shoulder landmarks).
@@ -83,22 +80,45 @@ export interface FitResult {
    * Hip width in metres (distance between the two hip landmarks).
    */
   hipWidth: number;
+
+  /**
+   * Optional groin Y coordinate when `landmarks.groin` is provided.
+   * Used downstream by weightTransfer to refine pelvis vs. leg boundaries.
+   */
+  groinY?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Linear interpolation between two Vector3 values. */
-function lerpVec3(a: THREE.Vector3, b: THREE.Vector3, t: number, out = new THREE.Vector3()): THREE.Vector3 {
+function lerpVec3(
+  a: THREE.Vector3,
+  b: THREE.Vector3,
+  t: number,
+  out = new THREE.Vector3(),
+): THREE.Vector3 {
   return out.lerpVectors(a, b, t);
 }
 
-/**
- * Clamps a number into [min, max].
- */
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[mid]!
+    : (sorted[mid - 1]! + sorted[mid]!) * 0.5;
+}
+
+function percentile(values: number[], p: number): number | null {
+  if (values.length === 0) return null;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const idx = clamp(Math.floor(p * (sorted.length - 1)), 0, sorted.length - 1);
+  return sorted[idx]!;
 }
 
 // Reference figure height used when authoring `VRM_BONE_DEFS` local positions.
@@ -109,7 +129,6 @@ const REFERENCE_HEIGHT_M = 1.70;
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface LandmarkGeometry {
-  /** Uniform scale factor (targetHeight / 1.70). */
   scale: number;
   characterHeight: number;
   hipCentre: THREE.Vector3;
@@ -118,17 +137,10 @@ interface LandmarkGeometry {
   forwardAxis: THREE.Vector3;    // unit vector pointing forward (+Z in T-pose)
   shoulderWidth: number;
   hipWidth: number;
-  /** Left side arm reach: shoulder → wrist, metres */
-  leftArmReach: number;
-  /** Right side arm reach: shoulder → wrist, metres */
-  rightArmReach: number;
+  groinY?: number;
 }
 
-/**
- * Derives all measurements needed for skeleton fitting from the 7 raw landmarks.
- */
 function deriveLandmarkGeometry(lm: LandmarkMap, clampScale: boolean): LandmarkGeometry {
-  // Height: from lowest ankle to head top
   const floorY = Math.min(lm.leftAnkle.y, lm.rightAnkle.y);
   const characterHeight = lm.headTop.y - floorY;
   let scale = characterHeight / REFERENCE_HEIGHT_M;
@@ -136,39 +148,47 @@ function deriveLandmarkGeometry(lm: LandmarkMap, clampScale: boolean): LandmarkG
     scale = clamp(scale, 0.5 / REFERENCE_HEIGHT_M, 3.0 / REFERENCE_HEIGHT_M);
   }
 
-  // Hip centre: average of left/right hip landmarks
   const hipCentre = new THREE.Vector3()
     .addVectors(lm.leftHip, lm.rightHip)
     .multiplyScalar(0.5);
 
-  // Hip width
-  const hipWidth = lm.leftHip.distanceTo(lm.rightHip);
+  // If groin is placed, refine pelvis root vertically without breaking L/R symmetry.
+  const groinY = lm.groin?.y;
+  if (groinY !== undefined) {
+    const targetHipY = clamp(
+      THREE.MathUtils.lerp(hipCentre.y, groinY + 0.065 * scale, 0.35),
+      groinY + 0.03 * scale,
+      hipCentre.y + 0.06 * scale,
+    );
+    hipCentre.y = targetHipY;
+  }
 
-  // Shoulder width
+  const hipWidth = lm.leftHip.distanceTo(lm.rightHip);
   const shoulderWidth = lm.leftShoulder.distanceTo(lm.rightShoulder);
 
-  // Spine axis: hip centre → neck base, normalised
   const spineAxis = new THREE.Vector3()
-    .subVectors(lm.neckBase, hipCentre)
-    .normalize();
+    .subVectors(lm.neckBase, hipCentre);
+  if (spineAxis.lengthSq() > 1e-8) {
+    spineAxis.normalize();
+  } else {
+    spineAxis.set(0, 1, 0);
+  }
 
-  // Left axis: from right shoulder to left shoulder, projected onto the
-  // plane perpendicular to spineAxis, then normalised.
-  // This gives us "character left" even if the mesh is slightly rotated.
   const rawLeft = new THREE.Vector3().subVectors(lm.leftShoulder, lm.rightShoulder);
   const leftAxis = rawLeft
-    .sub(spineAxis.clone().multiplyScalar(rawLeft.dot(spineAxis)))
-    .normalize();
+    .sub(spineAxis.clone().multiplyScalar(rawLeft.dot(spineAxis)));
+  if (leftAxis.lengthSq() > 1e-8) {
+    leftAxis.normalize();
+  } else {
+    leftAxis.set(1, 0, 0);
+  }
 
-  // Forward axis: perpendicular to both spine and left (right-hand rule: left × spine = forward)
-  const forwardAxis = new THREE.Vector3().crossVectors(leftAxis, spineAxis).normalize();
-
-  // Arm reach: upper arm + lower arm + hand, estimated from scale since
-  // we only have shoulder landmarks (no elbow/wrist landmarks).
-  // Reference arm reach (shoulder → wrist) for 1.70 m: 0.279 + 0.267 = 0.546 m
-  const refArmReach = 0.546; // metres on the 1.70 m reference figure
-  const leftArmReach = refArmReach * scale;
-  const rightArmReach = refArmReach * scale;
+  const forwardAxis = new THREE.Vector3().crossVectors(leftAxis, spineAxis);
+  if (forwardAxis.lengthSq() > 1e-8) {
+    forwardAxis.normalize();
+  } else {
+    forwardAxis.set(0, 0, 1);
+  }
 
   return {
     scale,
@@ -179,39 +199,195 @@ function deriveLandmarkGeometry(lm: LandmarkMap, clampScale: boolean): LandmarkG
     forwardAxis,
     shoulderWidth,
     hipWidth,
-    leftArmReach,
-    rightArmReach,
+    groinY,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// World-position solver helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function placeArmChain(
+  side: 1 | -1,
+  shoulderLm: THREE.Vector3,
+  elbowLm: THREE.Vector3 | undefined,
+  wristLm: THREE.Vector3 | undefined,
+  upperChestPos: THREE.Vector3 | undefined,
+  leftAxis: THREE.Vector3,
+  scale: number,
+  set: (name: RigBoneName, pos: THREE.Vector3) => void,
+): { lowerArmPos: THREE.Vector3; handPos: THREE.Vector3 } {
+  const clavicleName: RigBoneName = side === 1 ? 'leftShoulder' : 'rightShoulder';
+  const upperName: RigBoneName = side === 1 ? 'leftUpperArm' : 'rightUpperArm';
+  const lowerName: RigBoneName = side === 1 ? 'leftLowerArm' : 'rightLowerArm';
+  const handName: RigBoneName = side === 1 ? 'leftHand' : 'rightHand';
+
+  const sideDir = leftAxis.clone().multiplyScalar(side);
+  const refUpperArm = 0.279 * scale;
+  const refLowerArm = 0.267 * scale;
+
+  if (upperChestPos) {
+    set(clavicleName, lerpVec3(upperChestPos, shoulderLm, 0.4));
+  }
+
+  const upperArmPos = shoulderLm.clone();
+  set(upperName, upperArmPos);
+
+  let lowerArmPos: THREE.Vector3;
+  let handPos: THREE.Vector3;
+
+  if (elbowLm && wristLm) {
+    lowerArmPos = elbowLm.clone();
+    handPos = wristLm.clone();
+  } else if (wristLm) {
+    handPos = wristLm.clone();
+    lowerArmPos = lerpVec3(upperArmPos, handPos, 0.51);
+  } else if (elbowLm) {
+    lowerArmPos = elbowLm.clone();
+    const upperDir = new THREE.Vector3().subVectors(lowerArmPos, upperArmPos);
+    if (upperDir.lengthSq() > 1e-8) {
+      upperDir.normalize();
+    } else {
+      upperDir.copy(sideDir);
+    }
+    handPos = lowerArmPos.clone().addScaledVector(upperDir, refLowerArm);
+  } else {
+    lowerArmPos = upperArmPos.clone().addScaledVector(sideDir, refUpperArm);
+    handPos = lowerArmPos.clone().addScaledVector(sideDir, refLowerArm);
+  }
+
+  set(lowerName, lowerArmPos);
+  set(handName, handPos);
+  return { lowerArmPos, handPos };
+}
+
+function placeFingerChain(
+  side: 1 | -1,
+  handPos: THREE.Vector3,
+  lowerArmPos: THREE.Vector3,
+  leftAxis: THREE.Vector3,
+  forwardAxis: THREE.Vector3,
+  spineAxis: THREE.Vector3,
+  scale: number,
+  set: (name: RigBoneName, pos: THREE.Vector3) => void,
+): void {
+  const prefix = side === 1 ? 'left' : 'right';
+
+  // Primary finger extension axis follows forearm→wrist so A-pose hands align naturally
+  const fi = new THREE.Vector3().subVectors(handPos, lowerArmPos);
+  if (fi.lengthSq() > 1e-8) {
+    fi.normalize();
+  } else {
+    fi.copy(leftAxis).multiplyScalar(side);
+  }
+
+  // Orthogonal spread axis (thumb toward +fw, little toward -fw)
+  const fw = forwardAxis.clone().addScaledVector(fi, -forwardAxis.dot(fi));
+  if (fw.lengthSq() > 1e-6) {
+    fw.normalize();
+  } else {
+    fw.copy(spineAxis).addScaledVector(fi, -spineAxis.dot(fi));
+    if (fw.lengthSq() > 1e-6) {
+      fw.normalize();
+    } else {
+      fw.set(0, 0, 1);
+    }
+  }
+
+  // Orthogonal dorsal/palmar up axis matching +spineAxis in T-pose on both sides
+  const palmUp = new THREE.Vector3().crossVectors(fw, fi).multiplyScalar(side);
+  if (palmUp.lengthSq() > 1e-6) {
+    palmUp.normalize();
+  } else {
+    palmUp.copy(spineAxis);
+  }
+
+  const refMC = 0.082 * scale;
+  const refPrx = 0.030 * scale;
+  const refMid = 0.022 * scale;
+
+  const thumbBase = handPos
+    .clone()
+    .addScaledVector(fi, 0.034 * scale)
+    .addScaledVector(palmUp, -0.006 * scale)
+    .addScaledVector(fw, 0.022 * scale);
+  set(`${prefix}ThumbMetacarpal` as RigBoneName, thumbBase);
+  const tPrx = thumbBase
+    .clone()
+    .addScaledVector(fi, 0.026 * scale)
+    .addScaledVector(fw, 0.012 * scale);
+  set(`${prefix}ThumbProximal` as RigBoneName, tPrx);
+  set(`${prefix}ThumbDistal` as RigBoneName, tPrx.clone().addScaledVector(fi, 0.022 * scale));
+
+  const idxBase = handPos.clone().addScaledVector(fi, refMC).addScaledVector(fw, 0.012 * scale);
+  set(`${prefix}IndexProximal` as RigBoneName, idxBase);
+  const idxMid = idxBase.clone().addScaledVector(fi, refPrx);
+  set(`${prefix}IndexIntermediate` as RigBoneName, idxMid);
+  set(`${prefix}IndexDistal` as RigBoneName, idxMid.clone().addScaledVector(fi, refMid));
+
+  const midBase = handPos.clone().addScaledVector(fi, refMC).addScaledVector(fw, 0.004 * scale);
+  set(`${prefix}MiddleProximal` as RigBoneName, midBase);
+  const midMid = midBase.clone().addScaledVector(fi, 0.034 * scale);
+  set(`${prefix}MiddleIntermediate` as RigBoneName, midMid);
+  set(`${prefix}MiddleDistal` as RigBoneName, midMid.clone().addScaledVector(fi, 0.026 * scale));
+
+  const ringBase = handPos.clone().addScaledVector(fi, 0.079 * scale).addScaledVector(fw, -0.008 * scale);
+  set(`${prefix}RingProximal` as RigBoneName, ringBase);
+  const ringMid = ringBase.clone().addScaledVector(fi, refPrx);
+  set(`${prefix}RingIntermediate` as RigBoneName, ringMid);
+  set(`${prefix}RingDistal` as RigBoneName, ringMid.clone().addScaledVector(fi, refMid));
+
+  const littleBase = handPos.clone().addScaledVector(fi, 0.072 * scale).addScaledVector(fw, -0.020 * scale);
+  set(`${prefix}LittleProximal` as RigBoneName, littleBase);
+  const littleMid = littleBase.clone().addScaledVector(fi, 0.024 * scale);
+  set(`${prefix}LittleIntermediate` as RigBoneName, littleMid);
+  set(`${prefix}LittleDistal` as RigBoneName, littleMid.clone().addScaledVector(fi, 0.018 * scale));
+}
+
+function placeLegChain(
+  side: 1 | -1,
+  hipSocket: THREE.Vector3,
+  kneeLm: THREE.Vector3 | undefined,
+  ankleLm: THREE.Vector3,
+  spineAxis: THREE.Vector3,
+  forwardAxis: THREE.Vector3,
+  scale: number,
+  set: (name: RigBoneName, pos: THREE.Vector3) => void,
+): void {
+  const prefix = side === 1 ? 'left' : 'right';
+  const upperName = `${prefix}UpperLeg` as RigBoneName;
+  const lowerName = `${prefix}LowerLeg` as RigBoneName;
+  const footName = `${prefix}Foot` as RigBoneName;
+  const toesName = `${prefix}Toes` as RigBoneName;
+
+  const kneePos = kneeLm ? kneeLm.clone() : lerpVec3(hipSocket, ankleLm, 0.49);
+  const footPos = lerpVec3(kneePos, ankleLm, 0.96);
+
+  set(upperName, hipSocket.clone());
+  set(lowerName, kneePos);
+  set(footName, footPos);
+  set(
+    toesName,
+    ankleLm
+      .clone()
+      .addScaledVector(spineAxis, -0.062 * scale)
+      .addScaledVector(forwardAxis, 0.070 * scale),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // World-position solver
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Computes world-space positions for every VRM bone, given landmark geometry.
- *
- * Strategy:
- *  - Spine chain: lerp along hipCentre → neckBase using BONE_LANDMARK_BINDINGS ratios.
- *  - Head: lerp along neckBase → headTop.
- *  - Leg chains: lerp along hipSocket → ankle using BONE_LANDMARK_BINDINGS ratios.
- *  - Arm chains: extend laterally from shoulder landmark using scaled segment lengths.
- *  - Fingers / toes: proportional offset from their chain root joint.
- *  - Eyes / jaw: proportional offset from head.
- *  - Shoulder bones: lerp between spine midline and shoulder landmark.
- */
 function solveWorldPositions(
   lm: LandmarkMap,
   geo: LandmarkGeometry,
-  includedBones: Set<VrmBoneName>,
-): Map<VrmBoneName, THREE.Vector3> {
-  const wp = new Map<VrmBoneName, THREE.Vector3>();
+  includedBones: Set<RigBoneName>,
+): Map<RigBoneName, THREE.Vector3> {
+  const wp = new Map<RigBoneName, THREE.Vector3>();
   const { scale, hipCentre, spineAxis, leftAxis, forwardAxis } = geo;
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  /** Store a world position for a bone (only if it is included). */
-  const set = (name: VrmBoneName, pos: THREE.Vector3) => {
+  const set = (name: RigBoneName, pos: THREE.Vector3) => {
     if (includedBones.has(name)) wp.set(name, pos.clone());
   };
 
@@ -219,209 +395,192 @@ function solveWorldPositions(
   set('hips', hipCentre);
 
   // ── 2. Spine chain (hips → spine → chest → upperChest → neck → head) ─────
-  // We parameterise along hipCentre → neckBase (t=0 to 1) and then
-  // neckBase → headTop for neck and head.
   const hipToNeck = new THREE.Vector3().subVectors(lm.neckBase, hipCentre);
   const neckToHead = new THREE.Vector3().subVectors(lm.headTop, lm.neckBase);
 
-  // Spine bones that interpolate along hipCentre→neckBase
-  const spineBinding: Partial<Record<VrmBoneName, number>> = {
-    spine:      0.14,
-    chest:      0.42,
+  const spineBinding: Partial<Record<RigBoneName, number>> = {
+    spine: 0.14,
+    chest: 0.42,
     upperChest: 0.70,
   };
-  for (const [bone, t] of Object.entries(spineBinding) as [VrmBoneName, number][]) {
+  for (const [bone, t] of Object.entries(spineBinding) as [RigBoneName, number][]) {
     set(bone, new THREE.Vector3().copy(hipCentre).addScaledVector(hipToNeck, t));
   }
 
-  // Neck and head interpolate along neckBase→headTop
-  set('neck', new THREE.Vector3().copy(lm.neckBase).addScaledVector(neckToHead, 0.08));
-  set('head', new THREE.Vector3().copy(lm.neckBase).addScaledVector(neckToHead, 0.28));
+  let tNeck = 0.08;
+  let tHead = 0.28;
+  if (lm.chin) {
+    const neckSpanY = Math.max(1e-4, lm.headTop.y - lm.neckBase.y);
+    const chinY = clamp(lm.chin.y, lm.neckBase.y + 0.01 * scale, lm.headTop.y - 0.02 * scale);
+    const neckY = THREE.MathUtils.lerp(lm.neckBase.y, chinY, 0.40);
+    const headY = Math.max(
+      neckY + 0.015 * scale,
+      chinY + (lm.headTop.y - chinY) * 0.16,
+    );
+    tNeck = clamp((neckY - lm.neckBase.y) / neckSpanY, 0.04, 0.45);
+    tHead = clamp((headY - lm.neckBase.y) / neckSpanY, tNeck + 0.08, 0.65);
+  }
 
-  // ── 3. Face bones (relative to head position) ─────────────────────────────
+  set('neck', new THREE.Vector3().copy(lm.neckBase).addScaledVector(neckToHead, tNeck));
+  set('head', new THREE.Vector3().copy(lm.neckBase).addScaledVector(neckToHead, tHead));
+
+  // ── 3. Face bones (relative to head position & optional chin) ─────────────
   if (wp.has('head')) {
     const headPos = wp.get('head')!;
-
-    // Head size proportional to scale; reference head height ≈ 0.23 m for 1.70 m figure
     const headH = 0.23 * scale;
 
-    // Eyes: forward + lateral + slightly up from head joint
-    set('leftEye',  new THREE.Vector3().copy(headPos)
-      .addScaledVector(leftAxis,    0.032 * scale)
-      .addScaledVector(spineAxis,   0.062 * scale)
-      .addScaledVector(forwardAxis, 0.058 * scale));
+    set(
+      'leftEye',
+      new THREE.Vector3()
+        .copy(headPos)
+        .addScaledVector(leftAxis, 0.032 * scale)
+        .addScaledVector(spineAxis, 0.062 * scale)
+        .addScaledVector(forwardAxis, 0.058 * scale),
+    );
+    set(
+      'rightEye',
+      new THREE.Vector3()
+        .copy(headPos)
+        .addScaledVector(leftAxis, -0.032 * scale)
+        .addScaledVector(spineAxis, 0.062 * scale)
+        .addScaledVector(forwardAxis, 0.058 * scale),
+    );
 
-    set('rightEye', new THREE.Vector3().copy(headPos)
-      .addScaledVector(leftAxis,   -0.032 * scale)
-      .addScaledVector(spineAxis,   0.062 * scale)
-      .addScaledVector(forwardAxis, 0.058 * scale));
-
-    set('jaw', new THREE.Vector3().copy(headPos)
-      .addScaledVector(spineAxis,  -0.01 * scale)
-      .addScaledVector(forwardAxis, headH * 0.20));
+    const jawPos = lm.chin
+      ? lerpVec3(headPos, lm.chin, 0.65)
+      : new THREE.Vector3()
+          .copy(headPos)
+          .addScaledVector(spineAxis, -0.01 * scale)
+          .addScaledVector(forwardAxis, headH * 0.20);
+    set('jaw', jawPos);
   }
 
-  // ── 4. Left leg chain ─────────────────────────────────────────────────────
-  // Hip socket: the landmark position plus a small medial offset to put the
-  // joint at the socket rather than the outer landmark point.
+  // ── 4 & 5. Leg chains (symmetric thigh root adjustment if groin present) ──
+  let thighOffsetY = 0;
+  if (lm.groin) {
+    const avgHipY = (lm.leftHip.y + lm.rightHip.y) * 0.5;
+    const guidedThighY = clamp(
+      THREE.MathUtils.lerp(avgHipY, lm.groin.y + 0.035 * scale, 0.35),
+      lm.groin.y + 0.015 * scale,
+      avgHipY + 0.05 * scale,
+    );
+    thighOffsetY = guidedThighY - avgHipY;
+  }
+
   const leftHipSocket = lm.leftHip.clone();
-  const leftAnkle     = lm.leftAnkle.clone();
-  const leftLegVec    = new THREE.Vector3().subVectors(leftAnkle, leftHipSocket);
-
-  set('leftUpperLeg', leftHipSocket.clone());
-  set('leftLowerLeg', new THREE.Vector3().copy(leftHipSocket).addScaledVector(leftLegVec, 0.49));
-  set('leftFoot',     new THREE.Vector3().copy(leftHipSocket).addScaledVector(leftLegVec, 0.98));
-  set('leftToes',     new THREE.Vector3().copy(leftAnkle)
-    .addScaledVector(spineAxis,   -0.062 * scale)
-    .addScaledVector(forwardAxis,  0.070 * scale));
-
-  // ── 5. Right leg chain ────────────────────────────────────────────────────
+  leftHipSocket.y += thighOffsetY;
   const rightHipSocket = lm.rightHip.clone();
-  const rightAnkle     = lm.rightAnkle.clone();
-  const rightLegVec    = new THREE.Vector3().subVectors(rightAnkle, rightHipSocket);
+  rightHipSocket.y += thighOffsetY;
 
-  set('rightUpperLeg', rightHipSocket.clone());
-  set('rightLowerLeg', new THREE.Vector3().copy(rightHipSocket).addScaledVector(rightLegVec, 0.49));
-  set('rightFoot',     new THREE.Vector3().copy(rightHipSocket).addScaledVector(rightLegVec, 0.98));
-  set('rightToes',     new THREE.Vector3().copy(rightAnkle)
-    .addScaledVector(spineAxis,   -0.062 * scale)
-    .addScaledVector(forwardAxis,  0.070 * scale));
+  placeLegChain(1, leftHipSocket, lm.leftKnee, lm.leftAnkle, spineAxis, forwardAxis, scale, set);
+  placeLegChain(-1, rightHipSocket, lm.rightKnee, lm.rightAnkle, spineAxis, forwardAxis, scale, set);
 
-  // ── 6. Left arm chain ─────────────────────────────────────────────────────
-  // The shoulder landmark is the glenohumeral joint (shoulder ball).
-  // We extend along leftAxis (character's left = +X in T-pose world).
-  // Reference segment lengths (scaled):
-  //   upperArm:  0.279 m  →  0.279 * scale
-  //   lowerArm:  0.267 m  →  0.267 * scale
-  //   finger tip: 0.082 m  → 0.082 * scale (index proximal)
+  // ── 6 & 7. Arm chains ─────────────────────────────────────────────────────
+  const upperChestPos = wp.get('upperChest');
+  const leftArm = placeArmChain(
+    1,
+    lm.leftShoulder,
+    lm.leftElbow,
+    lm.leftWrist,
+    upperChestPos,
+    leftAxis,
+    scale,
+    set,
+  );
+  const rightArm = placeArmChain(
+    -1,
+    lm.rightShoulder,
+    lm.rightElbow,
+    lm.rightWrist,
+    upperChestPos,
+    leftAxis,
+    scale,
+    set,
+  );
 
-  const refUpperArm  = 0.279 * scale;
-  const refLowerArm  = 0.267 * scale;
-
-  // Shoulder bone sits between upperChest midline and glenohumeral joint
-  if (wp.has('upperChest')) {
-    const upperChestPos = wp.get('upperChest')!;
-    set('leftShoulder', lerpVec3(upperChestPos, lm.leftShoulder, 0.4));
-  }
-
-  const leftUpperArmPos = lm.leftShoulder.clone();
-  set('leftUpperArm', leftUpperArmPos);
-
-  const leftLowerArmPos = leftUpperArmPos.clone().addScaledVector(leftAxis, refUpperArm);
-  set('leftLowerArm', leftLowerArmPos);
-
-  const leftHandPos = leftLowerArmPos.clone().addScaledVector(leftAxis, refLowerArm);
-  set('leftHand', leftHandPos);
-
-  // ── 7. Right arm chain ────────────────────────────────────────────────────
-  if (wp.has('upperChest')) {
-    const upperChestPos = wp.get('upperChest')!;
-    set('rightShoulder', lerpVec3(upperChestPos, lm.rightShoulder, 0.4));
-  }
-
-  const rightUpperArmPos = lm.rightShoulder.clone();
-  set('rightUpperArm', rightUpperArmPos);
-
-  const rightLowerArmPos = rightUpperArmPos.clone().addScaledVector(leftAxis, -refUpperArm);
-  set('rightLowerArm', rightLowerArmPos);
-
-  const rightHandPos = rightLowerArmPos.clone().addScaledVector(leftAxis, -refLowerArm);
-  set('rightHand', rightHandPos);
-
-  // ── 8. Left fingers ───────────────────────────────────────────────────────
-  // Fingers fan out from the hand in the leftAxis (+X) direction.
-  // Z offsets spread them: thumb forward, little finger back.
-  // Reference metacarpal length ≈ 0.082 * scale (index).
+  // ── 8 & 9. Finger chains aligned with forearm→wrist ───────────────────────
   if (wp.has('leftHand')) {
-    const hand = wp.get('leftHand')!;
-    const fi   = leftAxis.clone();      // finger extension direction
-    const fw   = forwardAxis.clone();   // finger spread direction
-
-    const refMC   = 0.082 * scale;
-    const refPrx  = 0.030 * scale;
-    const refMid  = 0.022 * scale;
-
-    // Thumb (angled forward)
-    const thumbBase = hand.clone()
-      .addScaledVector(fi, 0.034 * scale)
-      .addScaledVector(spineAxis, -0.006 * scale)
-      .addScaledVector(fw,  0.022 * scale);
-    set('leftThumbMetacarpal', thumbBase);
-    const tPrx = thumbBase.clone().addScaledVector(fi, 0.026 * scale).addScaledVector(fw, 0.012 * scale);
-    set('leftThumbProximal', tPrx);
-    set('leftThumbDistal', tPrx.clone().addScaledVector(fi, 0.022 * scale));
-
-    // Index
-    const idxBase = hand.clone().addScaledVector(fi, refMC).addScaledVector(fw, 0.012 * scale);
-    set('leftIndexProximal', idxBase);
-    const idxMid = idxBase.clone().addScaledVector(fi, refPrx);
-    set('leftIndexIntermediate', idxMid);
-    set('leftIndexDistal', idxMid.clone().addScaledVector(fi, refMid));
-
-    // Middle
-    const midBase = hand.clone().addScaledVector(fi, refMC).addScaledVector(fw, 0.004 * scale);
-    set('leftMiddleProximal', midBase);
-    const midMid = midBase.clone().addScaledVector(fi, 0.034 * scale);
-    set('leftMiddleIntermediate', midMid);
-    set('leftMiddleDistal', midMid.clone().addScaledVector(fi, 0.026 * scale));
-
-    // Ring
-    const ringBase = hand.clone().addScaledVector(fi, 0.079 * scale).addScaledVector(fw, -0.008 * scale);
-    set('leftRingProximal', ringBase);
-    const ringMid = ringBase.clone().addScaledVector(fi, refPrx);
-    set('leftRingIntermediate', ringMid);
-    set('leftRingDistal', ringMid.clone().addScaledVector(fi, refMid));
-
-    // Little
-    const littleBase = hand.clone().addScaledVector(fi, 0.072 * scale).addScaledVector(fw, -0.020 * scale);
-    set('leftLittleProximal', littleBase);
-    const littleMid = littleBase.clone().addScaledVector(fi, 0.024 * scale);
-    set('leftLittleIntermediate', littleMid);
-    set('leftLittleDistal', littleMid.clone().addScaledVector(fi, 0.018 * scale));
+    placeFingerChain(
+      1,
+      leftArm.handPos,
+      leftArm.lowerArmPos,
+      leftAxis,
+      forwardAxis,
+      spineAxis,
+      scale,
+      set,
+    );
+  }
+  if (wp.has('rightHand')) {
+    placeFingerChain(
+      -1,
+      rightArm.handPos,
+      rightArm.lowerArmPos,
+      leftAxis,
+      forwardAxis,
+      spineAxis,
+      scale,
+      set,
+    );
   }
 
-  // ── 9. Right fingers (mirror of left; negate leftAxis offsets) ────────────
-  if (wp.has('rightHand')) {
-    const hand = wp.get('rightHand')!;
-    const fi   = leftAxis.clone().negate(); // right hand extends in -leftAxis
-    const fw   = forwardAxis.clone();
+  // ── 10. Optional secondary non-VRM bones ──────────────────────────────────
+  if (includedBones.has('pelvisLower')) {
+    const pelvisLowerPos = lm.groin
+      ? lm.groin.clone().addScaledVector(spineAxis, 0.015 * scale)
+      : hipCentre
+          .clone()
+          .addScaledVector(spineAxis, -0.065 * scale)
+          .addScaledVector(forwardAxis, 0.015 * scale);
+    set('pelvisLower', pelvisLowerPos);
+  }
 
-    const refMC   = 0.082 * scale;
-    const refPrx  = 0.030 * scale;
-    const refMid  = 0.022 * scale;
+  if (includedBones.has('leftButt') || includedBones.has('rightButt')) {
+    const gluteOffsetY = lm.groin
+      ? lm.groin.y + 0.03 * scale - hipCentre.y
+      : -0.035 * scale;
+    const buttX = Math.max(0.06 * scale, geo.hipWidth * 0.42);
+    const buttBack = 0.085 * scale;
 
-    const thumbBase = hand.clone()
-      .addScaledVector(fi, 0.034 * scale)
-      .addScaledVector(spineAxis, -0.006 * scale)
-      .addScaledVector(fw, 0.022 * scale);
-    set('rightThumbMetacarpal', thumbBase);
-    const tPrx = thumbBase.clone().addScaledVector(fi, 0.026 * scale).addScaledVector(fw, 0.012 * scale);
-    set('rightThumbProximal', tPrx);
-    set('rightThumbDistal', tPrx.clone().addScaledVector(fi, 0.022 * scale));
+    set(
+      'leftButt',
+      hipCentre
+        .clone()
+        .addScaledVector(leftAxis, buttX)
+        .addScaledVector(spineAxis, gluteOffsetY)
+        .addScaledVector(forwardAxis, -buttBack),
+    );
+    set(
+      'rightButt',
+      hipCentre
+        .clone()
+        .addScaledVector(leftAxis, -buttX)
+        .addScaledVector(spineAxis, gluteOffsetY)
+        .addScaledVector(forwardAxis, -buttBack),
+    );
+  }
 
-    const idxBase = hand.clone().addScaledVector(fi, refMC).addScaledVector(fw, 0.012 * scale);
-    set('rightIndexProximal', idxBase);
-    const idxMid = idxBase.clone().addScaledVector(fi, refPrx);
-    set('rightIndexIntermediate', idxMid);
-    set('rightIndexDistal', idxMid.clone().addScaledVector(fi, refMid));
+  if (includedBones.has('leftBreast') || includedBones.has('rightBreast')) {
+    const chestAnchor = wp.get('upperChest') ?? wp.get('chest') ?? hipCentre;
+    const chestPos = wp.get('chest') ?? chestAnchor;
+    const midChest = lerpVec3(chestAnchor, chestPos, 0.35);
+    const breastX = Math.max(0.075 * scale, geo.shoulderWidth * 0.24);
+    const breastForward = 0.095 * scale;
 
-    const midBase = hand.clone().addScaledVector(fi, refMC).addScaledVector(fw, 0.004 * scale);
-    set('rightMiddleProximal', midBase);
-    const midMid = midBase.clone().addScaledVector(fi, 0.034 * scale);
-    set('rightMiddleIntermediate', midMid);
-    set('rightMiddleDistal', midMid.clone().addScaledVector(fi, 0.026 * scale));
-
-    const ringBase = hand.clone().addScaledVector(fi, 0.079 * scale).addScaledVector(fw, -0.008 * scale);
-    set('rightRingProximal', ringBase);
-    const ringMid = ringBase.clone().addScaledVector(fi, refPrx);
-    set('rightRingIntermediate', ringMid);
-    set('rightRingDistal', ringMid.clone().addScaledVector(fi, refMid));
-
-    const littleBase = hand.clone().addScaledVector(fi, 0.072 * scale).addScaledVector(fw, -0.020 * scale);
-    set('rightLittleProximal', littleBase);
-    const littleMid = littleBase.clone().addScaledVector(fi, 0.024 * scale);
-    set('rightLittleIntermediate', littleMid);
-    set('rightLittleDistal', littleMid.clone().addScaledVector(fi, 0.018 * scale));
+    set(
+      'leftBreast',
+      midChest
+        .clone()
+        .addScaledVector(leftAxis, breastX)
+        .addScaledVector(forwardAxis, breastForward),
+    );
+    set(
+      'rightBreast',
+      midChest
+        .clone()
+        .addScaledVector(leftAxis, -breastX)
+        .addScaledVector(forwardAxis, breastForward),
+    );
   }
 
   return wp;
@@ -431,47 +590,34 @@ function solveWorldPositions(
 // World → local conversion
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Converts world-space bone positions back into the local positions expected
- * by the bone hierarchy, then writes them onto the actual `THREE.Bone` objects.
- *
- * Since we keep all bone rotations as identity (pure T-pose), the local
- * position of a bone is simply:
- *
- *   localPos = worldPos - parentWorldPos
- *
- * This is exact for identity-rotation hierarchies (no rotation means the
- * world transform is just accumulated translation).
- *
- * Bones without a solved world position are left at their scaled T-pose default.
- */
 function applyWorldPositionsToBones(
   built: BuiltSkeleton,
-  worldPositions: Map<VrmBoneName, THREE.Vector3>,
+  worldPositions: Map<RigBoneName, THREE.Vector3>,
   scale: number,
 ): void {
   // Walk in definition order (parents before children)
-  for (const def of VRM_BONE_DEFS) {
+  for (const def of ALL_RIG_BONE_DEFS) {
     const bone = built.boneMap.get(def.name);
-    if (!bone) continue; // bone not in this skeleton (requiredOnly)
+    if (!bone) continue;
 
     const worldPos = worldPositions.get(def.name);
     if (!worldPos) {
-      // Bone has no world position solved — keep scaled T-pose local position
       const [lx, ly, lz] = def.localPosition;
       bone.position.set(lx * scale, ly * scale, lz * scale);
       continue;
     }
 
-    if (def.parent === null) {
-      // Root bone (hips): local position IS world position
+    const actualParent = bone.parent && (bone.parent as THREE.Bone).isBone
+      ? (bone.parent.name as RigBoneName)
+      : null;
+
+    if (actualParent === null) {
       bone.position.copy(worldPos);
     } else {
-      const parentWorldPos = worldPositions.get(def.parent);
+      const parentWorldPos = worldPositions.get(actualParent);
       if (parentWorldPos) {
         bone.position.subVectors(worldPos, parentWorldPos);
       } else {
-        // Parent not solved — fall back to scaled T-pose offset
         const [lx, ly, lz] = def.localPosition;
         bone.position.set(lx * scale, ly * scale, lz * scale);
       }
@@ -484,53 +630,32 @@ function applyWorldPositionsToBones(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Fits a fresh VRM T-pose skeleton to a set of 7 anatomical landmarks,
- * returning a skeleton whose bone positions match the target humanoid mesh.
- *
- * The returned skeleton should be placed at the scene origin before calling
- * `skeleton.calculateInverses()` and binding it to skinned meshes.
- *
- * @param landmarks  7 world-space points on the target mesh (in metres).
- * @param options    Optional tuning flags.
- *
- * @example
- * ```ts
- * const result = fitSkeletonToLandmarks(landmarks);
- * scene.add(result.built.root);
- * result.built.root.updateMatrixWorld(true);
- * result.built.skeleton.calculateInverses();
- * // → ready for weight transfer
- * ```
+ * Fits a VRM skeleton to a set of anatomical landmarks (8 core required +
+ * optional limb/detail markers), returning a skeleton matching T-pose, A-pose,
+ * or bent-limb meshes.
  */
 export function fitSkeletonToLandmarks(
   landmarks: LandmarkMap,
   options: FitOptions = {},
 ): FitResult {
   const clampScale = options.clampScale ?? true;
+  const requiredOnly = options.requiredOnly ?? false;
+  const includeSecondaryBones = !requiredOnly && (options.includeSecondaryBones ?? false);
 
-  // 1. Measure
   const geo = deriveLandmarkGeometry(landmarks, clampScale);
 
-  // 2. Build a fresh skeleton (always start clean)
   const built = buildTPoseSkeleton({
     scale: geo.scale,
-    requiredOnly: options.requiredOnly ?? false,
+    requiredOnly,
+    includeSecondaryBones,
   });
 
-  // 3. Compute which bones are present
-  const includedBones = new Set(built.boneMap.keys()) as Set<VrmBoneName>;
-
-  // 4. Solve world-space positions
+  const includedBones = new Set<RigBoneName>(built.boneMap.keys());
   const worldPositions = solveWorldPositions(landmarks, geo, includedBones);
 
-  // 5. Apply world positions back onto the bone local positions
   applyWorldPositionsToBones(built, worldPositions, geo.scale);
-
-  // 6. Recompute world matrices so the skeleton is ready
   built.root.updateMatrixWorld(true);
 
-  // 7. Fill in any unsolved world positions from the final bone matrices
-  //    (catches bones we placed via scaled T-pose fallback)
   for (const [name, bone] of built.boneMap) {
     if (!worldPositions.has(name)) {
       worldPositions.set(name, bone.getWorldPosition(new THREE.Vector3()));
@@ -544,75 +669,529 @@ export function fitSkeletonToLandmarks(
     worldPositions,
     shoulderWidth: geo.shoulderWidth,
     hipWidth: geo.hipWidth,
+    ...(geo.groinY !== undefined ? { groinY: geo.groinY } : {}),
   };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Landmark auto-detection from mesh bounding geometry
+// Landmark auto-detection from mesh bounding geometry + vertex slices
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Options for `estimateLandmarksFromBounds`.
- */
 export interface BoundingBoxLandmarkOptions {
   /**
    * The mesh's bounding box, in world space.
-   * Pass the result of `geometry.computeBoundingBox(); geometry.boundingBox`.
    */
   boundingBox: THREE.Box3;
 
   /**
-   * Optional: the mesh's vertex positions buffer (Float32Array), used for a
-   * more accurate hip-centre estimate by sampling the waist cross-section.
-   * When omitted, the hip centre is estimated from bounding box proportions.
+   * Optional vertex position buffer (Float32Array) used to detect T-pose vs
+   * A-pose arm droop, elbows, wrists, knees, chin, groin, and median Z depths.
    */
   positionBuffer?: Float32Array;
+
+  /**
+   * Landmark preset ('8' | '14' | '16') controlling whether limb and detail
+   * landmarks are populated. Defaults to '8' when omitted for backward compatibility.
+   */
+  preset?: LandmarkPreset;
+}
+
+interface SampledVertex {
+  x: number;
+  y: number;
+  z: number;
+  u: number; // normalised height in [0, 1]
+}
+
+function sampleMeshVertices(
+  pos: Float32Array,
+  minY: number,
+  totalH: number,
+): SampledVertex[] {
+  const count = Math.floor(pos.length / 3);
+  if (count < 12 || totalH <= 1e-5) return [];
+
+  const stride = count > 24000 ? Math.floor(count / 20000) : 1;
+  const verts: SampledVertex[] = [];
+  for (let i = 0; i < count; i += stride) {
+    const o = i * 3;
+    const x = pos[o]!;
+    const y = pos[o + 1]!;
+    const z = pos[o + 2]!;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
+    verts.push({ x, y, z, u: (y - minY) / totalH });
+  }
+  return verts;
+}
+
+function detectSideArm(
+  side: 1 | -1,
+  verts: SampledVertex[],
+  midX: number,
+  torsoZ: number,
+  shoulderDx: number,
+  defaultShoulderY: number,
+  totalH: number,
+  isTPoseFallback: boolean,
+): {
+  shoulder: THREE.Vector3;
+  elbow: THREE.Vector3;
+  wrist: THREE.Vector3;
+} {
+  // Refined shoulder height/Z from the deltoid-torso junction band
+  const shBand = verts.filter(
+    (v) =>
+      v.u >= 0.76 &&
+      v.u <= 0.87 &&
+      side * (v.x - midX) >= shoulderDx * 0.78 &&
+      side * (v.x - midX) <= shoulderDx * 1.35 &&
+      Math.abs(v.z - torsoZ) < 0.14 * totalH,
+  );
+  const shoulderY = shBand.length >= 3 ? (median(shBand.map((v) => v.y)) ?? defaultShoulderY) : defaultShoulderY;
+  const shoulderZ = shBand.length >= 3 ? (median(shBand.map((v) => v.z)) ?? torsoZ) : torsoZ;
+  const shoulder = new THREE.Vector3(midX + side * shoulderDx, shoulderY, shoulderZ);
+
+  // Lateral arm vertices outside torso/hip X band
+  const armVerts = verts.filter(
+    (v) =>
+      v.u >= 0.34 &&
+      v.u <= 0.93 &&
+      side * (v.x - midX) > shoulderDx + 0.02 * totalH,
+  );
+
+  if (armVerts.length >= 8) {
+    // Rank arm tips primarily by lateral reach from shoulder so flared skirts/hips
+    // (large vertical drop, small X offset) never beat the actual outstretched hand.
+    const withReach = armVerts.map((v) => ({
+      v,
+      lat: side * (v.x - shoulder.x),
+      d: Math.hypot(v.x - shoulder.x, v.y - shoulder.y, v.z - shoulder.z),
+    }));
+    const tipLat = percentile(withReach.map((item) => item.lat), 0.98) ?? 0;
+
+    if (tipLat >= 0.07 * totalH) {
+      const tipBand = withReach
+        .filter((item) => item.lat >= tipLat * 0.88)
+        .map((item) => item.v);
+      const tip = new THREE.Vector3(
+        median(tipBand.map((v) => v.x)) ?? shoulder.x + side * tipLat,
+        median(tipBand.map((v) => v.y)) ?? shoulder.y,
+        median(tipBand.map((v) => v.z)) ?? shoulder.z,
+      );
+
+      // Filter vertices along the shoulder -> tip cylinder so hanging skirt cloth
+      // never contaminates wrist or elbow medians.
+      const chord = new THREE.Vector3().subVectors(tip, shoulder);
+      const chordLen = chord.length();
+      const chordLenSq = Math.max(1e-6, chordLen * chordLen);
+      const tubeRadiusSq = Math.pow(0.08 * totalH, 2);
+
+      const onArm = armVerts
+        .map((v) => {
+          const rx = v.x - shoulder.x;
+          const ry = v.y - shoulder.y;
+          const rz = v.z - shoulder.z;
+          const proj = (rx * chord.x + ry * chord.y + rz * chord.z) / chordLenSq;
+          const px = rx - proj * chord.x;
+          const py = ry - proj * chord.y;
+          const pz = rz - proj * chord.z;
+          return { v, proj, perpSq: px * px + py * py + pz * pz };
+        })
+        .filter((item) => item.proj >= 0 && item.proj <= 1.05 && item.perpSq <= tubeRadiusSq);
+
+      const wristBand = onArm
+        .filter((item) => item.proj >= 0.75 && item.proj <= 0.88)
+        .map((item) => item.v);
+      const wrist = wristBand.length >= 3
+        ? new THREE.Vector3(
+            median(wristBand.map((v) => v.x))!,
+            median(wristBand.map((v) => v.y))!,
+            median(wristBand.map((v) => v.z))!,
+          )
+        : lerpVec3(shoulder, tip, 0.81);
+
+      const wChord = new THREE.Vector3().subVectors(wrist, shoulder);
+      const wChordLenSq = Math.max(1e-6, wChord.lengthSq());
+      const elbowBand = onArm
+        .filter((item) => {
+          const projW =
+            ((item.v.x - shoulder.x) * wChord.x +
+              (item.v.y - shoulder.y) * wChord.y +
+              (item.v.z - shoulder.z) * wChord.z) /
+            wChordLenSq;
+          return projW >= 0.43 && projW <= 0.58;
+        })
+        .map((item) => item.v);
+      const elbow = elbowBand.length >= 3
+        ? new THREE.Vector3(
+            median(elbowBand.map((v) => v.x))!,
+            median(elbowBand.map((v) => v.y))!,
+            median(elbowBand.map((v) => v.z))!,
+          )
+        : lerpVec3(shoulder, wrist, 0.51);
+
+      // Refine shoulder Z/Y gently toward proximal upper arm centerline
+      const proxBand = onArm
+        .filter((item) => item.proj >= 0.04 && item.proj <= 0.18)
+        .map((item) => item.v);
+      if (proxBand.length >= 3) {
+        const proxY = median(proxBand.map((v) => v.y))!;
+        const proxZ = median(proxBand.map((v) => v.z))!;
+        shoulder.y = THREE.MathUtils.lerp(shoulder.y, proxY, 0.45);
+        shoulder.z = THREE.MathUtils.lerp(shoulder.z, proxZ, 0.5);
+      }
+
+      return { shoulder, elbow, wrist };
+    }
+  }
+
+  // Proportional fallback (T-pose vs ~48° A-pose)
+  if (isTPoseFallback) {
+    return {
+      shoulder,
+      elbow: shoulder.clone().add(new THREE.Vector3(side * 0.164 * totalH, 0, 0)),
+      wrist: shoulder.clone().add(new THREE.Vector3(side * 0.321 * totalH, 0, 0)),
+    };
+  }
+  return {
+    shoulder,
+    elbow: shoulder.clone().add(new THREE.Vector3(side * 0.115 * totalH, -0.115 * totalH, 0)),
+    wrist: shoulder.clone().add(new THREE.Vector3(side * 0.220 * totalH, -0.230 * totalH, 0.015 * totalH)),
+  };
 }
 
 /**
- * Estimates the 7 anatomical landmarks from the mesh's bounding box alone.
- *
- * This is the **fallback** auto-detection path: it assumes a standard upright
- * humanoid figure with arms out (T-pose or A-pose) and derives landmarks
- * from published proportional ratios.
- *
- * For better results, use a visual landmark editor (LandmarkEditor.tsx) on
- * top of this initial estimate.
- *
- * Ratios used (Winter 1990, De Leva 1996 — public domain):
- *   • Head top  : 100% of height
- *   • Neck base : 87%  of height
- *   • Shoulder  : 82%  of height, ±43% of width
- *   • Hip       : 52%  of height, ±25% of width
- *   • Ankle     : 4%   of height
+ * Estimates anatomical landmarks from the mesh bounding box and (when supplied)
+ * vertex positions. Detects T-pose vs A-pose arm droop, bent limbs, chin, groin,
+ * and interior median Z depths automatically.
  */
 export function estimateLandmarksFromBounds(
   opts: BoundingBoxLandmarkOptions,
 ): LandmarkMap {
-  const { boundingBox: bb } = opts;
+  const { boundingBox: bb, positionBuffer, preset = '8' } = opts;
 
-  const minY  = bb.min.y;
-  const maxY  = bb.max.y;
-  const minX  = bb.min.x;
-  const maxX  = bb.max.x;
-  const totalH = maxY - minY;
-  const totalW  = maxX - minX;
+  const minY = bb.min.y;
+  const maxY = bb.max.y;
+  const minX = bb.min.x;
+  const maxX = bb.max.x;
+  const totalH = Math.max(1e-4, maxY - minY);
+  const totalW = Math.max(1e-4, maxX - minX);
   const centreX = (minX + maxX) * 0.5;
   const centreZ = (bb.min.z + bb.max.z) * 0.5;
+  const isWideTPose = totalW / totalH > 0.72;
 
-  const y = (ratio: number) => minY + totalH * ratio;
-  const halfW = (ratio: number) => totalW * ratio;
+  const yAt = (ratio: number) => minY + totalH * ratio;
 
-  return {
-    headTop:        new THREE.Vector3(centreX, y(1.00), centreZ),
-    neckBase:       new THREE.Vector3(centreX, y(0.87), centreZ),
-    leftShoulder:   new THREE.Vector3(centreX + halfW(0.43), y(0.82), centreZ),
-    rightShoulder:  new THREE.Vector3(centreX - halfW(0.43), y(0.82), centreZ),
-    leftHip:        new THREE.Vector3(centreX + halfW(0.25), y(0.52), centreZ),
-    rightHip:       new THREE.Vector3(centreX - halfW(0.25), y(0.52), centreZ),
-    leftAnkle:      new THREE.Vector3(centreX + halfW(0.14), y(0.04), centreZ),
-    rightAnkle:     new THREE.Vector3(centreX - halfW(0.14), y(0.04), centreZ),
+  // Height-based proportional fallback bounds (clamped inside bbox)
+  const fallbackShoulderDx = Math.min(totalW * 0.43, 0.118 * totalH);
+  const fallbackHipDx = Math.min(totalW * 0.25, 0.068 * totalH);
+  const fallbackAnkleDx = Math.min(totalW * 0.16, 0.062 * totalH);
+
+  const verts = positionBuffer ? sampleMeshVertices(positionBuffer, minY, totalH) : [];
+  const hasVerts = verts.length >= 24;
+
+  // ── 1. Body midline X and core Z ──────────────────────────────────────────
+  let midX = centreX;
+  let headZ = centreZ;
+  let torsoZ = centreZ;
+
+  if (hasVerts) {
+    const headBand = verts.filter((v) => v.u >= 0.89 && v.u <= 0.98);
+    if (headBand.length >= 6) {
+      midX = median(headBand.map((v) => v.x)) ?? centreX;
+      headZ = median(headBand.map((v) => v.z)) ?? centreZ;
+    }
+
+    const coreTorso = verts.filter(
+      (v) => v.u >= 0.56 && v.u <= 0.74 && Math.abs(v.x - midX) < 0.125 * totalH,
+    );
+    if (coreTorso.length >= 8) {
+      torsoZ = median(coreTorso.map((v) => v.z)) ?? headZ;
+      const coreMid = median(coreTorso.map((v) => v.x));
+      if (coreMid !== null) midX = THREE.MathUtils.lerp(midX, coreMid, 0.5);
+    } else {
+      torsoZ = headZ;
+    }
+  }
+
+  // ── 2. Head top, neck base, chin ──────────────────────────────────────────
+  let headTop = new THREE.Vector3(midX, yAt(1.0), headZ);
+  let neckBase = new THREE.Vector3(midX, yAt(0.86), torsoZ);
+  let chin = new THREE.Vector3(midX, yAt(0.888), clamp(headZ + 0.05 * totalH, bb.min.z, bb.max.z));
+
+  if (hasVerts) {
+    const crownBand = verts.filter((v) => v.u >= 0.96);
+    if (crownBand.length >= 2) {
+      let crownMaxY = maxY;
+      for (const v of crownBand) {
+        if (v.y > crownMaxY) crownMaxY = v.y;
+      }
+      headTop = new THREE.Vector3(
+        midX,
+        crownMaxY,
+        median(crownBand.map((v) => v.z)) ?? headZ,
+      );
+    }
+
+    // Neck base: scan [0.81, 0.89] for the narrowest neck cross-section
+    let bestNeckU = 0.855;
+    let minSpan = Infinity;
+    for (let s = 0; s < 8; s++) {
+      const u0 = 0.81 + s * 0.01;
+      const u1 = u0 + 0.012;
+      const slice = verts.filter(
+        (v) =>
+          v.u >= u0 &&
+          v.u <= u1 &&
+          Math.abs(v.x - midX) < 0.095 * totalH &&
+          Math.abs(v.z - torsoZ) < 0.12 * totalH,
+      );
+      if (slice.length >= 3) {
+        let sMinX = Infinity;
+        let sMaxX = -Infinity;
+        for (const v of slice) {
+          if (v.x < sMinX) sMinX = v.x;
+          if (v.x > sMaxX) sMaxX = v.x;
+        }
+        const span = sMaxX - sMinX;
+        if (span < minSpan) {
+          minSpan = span;
+          bestNeckU = (u0 + u1) * 0.5;
+        }
+      }
+    }
+    const neckU = clamp(bestNeckU - 0.012, 0.825, 0.875);
+    const neckSlice = verts.filter(
+      (v) =>
+        Math.abs(v.u - neckU) <= 0.015 &&
+        Math.abs(v.x - midX) < 0.065 * totalH,
+    );
+    neckBase = new THREE.Vector3(
+      midX,
+      yAt(neckU),
+      neckSlice.length >= 2 ? (median(neckSlice.map((v) => v.z)) ?? torsoZ) : torsoZ,
+    );
+
+    // Chin: detect anterior protrusion jump above throat
+    const throatVerts = verts.filter(
+      (v) => v.u >= 0.835 && v.u <= 0.87 && Math.abs(v.x - midX) < 0.045 * totalH,
+    );
+    const throatFrontZ = throatVerts.length >= 2
+      ? Math.max(...throatVerts.map((v) => v.z))
+      : headZ;
+
+    let detectedChinY: number | null = null;
+    let detectedChinZ = headZ + 0.045 * totalH;
+    for (let s = 0; s < 7; s++) {
+      const u0 = 0.87 + s * 0.007;
+      const u1 = u0 + 0.008;
+      const faceSlice = verts.filter(
+        (v) => v.u >= u0 && v.u <= u1 && Math.abs(v.x - midX) < 0.045 * totalH,
+      );
+      if (faceSlice.length >= 2) {
+        const frontZ = Math.max(...faceSlice.map((v) => v.z));
+        if (frontZ > throatFrontZ + 0.012 * totalH) {
+          detectedChinY = yAt((u0 + u1) * 0.5);
+          detectedChinZ = THREE.MathUtils.lerp(headZ, frontZ, 0.88);
+          break;
+        }
+      }
+    }
+    if (detectedChinY !== null) {
+      chin = new THREE.Vector3(midX, detectedChinY, detectedChinZ);
+    } else {
+      chin = new THREE.Vector3(
+        midX,
+        THREE.MathUtils.lerp(neckBase.y, headTop.y, 0.22),
+        clamp(headZ + 0.045 * totalH, bb.min.z, bb.max.z),
+      );
+    }
+  }
+
+  // ── 3. Groin & Hips ───────────────────────────────────────────────────────
+  let groin = new THREE.Vector3(midX, yAt(0.475), torsoZ);
+  let groinDetected = false;
+  let hipU = 0.52;
+  let hipDx = fallbackHipDx;
+  let hipZ = torsoZ;
+
+  if (hasVerts) {
+    // Scan midline gap from upper thighs (0.36) up through pelvis (0.58)
+    const sliceCounts: Array<{ u: number; verts: SampledVertex[] }> = [];
+    for (let s = 0; s < 22; s++) {
+      const u0 = 0.36 + s * 0.01;
+      const u1 = u0 + 0.01;
+      const midSlice = verts.filter(
+        (v) =>
+          v.u >= u0 &&
+          v.u <= u1 &&
+          Math.abs(v.x - midX) < 0.026 * totalH &&
+          Math.abs(v.z - torsoZ) < 0.11 * totalH,
+      );
+      sliceCounts.push({ u: (u0 + u1) * 0.5, verts: midSlice });
+    }
+
+    // Require an open leg gap below the crotch so skirts don't false-trigger at 0.36
+    const hasOpenLegGap =
+      sliceCounts[0]!.verts.length <= 1 && sliceCounts[1]!.verts.length <= 1;
+
+    if (hasOpenLegGap) {
+      for (let k = 2; k < sliceCounts.length - 1; k++) {
+        if (sliceCounts[k]!.verts.length >= 2 && sliceCounts[k + 1]!.verts.length >= 2) {
+          const gU = sliceCounts[k]!.u;
+          const gZ = median(sliceCounts[k]!.verts.map((v) => v.z)) ?? torsoZ;
+          groin = new THREE.Vector3(midX, yAt(gU), gZ);
+          groinDetected = true;
+          break;
+        }
+      }
+    }
+
+    if (groinDetected) {
+      hipU = clamp((groin.y - minY) / totalH + 0.045, 0.48, 0.57);
+    }
+
+    const hipSlice = verts.filter(
+      (v) =>
+        Math.abs(v.u - hipU) <= 0.022 &&
+        Math.abs(v.x - midX) < 0.15 * totalH &&
+        Math.abs(v.z - torsoZ) < 0.14 * totalH,
+    );
+    if (hipSlice.length >= 6) {
+      hipZ = median(hipSlice.map((v) => v.z)) ?? torsoZ;
+      const pelvisHalfW = percentile(hipSlice.map((v) => Math.abs(v.x - midX)), 0.88);
+      if (pelvisHalfW !== null) {
+        hipDx = clamp(pelvisHalfW * 0.58, 0.048 * totalH, 0.088 * totalH);
+      }
+    }
+  }
+
+  const leftHip = new THREE.Vector3(midX + hipDx, yAt(hipU), hipZ);
+  const rightHip = new THREE.Vector3(midX - hipDx, yAt(hipU), hipZ);
+
+  // ── 4. Knees & Ankles ─────────────────────────────────────────────────────
+  const ankleU = 0.045;
+  const kneeU = THREE.MathUtils.lerp(ankleU, hipU, 0.51);
+
+  const detectLegJoints = (side: 1 | -1) => {
+    const legVerts = hasVerts
+      ? verts.filter(
+          (v) =>
+            side * (v.x - midX) > 0.004 * totalH &&
+            side * (v.x - midX) < 0.22 * totalH,
+        )
+      : [];
+
+    const ankleBand = legVerts.filter((v) => v.u >= 0.028 && v.u <= 0.075);
+    const ankle = ankleBand.length >= 3
+      ? new THREE.Vector3(
+          median(ankleBand.map((v) => v.x))!,
+          yAt(ankleU),
+          median(ankleBand.map((v) => v.z))!,
+        )
+      : new THREE.Vector3(midX + side * fallbackAnkleDx, yAt(ankleU), torsoZ);
+
+    const kneeBand = legVerts.filter((v) => Math.abs(v.u - kneeU) <= 0.028);
+    const knee = kneeBand.length >= 3
+      ? new THREE.Vector3(
+          median(kneeBand.map((v) => v.x))!,
+          yAt(kneeU),
+          median(kneeBand.map((v) => v.z))!,
+        )
+      : new THREE.Vector3(
+          THREE.MathUtils.lerp(side === 1 ? leftHip.x : rightHip.x, ankle.x, 0.5),
+          yAt(kneeU),
+          THREE.MathUtils.lerp(hipZ, ankle.z, 0.5),
+        );
+
+    return { knee, ankle };
   };
+
+  const leftLeg = detectLegJoints(1);
+  const rightLeg = detectLegJoints(-1);
+
+  // ── 5. Shoulders, Elbows, Wrists (T-pose vs A-pose detection) ─────────────
+  let shoulderDx = fallbackShoulderDx;
+  const defaultShoulderY = yAt(0.815);
+
+  if (hasVerts) {
+    const ribBand = verts.filter(
+      (v) =>
+        v.u >= 0.60 &&
+        v.u <= 0.72 &&
+        Math.abs(v.x - midX) < 0.135 * totalH &&
+        Math.abs(v.z - torsoZ) < 0.14 * totalH,
+    );
+    if (ribBand.length >= 6) {
+      const torsoEdge = percentile(ribBand.map((v) => Math.abs(v.x - midX)), 0.94);
+      if (torsoEdge !== null) {
+        shoulderDx = clamp(torsoEdge * 1.05, 0.095 * totalH, 0.135 * totalH);
+      }
+    }
+  }
+
+  let leftArm: { shoulder: THREE.Vector3; elbow: THREE.Vector3; wrist: THREE.Vector3 };
+  let rightArm: { shoulder: THREE.Vector3; elbow: THREE.Vector3; wrist: THREE.Vector3 };
+
+  if (hasVerts) {
+    leftArm = detectSideArm(1, verts, midX, torsoZ, shoulderDx, defaultShoulderY, totalH, isWideTPose);
+    rightArm = detectSideArm(-1, verts, midX, torsoZ, shoulderDx, defaultShoulderY, totalH, isWideTPose);
+  } else {
+    const shL = new THREE.Vector3(midX + shoulderDx, defaultShoulderY, torsoZ);
+    const shR = new THREE.Vector3(midX - shoulderDx, defaultShoulderY, torsoZ);
+    if (isWideTPose) {
+      const reach = Math.max(0.18 * totalH, totalW * 0.43 - shoulderDx);
+      leftArm = {
+        shoulder: shL,
+        elbow: shL.clone().add(new THREE.Vector3(reach * 0.48, 0, 0)),
+        wrist: shL.clone().add(new THREE.Vector3(reach * 0.90, 0, 0)),
+      };
+      rightArm = {
+        shoulder: shR,
+        elbow: shR.clone().add(new THREE.Vector3(-reach * 0.48, 0, 0)),
+        wrist: shR.clone().add(new THREE.Vector3(-reach * 0.90, 0, 0)),
+      };
+    } else {
+      const armReachX = Math.max(0.08 * totalH, totalW * 0.42 - shoulderDx);
+      leftArm = {
+        shoulder: shL,
+        elbow: new THREE.Vector3(midX + shoulderDx + armReachX * 0.48, yAt(0.69), torsoZ),
+        wrist: new THREE.Vector3(midX + shoulderDx + armReachX * 0.88, yAt(0.54), torsoZ + 0.012 * totalH),
+      };
+      rightArm = {
+        shoulder: shR,
+        elbow: new THREE.Vector3(midX - shoulderDx - armReachX * 0.48, yAt(0.69), torsoZ),
+        wrist: new THREE.Vector3(midX - shoulderDx - armReachX * 0.88, yAt(0.54), torsoZ + 0.012 * totalH),
+      };
+    }
+  }
+
+  const result: LandmarkMap = {
+    headTop,
+    neckBase,
+    leftShoulder: leftArm.shoulder,
+    rightShoulder: rightArm.shoulder,
+    leftHip,
+    rightHip,
+    leftAnkle: leftLeg.ankle,
+    rightAnkle: rightLeg.ankle,
+  };
+
+  if (preset === '14' || preset === '16') {
+    result.leftElbow = leftArm.elbow;
+    result.rightElbow = rightArm.elbow;
+    result.leftWrist = leftArm.wrist;
+    result.rightWrist = rightArm.wrist;
+    result.leftKnee = leftLeg.knee;
+    result.rightKnee = rightLeg.knee;
+  }
+
+  if (preset === '16') {
+    result.chin = chin;
+    result.groin = groin;
+  }
+
+  return result;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -622,8 +1201,6 @@ export function estimateLandmarksFromBounds(
 /**
  * Validates that a set of landmarks passes basic sanity checks.
  * Returns an array of human-readable warning strings (empty = all good).
- *
- * Useful for surfacing errors in the UI before running the fitter.
  */
 export function validateLandmarks(lm: LandmarkMap): string[] {
   const warnings: string[] = [];
@@ -651,6 +1228,29 @@ export function validateLandmarks(lm: LandmarkMap): string[] {
   const shoulderWidth = lm.leftShoulder.distanceTo(lm.rightShoulder);
   if (shoulderWidth < 0.05) {
     warnings.push(`Shoulder landmarks are very close (${shoulderWidth.toFixed(3)} m). Check placement.`);
+  }
+
+  // Optional limb & detail checks (only evaluated when present)
+  if (lm.leftElbow && lm.rightElbow && lm.leftElbow.x < lm.rightElbow.x) {
+    warnings.push('leftElbow should be to the character\'s left (+X). Landmarks may be swapped.');
+  }
+  if (lm.leftWrist && lm.rightWrist && lm.leftWrist.x < lm.rightWrist.x) {
+    warnings.push('leftWrist should be to the character\'s left (+X). Landmarks may be swapped.');
+  }
+  if (lm.leftKnee && lm.rightKnee && lm.leftKnee.x < lm.rightKnee.x) {
+    warnings.push('leftKnee should be to the character\'s left (+X). Landmarks may be swapped.');
+  }
+  if (lm.leftKnee && (lm.leftKnee.y > lm.leftHip.y + 0.02 || lm.leftKnee.y < lm.leftAnkle.y - 0.02)) {
+    warnings.push('leftKnee should be positioned between leftHip and leftAnkle.');
+  }
+  if (lm.rightKnee && (lm.rightKnee.y > lm.rightHip.y + 0.02 || lm.rightKnee.y < lm.rightAnkle.y - 0.02)) {
+    warnings.push('rightKnee should be positioned between rightHip and rightAnkle.');
+  }
+  if (lm.chin && (lm.chin.y >= lm.headTop.y || lm.chin.y < lm.neckBase.y - 0.06)) {
+    warnings.push('chin should be positioned between neckBase and headTop.');
+  }
+  if (lm.groin && (lm.groin.y >= lm.neckBase.y || lm.groin.y <= Math.max(lm.leftAnkle.y, lm.rightAnkle.y))) {
+    warnings.push('groin should be positioned between the ankles and neckBase.');
   }
 
   return warnings;

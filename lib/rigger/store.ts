@@ -10,7 +10,15 @@
 import * as THREE from 'three';
 import { create } from 'zustand';
 
-import { LANDMARK_IDS, nextUnplacedLandmark, type LandmarkId, type LandmarkMap } from '@/lib/rigger/vrmSkeleton';
+import {
+  LANDMARK_IDS,
+  getLandmarkIdsForPreset,
+  nextUnplacedLandmark,
+  type LandmarkId,
+  type LandmarkMap,
+  type LandmarkPreset,
+  type RequiredLandmarkId,
+} from '@/lib/rigger/vrmSkeleton';
 import type { FitResult } from '@/lib/rigger/templateFitter';
 import type { WeightTransferResult } from '@/lib/rigger/weightTransfer';
 import type { DiffusionResult } from '@/lib/rigger/heatDiffusion';
@@ -28,7 +36,33 @@ export type LandmarkMode = 'auto' | 'manual';
  * itself lives in `vrmSkeleton.ts` so the store, the 3D editor and the sidebar
  * cannot drift apart.
  */
-const REQUIRED_LANDMARK_IDS: readonly LandmarkId[] = LANDMARK_IDS;
+const REQUIRED_LANDMARK_IDS: readonly RequiredLandmarkId[] = LANDMARK_IDS;
+
+/** Bilateral landmark pairs mirrored when `useSymmetry` is enabled. */
+export const MIRROR_PAIR: Partial<Record<LandmarkId, LandmarkId>> = {
+  leftShoulder:  'rightShoulder',
+  rightShoulder: 'leftShoulder',
+  leftElbow:     'rightElbow',
+  rightElbow:    'leftElbow',
+  leftWrist:     'rightWrist',
+  rightWrist:    'leftWrist',
+  leftHip:       'rightHip',
+  rightHip:      'leftHip',
+  leftKnee:      'rightKnee',
+  rightKnee:     'leftKnee',
+  leftAnkle:     'rightAnkle',
+  rightAnkle:    'leftAnkle',
+};
+
+const CENTER_LANDMARKS: ReadonlySet<LandmarkId> = new Set([
+  'headTop',
+  'chin',
+  'neckBase',
+  'groin',
+]);
+
+// Re-export nextUnplacedLandmark for convenience while keeping check_rigger_landmarks.cjs intact.
+export { nextUnplacedLandmark };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper
@@ -51,14 +85,16 @@ export function areAllLandmarksSet(landmarks: Partial<LandmarkMap>): boolean {
 export interface RiggerState {
   // ── Mesh ────────────────────────────────────────────────────────────────
   meshFile: File | null;
-  meshUrl: string | null; // object URL for display
+  meshUrl: string | null;
   meshGeometry: THREE.BufferGeometry | null;
+  meshMaterial: THREE.Material | THREE.Material[] | null;
   meshBbox: THREE.Box3 | null;
 
   // ── Landmarks ───────────────────────────────────────────────────────────
   landmarks: Partial<LandmarkMap>;
+  landmarkPreset: LandmarkPreset;
   landmarkMode: LandmarkMode;
-  activeLandmark: LandmarkId | null; // which landmark handle is selected
+  activeLandmark: LandmarkId | null;
   isDraggingLandmark: boolean;
   useSymmetry: boolean;
   landmarksConfirmed: boolean;
@@ -86,15 +122,18 @@ export interface RiggerState {
   diffuseIterations: number;
   bilateralStrength: number;
   requiredBonesOnly: boolean;
+  includeSecondaryBones: boolean;
 
   // ── Actions ─────────────────────────────────────────────────────────────
   setMeshFile: (file: File) => void;
   setMeshGeometry: (geometry: THREE.BufferGeometry | null) => void;
+  setMeshMaterial: (material: THREE.Material | THREE.Material[] | null) => void;
   setMeshBbox: (bbox: THREE.Box3 | null) => void;
   clearMesh: () => void;
   setLandmark: (id: LandmarkId, pos: THREE.Vector3) => void;
+  setLandmarkPreset: (preset: LandmarkPreset) => void;
   clearLandmarks: () => void;
-  /** Remove exactly one marker, leaving the other seven in place. */
+  /** Remove exactly one marker (and its mirrored partner if symmetry is enabled). */
   deleteLandmark: (id: LandmarkId) => void;
   setActiveLandmark: (id: LandmarkId | null) => void;
   setLandmarkMissFlash: (v: boolean) => void;
@@ -115,7 +154,11 @@ export interface RiggerState {
   setOption: <
     K extends keyof Pick<
       RiggerState,
-      'includeVrm' | 'diffuseIterations' | 'bilateralStrength' | 'requiredBonesOnly'
+      | 'includeVrm'
+      | 'diffuseIterations'
+      | 'bilateralStrength'
+      | 'requiredBonesOnly'
+      | 'includeSecondaryBones'
     >,
   >(
     key: K,
@@ -132,9 +175,11 @@ type RiggerStateData = Omit<
   RiggerState,
   | 'setMeshFile'
   | 'setMeshGeometry'
+  | 'setMeshMaterial'
   | 'setMeshBbox'
   | 'clearMesh'
   | 'setLandmark'
+  | 'setLandmarkPreset'
   | 'clearLandmarks'
   | 'deleteLandmark'
   | 'setActiveLandmark'
@@ -162,9 +207,11 @@ const DEFAULT_STATE: RiggerStateData = {
   meshFile: null,
   meshUrl: null,
   meshGeometry: null,
+  meshMaterial: null,
   meshBbox: null,
   // Landmarks
   landmarks: {},
+  landmarkPreset: '14',
   landmarkMode: 'auto',
   activeLandmark: null,
   isDraggingLandmark: false,
@@ -189,6 +236,7 @@ const DEFAULT_STATE: RiggerStateData = {
   diffuseIterations: 4,
   bilateralStrength: 0.5,
   requiredBonesOnly: false,
+  includeSecondaryBones: false,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -201,16 +249,15 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
   // ── Mesh ──────────────────────────────────────────────────────────────────
 
   setMeshFile: (file) => {
-    // Revoke any previous object URL to avoid memory leaks.
     set((s) => {
       if (s.meshUrl) URL.revokeObjectURL(s.meshUrl);
       return {
         meshFile: file,
         meshUrl: URL.createObjectURL(file),
         meshGeometry: null,
+        meshMaterial: null,
         meshBbox: null,
         stage: 'mesh-loaded',
-        // Reset downstream state when a new mesh is loaded.
         landmarks: {},
         landmarksConfirmed: false,
         fitResult: null,
@@ -224,6 +271,8 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
   },
 
   setMeshGeometry: (geometry) => set({ meshGeometry: geometry }),
+
+  setMeshMaterial: (material) => set({ meshMaterial: material }),
 
   setMeshBbox: (bbox) => set({ meshBbox: bbox }),
 
@@ -240,18 +289,10 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
     set((s) => {
       const nextLandmarks: Partial<LandmarkMap> = { ...s.landmarks, [id]: pos };
       if (s.useSymmetry) {
-        if (id === 'headTop' || id === 'neckBase') {
+        if (CENTER_LANDMARKS.has(id)) {
           nextLandmarks[id] = new THREE.Vector3(0, pos.y, pos.z);
         } else {
-          const pairMap: Partial<Record<LandmarkId, LandmarkId>> = {
-            leftShoulder: 'rightShoulder',
-            rightShoulder: 'leftShoulder',
-            leftHip: 'rightHip',
-            rightHip: 'leftHip',
-            leftAnkle: 'rightAnkle',
-            rightAnkle: 'leftAnkle',
-          };
-          const pairId = pairMap[id];
+          const pairId = MIRROR_PAIR[id];
           if (pairId) {
             nextLandmarks[pairId] = new THREE.Vector3(-pos.x, pos.y, pos.z);
           }
@@ -264,6 +305,20 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
     });
   },
 
+  setLandmarkPreset: (preset) => {
+    set((s) => {
+      const allowed = getLandmarkIdsForPreset(preset);
+      const nextActive =
+        s.activeLandmark && allowed.includes(s.activeLandmark)
+          ? s.activeLandmark
+          : null;
+      return {
+        landmarkPreset: preset,
+        activeLandmark: nextActive,
+      };
+    });
+  },
+
   clearLandmarks: () => {
     set({ landmarks: {}, landmarksConfirmed: false, activeLandmark: null, isDraggingLandmark: false });
   },
@@ -272,21 +327,13 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
     set((s) => {
       const nextLandmarks = { ...s.landmarks };
       delete nextLandmarks[id];
-      /* With symmetry on, the mirrored partner was placed implicitly, so
-         removing one half would leave a silently wrong pair. Drop both. */
       if (s.useSymmetry) {
-        const pair: Partial<Record<LandmarkId, LandmarkId>> = {
-          leftShoulder: 'rightShoulder', rightShoulder: 'leftShoulder',
-          leftHip: 'rightHip', rightHip: 'leftHip',
-          leftAnkle: 'rightAnkle', rightAnkle: 'leftAnkle',
-        };
-        const partner = pair[id];
+        const partner = MIRROR_PAIR[id];
         if (partner) delete nextLandmarks[partner];
       }
       return {
         landmarks: nextLandmarks,
         landmarksConfirmed: false,
-        // Re-select the one just removed so the user can immediately re-place it.
         activeLandmark: id,
         isDraggingLandmark: false,
       };
@@ -334,9 +381,6 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
 
   setError: (e) => set((s) => {
     if (e === null) {
-      /* Clearing used to keep `stage: 'error'` forever, so dismissing the
-         banner left the wizard stuck on a stage that no longer applied. Fall
-         back to a stage derived from what actually exists. */
       if (s.stage !== 'error') return { error: null };
       return {
         error: null,

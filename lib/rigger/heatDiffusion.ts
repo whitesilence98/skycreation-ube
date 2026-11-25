@@ -3,52 +3,10 @@
  *
  * Laplacian Heat Diffusion — Phase 4 of the CC-Kit Auto-Rigger pipeline.
  *
- * Smooths the raw per-vertex skin weights produced by `weightTransfer.ts`
- * by propagating them along the mesh surface connectivity graph.
- *
- * Without smoothing, weight boundaries are hard — deformation looks faceted
- * and stiff at joint bends (elbow, knee, shoulder). Heat diffusion softens
- * those transitions, blending weights smoothly across the skin surface.
- *
- * ─── Algorithm ───────────────────────────────────────────────────────────────
- *
- *  Step 1 — Adjacency
- *    Parse the mesh face buffer (indexed or non-indexed) to build a compact
- *    vertex-neighbour lookup: for every vertex, the list of vertices that
- *    share a triangle edge with it.
- *
- *  Step 2 — Sparse weight representation
- *    Convert the flat `skinIndex / skinWeight` buffers from weightTransfer.ts
- *    into an array of small Maps (vertexIndex → Map<boneIndex, weight>),
- *    which lets us efficiently merge and blend bone channels across neighbours.
- *
- *  Step 3 — Laplacian diffusion (N iterations)
- *    For each iteration:
- *      For each vertex v:
- *        For each bone b present in v or any neighbour of v:
- *          smoothed[b] = (1 − λ) · current[v][b]
- *                      +      λ  · mean(neighbours[v][b])
- *      Re-normalise per vertex so weights still sum to 1.0.
- *      Keep only the top `maxInfluences` bones.
- *
- *  Step 4 — Pack back
- *    Write the smoothed, normalised weights into new Uint16Array / Float32Array
- *    buffers compatible with Three.js BufferAttribute(_, 4).
- *
- * ─── Complexity ──────────────────────────────────────────────────────────────
- *
- *  Adjacency build: O(F)   — one pass over the face buffer.
- *  Per iteration:   O(V × K × B_local) where K = average vertex valence (~6
- *                   for triangulated meshes), B_local = active bones per ring.
- *  Typical 15k-vertex mesh, 5 iterations: ~2–8 ms in browser.
- *
- * ─── Legal ───────────────────────────────────────────────────────────────────
- *
- *  Uniform Laplacian smoothing is classical applied mathematics (textbook
- *  graph Laplacian), not patentable. No proprietary implementation is copied.
- *
- * Usage:
- *   import { diffuseWeights, applyDiffusedWeightsToGeometry } from '@/lib/rigger/heatDiffusion';
+ * Uses flat CSR typed arrays (`buildAdjacency`) and fixed-capacity typed-array
+ * buffers (`INTER_SLOTS = 8`) with zero per-vertex `Set`/`Map` allocations, so
+ * high-poly external meshes (500k+ vertices, ~1M triangles) smooth rapidly with
+ * low memory overhead.
  */
 
 import * as THREE from 'three';
@@ -59,92 +17,56 @@ import type { WeightTransferResult } from '@/lib/rigger/weightTransfer';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface DiffusionOptions {
-  /**
-   * Number of Laplacian smoothing passes.
-   * More iterations = smoother transitions, but risk over-blurring tight joints.
-   * Recommended: 3–5. Default: 4.
-   */
+  /** Number of Laplacian smoothing passes (1–8). Default: 4. */
   iterations?: number;
-
-  /**
-   * Diffusion rate λ per iteration [0–1].
-   * Higher = faster convergence but can overshoot near joint seams.
-   * Recommended: 0.3–0.5. Default: 0.35.
-   */
+  /** Diffusion rate λ per iteration [0–1]. Default: 0.35. */
   lambda?: number;
-
-  /**
-   * Maximum bone influences per vertex in the output (1–4).
-   * Must match the value used in weightTransfer. Default: 4.
-   */
+  /** Maximum bone influences per vertex in output (1–4). Default: 4. */
   maxInfluences?: number;
-
-  /**
-   * Minimum weight to retain after re-normalisation.
-   * Weights below this are zeroed out to keep the map sparse.
-   * Default: 0.001.
-   */
+  /** Minimum weight to retain after re-normalisation. Default: 0.001. */
   minWeight?: number;
-
-  /**
-   * Optional per-vertex anchor strength [0–1].
-   * Vertices with anchor = 1.0 are completely frozen (no smoothing).
-   * Vertices with anchor = 0.0 are fully diffused.
-   * Pass a Float32Array of length `vertexCount` or omit for no anchoring.
-   *
-   * Useful for pinning joint-centre vertices so their weights don't blur away.
-   */
+  /** Optional per-vertex anchor strength [0–1]. */
   anchorStrength?: Float32Array;
-
-  /**
-   * Progress callback — called after each iteration.
-   * `progress` is 0–1.
-   */
+  /** Progress callback — called periodically (`progress` in 0..1). */
   onProgress?: (progress: number) => void;
 }
 
 export interface DiffusionResult {
-  /** Smoothed bone indices — same format as WeightTransferResult.skinIndex. */
-  skinIndex:  Uint16Array;
-  /** Smoothed bone weights — normalised, same format as WeightTransferResult.skinWeight. */
+  skinIndex: Uint16Array;
   skinWeight: Float32Array;
-  /** Number of vertices processed. */
   vertexCount: number;
-  /** Number of iterations actually run (may be less if already converged). */
   iterationsRun: number;
-  /**
-   * Maximum weight change across all vertices in the final iteration.
-   * Useful for diagnosing convergence: < 0.001 means the map is stable.
-   */
   finalMaxDelta: number;
 }
 
+export interface Adjacency {
+  offsets: Uint32Array;
+  data: Uint32Array;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. Adjacency builder
+// 1. Flat CSR Adjacency Builder (zero per-vertex Set allocations)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Compact adjacency structure: for each vertex, the flat list of its unique
- * edge-neighbours in the triangle mesh.
- *
- * Layout:
- *   offsets[i]       = start of vertex i's neighbour list in `data`
- *   offsets[i + 1]   = exclusive end (so neighbours are data[offsets[i]..offsets[i+1]])
- *   data[...]        = packed neighbour vertex indices (Uint32)
- */
-export interface Adjacency {
-  offsets: Uint32Array;   // length: vertexCount + 1
-  data:    Uint32Array;   // length: total edge-neighbour count (sum of all valences)
+function sortSliceInPlace(arr: Uint32Array, start: number, end: number): void {
+  // Small valence (typically 4–12): fast in-place insertion sort with zero heap alloc
+  if (end - start <= 32) {
+    for (let i = start + 1; i < end; i++) {
+      const key = arr[i]!;
+      let j = i - 1;
+      while (j >= start && arr[j]! > key) {
+        arr[j + 1] = arr[j]!;
+        j--;
+      }
+      arr[j + 1] = key;
+    }
+    return;
+  }
+  arr.subarray(start, end).sort();
 }
 
 /**
- * Builds the vertex adjacency structure from a mesh geometry.
- *
- * Works with both indexed (`geometry.index !== null`) and non-indexed
- * geometries. For non-indexed meshes every 3 elements form a triangle.
- *
- * Duplicate edges (shared between two triangles) are automatically
- * deduplicated — each neighbour appears at most once.
+ * Builds deduplicated vertex edge-adjacency using flat typed arrays.
  */
 export function buildAdjacency(geometry: THREE.BufferGeometry): Adjacency {
   const posAttr = geometry.getAttribute('position');
@@ -152,393 +74,453 @@ export function buildAdjacency(geometry: THREE.BufferGeometry): Adjacency {
     throw new Error('[heatDiffusion] Geometry has no position attribute.');
   }
   const vertexCount = posAttr.count;
-
-  // Phase 1: collect neighbour sets per vertex (using bit-sets would be faster
-  // for dense meshes, but Set<number> is simpler and correct for browser use)
-  const neighbourSets: Set<number>[] = new Array(vertexCount);
-  for (let i = 0; i < vertexCount; i++) neighbourSets[i] = new Set<number>();
-
-  const addEdge = (a: number, b: number) => {
-    if (a !== b) {
-      neighbourSets[a]!.add(b);
-      neighbourSets[b]!.add(a);
-    }
-  };
-
+  const deg = new Uint32Array(vertexCount);
   const index = geometry.index;
+
+  // Pass 1: count raw edge incidences per vertex
   if (index !== null) {
-    // Indexed geometry
     const idx = index.array;
-    for (let f = 0; f < idx.length; f += 3) {
+    for (let f = 0; f + 2 < idx.length; f += 3) {
       const a = idx[f]!;
       const b = idx[f + 1]!;
       const c = idx[f + 2]!;
-      addEdge(a, b);
-      addEdge(b, c);
-      addEdge(c, a);
+      if (a < vertexCount && b < vertexCount && a !== b) {
+        deg[a]!++;
+        deg[b]!++;
+      }
+      if (b < vertexCount && c < vertexCount && b !== c) {
+        deg[b]!++;
+        deg[c]!++;
+      }
+      if (c < vertexCount && a < vertexCount && c !== a) {
+        deg[c]!++;
+        deg[a]!++;
+      }
     }
   } else {
-    // Non-indexed geometry — every 3 vertices form a triangle
-    for (let f = 0; f < vertexCount; f += 3) {
-      addEdge(f, f + 1);
-      addEdge(f + 1, f + 2);
-      addEdge(f + 2, f);
+    for (let f = 0; f + 2 < vertexCount; f += 3) {
+      const a = f;
+      const b = f + 1;
+      const c = f + 2;
+      deg[a]! += 2;
+      deg[b]! += 2;
+      deg[c]! += 2;
     }
   }
 
-  // Phase 2: pack into flat arrays
-  const offsets = new Uint32Array(vertexCount + 1);
-  let totalEdges = 0;
+  // Pass 2: prefix sum raw offsets & fill raw neighbour slots
+  const rawOffsets = new Uint32Array(vertexCount + 1);
+  let totalRaw = 0;
   for (let i = 0; i < vertexCount; i++) {
-    offsets[i] = totalEdges;
-    totalEdges += neighbourSets[i]!.size;
+    rawOffsets[i] = totalRaw;
+    totalRaw += deg[i]!;
   }
-  offsets[vertexCount] = totalEdges;
+  rawOffsets[vertexCount] = totalRaw;
 
-  const data = new Uint32Array(totalEdges);
-  let ptr = 0;
-  for (let i = 0; i < vertexCount; i++) {
-    for (const nb of neighbourSets[i]!) {
-      data[ptr++] = nb;
+  const rawTargets = new Uint32Array(totalRaw);
+  const writePtr = new Uint32Array(rawOffsets.subarray(0, vertexCount));
+
+  if (index !== null) {
+    const idx = index.array;
+    for (let f = 0; f + 2 < idx.length; f += 3) {
+      const a = idx[f]!;
+      const b = idx[f + 1]!;
+      const c = idx[f + 2]!;
+      if (a < vertexCount && b < vertexCount && a !== b) {
+        rawTargets[writePtr[a]!++] = b;
+        rawTargets[writePtr[b]!++] = a;
+      }
+      if (b < vertexCount && c < vertexCount && b !== c) {
+        rawTargets[writePtr[b]!++] = c;
+        rawTargets[writePtr[c]!++] = b;
+      }
+      if (c < vertexCount && a < vertexCount && c !== a) {
+        rawTargets[writePtr[c]!++] = a;
+        rawTargets[writePtr[a]!++] = c;
+      }
+    }
+  } else {
+    for (let f = 0; f + 2 < vertexCount; f += 3) {
+      const a = f;
+      const b = f + 1;
+      const c = f + 2;
+      rawTargets[writePtr[a]!++] = b;
+      rawTargets[writePtr[b]!++] = a;
+      rawTargets[writePtr[b]!++] = c;
+      rawTargets[writePtr[c]!++] = b;
+      rawTargets[writePtr[c]!++] = a;
+      rawTargets[writePtr[a]!++] = c;
     }
   }
 
+  // Pass 3: sort & deduplicate each vertex's slice in-place forward (safe since uniquePtr <= start)
+  const offsets = rawOffsets; // reuse allocation safely
+  let uniquePtr = 0;
+  for (let i = 0; i < vertexCount; i++) {
+    const start = offsets[i]!;
+    const end = offsets[i + 1]!;
+    offsets[i] = uniquePtr;
+    if (start >= end) continue;
+
+    sortSliceInPlace(rawTargets, start, end);
+    let prev = -1;
+    for (let k = start; k < end; k++) {
+      const nb = rawTargets[k]!;
+      if (nb !== prev) {
+        rawTargets[uniquePtr++] = nb;
+        prev = nb;
+      }
+    }
+  }
+  offsets[vertexCount] = uniquePtr;
+
+  const data = rawTargets.slice(0, uniquePtr);
   return { offsets, data };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. Sparse weight representation
+// 2. Typed Sparse Buffers & Zero-Allocation Laplacian Pass
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Per-vertex sparse weight map: boneIndex → weight.
- * Only non-zero influences are stored (at most `maxInfluences` entries).
- */
-type VertexWeightMap = Map<number, number>;
+const INTER_SLOTS = 8;
 
-/**
- * Unpacks the flat `skinIndex / skinWeight` buffers into an array of Maps,
- * one per vertex. Zero-weight slots are skipped.
- */
-function unpackToMaps(
-  skinIndex:  Uint16Array,
-  skinWeight: Float32Array,
+interface DiffusionWorkspace {
+  curIdx: Uint16Array;
+  curWgt: Float32Array;
+  nxtIdx: Uint16Array;
+  nxtWgt: Float32Array;
+  boneAcc: Float32Array;
+  boneSeen: Uint8Array;
+  touchedBones: Uint16Array;
+  topBone: Uint16Array;
+  topWgt: Float32Array;
+}
+
+function createWorkspace(
+  rawIdx: Uint16Array,
+  rawWgt: Float32Array,
   vertexCount: number,
-): VertexWeightMap[] {
-  const maps: VertexWeightMap[] = new Array(vertexCount);
+): DiffusionWorkspace {
+  let maxBoneIdx = 0;
+  const len4 = vertexCount * 4;
+  for (let i = 0; i < len4; i++) {
+    if (rawWgt[i]! > 0 && rawIdx[i]! > maxBoneIdx) {
+      maxBoneIdx = rawIdx[i]!;
+    }
+  }
+  const boneSpace = maxBoneIdx + 1;
+
+  const curIdx = new Uint16Array(vertexCount * INTER_SLOTS);
+  const curWgt = new Float32Array(vertexCount * INTER_SLOTS);
+  const nxtIdx = new Uint16Array(vertexCount * INTER_SLOTS);
+  const nxtWgt = new Float32Array(vertexCount * INTER_SLOTS);
+
   for (let vi = 0; vi < vertexCount; vi++) {
-    const m = new Map<number, number>();
-    const base = vi * 4;
+    const src = vi * 4;
+    const dst = vi * INTER_SLOTS;
     for (let s = 0; s < 4; s++) {
-      const w = skinWeight[base + s]!;
-      if (w > 0) {
-        m.set(skinIndex[base + s]!, w);
-      }
+      curIdx[dst + s] = rawIdx[src + s]!;
+      curWgt[dst + s] = rawWgt[src + s]!;
     }
-    maps[vi] = m;
-  }
-  return maps;
-}
-
-/**
- * Packs an array of sparse weight maps back into flat typed arrays.
- * Keeps the top `maxInfluences` entries by weight, normalises to sum = 1.0,
- * and zeros out weights below `minWeight`.
- */
-function packFromMaps(
-  maps:         VertexWeightMap[],
-  vertexCount:  number,
-  maxInfluences: number,
-  minWeight:    number,
-): { skinIndex: Uint16Array; skinWeight: Float32Array } {
-  const skinIndex  = new Uint16Array(vertexCount * 4);
-  const skinWeight = new Float32Array(vertexCount * 4);
-
-  for (let vi = 0; vi < vertexCount; vi++) {
-    const m = maps[vi]!;
-    const base = vi * 4;
-
-    // Sort by weight descending, keep top N
-    const entries = Array.from(m.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, maxInfluences);
-
-    // Zero out below threshold
-    let sum = 0;
-    for (const [, w] of entries) {
-      if (w >= minWeight) sum += w;
-    }
-
-    let slot = 0;
-    for (const [boneIdx, w] of entries) {
-      if (w < minWeight) continue;
-      skinIndex [base + slot] = boneIdx;
-      skinWeight[base + slot] = sum > 0 ? w / sum : 0;
-      slot++;
-    }
-
-    // If nothing survived the threshold, pin to bone 0 (hips)
-    if (slot === 0) {
-      skinIndex [base] = 0;
-      skinWeight[base] = 1.0;
-    }
-
-    // Remaining slots stay zero (default Uint16/Float32 init)
   }
 
-  return { skinIndex, skinWeight };
+  return {
+    curIdx,
+    curWgt,
+    nxtIdx,
+    nxtWgt,
+    boneAcc: new Float32Array(boneSpace),
+    boneSeen: new Uint8Array(boneSpace),
+    touchedBones: new Uint16Array(boneSpace),
+    topBone: new Uint16Array(INTER_SLOTS),
+    topWgt: new Float32Array(INTER_SLOTS),
+  };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. Single Laplacian pass
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Runs one Laplacian smoothing pass over all vertices.
- *
- * For each vertex v:
- *   For each bone b active on v or any neighbour of v:
- *     smoothed[v][b] = (1 − λ) · current[v][b]
- *                    +      λ  · mean_{j ∈ N(v)}(current[j][b])
- *
- * @returns The maximum weight change across all vertices (convergence indicator).
- */
-function laplacianPass(
-  current:       VertexWeightMap[],
-  next:          VertexWeightMap[],  // pre-allocated output buffer
-  adjacency:     Adjacency,
-  lambda:        number,
+function stepVertexRange(
+  startVi: number,
+  endVi: number,
+  ws: DiffusionWorkspace,
+  adjacency: Adjacency,
+  lambda: number,
   anchorStrength: Float32Array | undefined,
 ): number {
+  const { curIdx, curWgt, nxtIdx, nxtWgt, boneAcc, boneSeen, touchedBones, topBone, topWgt } = ws;
   const { offsets, data } = adjacency;
-  const vertexCount = current.length;
   let maxDelta = 0;
 
-  for (let vi = 0; vi < vertexCount; vi++) {
-    // Effective lambda is 0 for fully anchored vertices
+  for (let vi = startVi; vi < endVi; vi++) {
+    const base = vi * INTER_SLOTS;
     const anchor = anchorStrength ? (anchorStrength[vi] ?? 0) : 0;
-    const effectiveLambda = lambda * (1 - anchor);
+    const effLambda = lambda * (1 - anchor);
 
     const nbStart = offsets[vi]!;
-    const nbEnd   = offsets[vi + 1]!;
+    const nbEnd = offsets[vi + 1]!;
     const nbCount = nbEnd - nbStart;
 
-    if (nbCount === 0 || effectiveLambda <= 0) {
-      // Isolated vertex or anchored: copy unchanged
-      next[vi] = new Map(current[vi]!);
+    if (nbCount === 0 || effLambda <= 0) {
+      for (let s = 0; s < INTER_SLOTS; s++) {
+        nxtIdx[base + s] = curIdx[base + s]!;
+        nxtWgt[base + s] = curWgt[base + s]!;
+      }
       continue;
     }
 
-    // Collect all bone indices active on this vertex OR its neighbours
-    const activeBones = new Set<number>(current[vi]!.keys());
+    const selfScale = 1 - effLambda;
+    const nbScale = effLambda / nbCount;
+    let touchedCount = 0;
+
+    // Self weights
+    for (let s = 0; s < INTER_SLOTS; s++) {
+      const w = curWgt[base + s]!;
+      if (w <= 0) break;
+      const b = curIdx[base + s]!;
+      if (!boneSeen[b]) {
+        boneSeen[b] = 1;
+        touchedBones[touchedCount++] = b;
+      }
+      boneAcc[b]! += w * selfScale;
+    }
+
+    // Neighbour weights
     for (let ni = nbStart; ni < nbEnd; ni++) {
-      for (const boneIdx of current[data[ni]!]!.keys()) {
-        activeBones.add(boneIdx);
+      const nBase = data[ni]! * INTER_SLOTS;
+      for (let s = 0; s < INTER_SLOTS; s++) {
+        const w = curWgt[nBase + s]!;
+        if (w <= 0) break;
+        const b = curIdx[nBase + s]!;
+        if (!boneSeen[b]) {
+          boneSeen[b] = 1;
+          touchedBones[touchedCount++] = b;
+        }
+        boneAcc[b]! += w * nbScale;
       }
     }
 
-    const smoothed = new Map<number, number>();
+    // Keep top INTER_SLOTS descending & reset accumulators
+    let topCount = 0;
+    for (let t = 0; t < touchedCount; t++) {
+      const b = touchedBones[t]!;
+      const newW = boneAcc[b]!;
+      boneAcc[b] = 0;
+      boneSeen[b] = 0;
+      if (newW <= 1e-6) continue;
 
-    for (const boneIdx of activeBones) {
-      // Self contribution: (1 − λ) × current weight
-      const selfW = current[vi]!.get(boneIdx) ?? 0;
-
-      // Neighbour contribution: λ × mean of neighbours' weights for this bone
-      let nbSum = 0;
-      for (let ni = nbStart; ni < nbEnd; ni++) {
-        nbSum += current[data[ni]!]!.get(boneIdx) ?? 0;
+      if (topCount < INTER_SLOTS) {
+        let pos = topCount++;
+        while (pos > 0 && topWgt[pos - 1]! < newW) {
+          topWgt[pos] = topWgt[pos - 1]!;
+          topBone[pos] = topBone[pos - 1]!;
+          pos--;
+        }
+        topWgt[pos] = newW;
+        topBone[pos] = b;
+      } else if (newW > topWgt[INTER_SLOTS - 1]!) {
+        let pos = INTER_SLOTS - 1;
+        while (pos > 0 && topWgt[pos - 1]! < newW) {
+          topWgt[pos] = topWgt[pos - 1]!;
+          topBone[pos] = topBone[pos - 1]!;
+          pos--;
+        }
+        topWgt[pos] = newW;
+        topBone[pos] = b;
       }
-      const nbMean = nbSum / nbCount;
+    }
 
-      const newW = (1 - effectiveLambda) * selfW + effectiveLambda * nbMean;
-      if (newW > 1e-6) {
-        smoothed.set(boneIdx, newW);
+    let sum = 0;
+    for (let s = 0; s < topCount; s++) sum += topWgt[s]!;
 
-        // Track convergence
-        const delta = Math.abs(newW - selfW);
+    if (sum > 0) {
+      const invSum = 1 / sum;
+      for (let s = 0; s < topCount; s++) {
+        const normalizedW = topWgt[s]! * invSum;
+        const b = topBone[s]!;
+        nxtIdx[base + s] = b;
+        nxtWgt[base + s] = normalizedW;
+
+        // Track convergence delta against previous self weight
+        let prevW = 0;
+        for (let k = 0; k < INTER_SLOTS; k++) {
+          const cw = curWgt[base + k]!;
+          if (cw <= 0) break;
+          if (curIdx[base + k]! === b) {
+            prevW = cw;
+            break;
+          }
+        }
+        const delta = Math.abs(normalizedW - prevW);
         if (delta > maxDelta) maxDelta = delta;
       }
+      for (let s = topCount; s < INTER_SLOTS; s++) {
+        nxtIdx[base + s] = 0;
+        nxtWgt[base + s] = 0;
+      }
+    } else {
+      for (let s = 0; s < INTER_SLOTS; s++) {
+        nxtIdx[base + s] = curIdx[base + s]!;
+        nxtWgt[base + s] = curWgt[base + s]!;
+      }
     }
-
-    next[vi] = smoothed;
   }
 
   return maxDelta;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. Main exported function
-// ─────────────────────────────────────────────────────────────────────────────
+function packWorkspace(
+  ws: DiffusionWorkspace,
+  vertexCount: number,
+  maxInfluences: number,
+  minWeight: number,
+): { skinIndex: Uint16Array; skinWeight: Float32Array } {
+  const { curIdx, curWgt } = ws;
+  const skinIndex = new Uint16Array(vertexCount * 4);
+  const skinWeight = new Float32Array(vertexCount * 4);
 
-/**
- * Runs Laplacian heat diffusion over raw skin weights to smooth joint seams.
- *
- * Call this after `transferWeights()` and before `exportRiggedGlb()`.
- *
- * @param rawResult   The output of `transferWeights()` or `transferWeightsAsync()`.
- * @param geometry    The same mesh geometry used for weight transfer (needed for adjacency).
- * @param options     Tuning options.
- *
- * @example
- * ```ts
- * const raw     = transferWeights(geometry, fitResult, worldMatrix);
- * const smooth  = diffuseWeights(raw, geometry, { iterations: 4, lambda: 0.35 });
- * applyWeightsToGeometry(geometry, smooth);
- * ```
- */
-export function diffuseWeights(
-  rawResult: WeightTransferResult,
-  geometry:  THREE.BufferGeometry,
-  options:   DiffusionOptions = {},
-): DiffusionResult {
-  const iterations    = Math.max(1, Math.round(options.iterations    ?? 4));
-  const lambda        = Math.max(0, Math.min(1, options.lambda       ?? 0.35));
-  const maxInfluences = Math.min(4, Math.max(1, options.maxInfluences ?? 4));
-  const minWeight     = options.minWeight     ?? 0.001;
-  const anchorStrength = options.anchorStrength;
-  const onProgress    = options.onProgress;
+  for (let vi = 0; vi < vertexCount; vi++) {
+    const src = vi * INTER_SLOTS;
+    const dst = vi * 4;
 
-  const { vertexCount, skinIndex: rawIdx, skinWeight: rawWgt } = rawResult;
+    let sum = 0;
+    let count = 0;
+    for (let s = 0; s < maxInfluences; s++) {
+      const w = curWgt[src + s]!;
+      if (w < minWeight) break;
+      sum += w;
+      count++;
+    }
 
-  // ── Build adjacency ────────────────────────────────────────────────────────
-  const adjacency = buildAdjacency(geometry);
+    if (count === 0) {
+      skinIndex[dst] = curIdx[src]!;
+      skinWeight[dst] = 1.0;
+      continue;
+    }
 
-  // ── Unpack into sparse maps ────────────────────────────────────────────────
-  let current = unpackToMaps(rawIdx, rawWgt, vertexCount);
-
-  // Pre-allocate the "next" buffer (reused every iteration)
-  let next: VertexWeightMap[] = new Array(vertexCount);
-
-  // ── Diffusion loop ─────────────────────────────────────────────────────────
-  const CONVERGE_THRESHOLD = 5e-5; // stop early if max delta falls below this
-  let iterationsRun = 0;
-  let finalMaxDelta = 0;
-
-  for (let iter = 0; iter < iterations; iter++) {
-    finalMaxDelta = laplacianPass(current, next, adjacency, lambda, anchorStrength);
-    iterationsRun++;
-
-    // Swap buffers
-    const tmp = current;
-    current   = next;
-    next      = tmp;
-
-    if (onProgress) onProgress((iter + 1) / iterations);
-
-    // Early exit if converged
-    if (finalMaxDelta < CONVERGE_THRESHOLD) break;
+    const invSum = 1 / sum;
+    for (let s = 0; s < count; s++) {
+      skinIndex[dst + s] = curIdx[src + s]!;
+      skinWeight[dst + s] = curWgt[src + s]! * invSum;
+    }
   }
 
-  // ── Pack back to typed arrays ──────────────────────────────────────────────
-  const { skinIndex, skinWeight } = packFromMaps(current, vertexCount, maxInfluences, minWeight);
+  return { skinIndex, skinWeight };
+}
 
-  return { skinIndex, skinWeight, vertexCount, iterationsRun, finalMaxDelta };
+function swapWorkspaceBuffers(ws: DiffusionWorkspace): void {
+  const tmpIdx = ws.curIdx;
+  ws.curIdx = ws.nxtIdx;
+  ws.nxtIdx = tmpIdx;
+
+  const tmpWgt = ws.curWgt;
+  ws.curWgt = ws.nxtWgt;
+  ws.nxtWgt = tmpWgt;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. Convenience wrapper — apply directly to geometry
+// 3. Main exported functions (sync + async)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Runs `diffuseWeights` and writes the smoothed result directly onto the
- * geometry's `skinIndex` and `skinWeight` attributes in-place.
- *
- * @returns The same geometry, mutated.
- */
-export function applyDiffusedWeightsToGeometry(
+export function diffuseWeights(
   rawResult: WeightTransferResult,
-  geometry:  THREE.BufferGeometry,
-  options?:  DiffusionOptions,
-): THREE.BufferGeometry {
-  const result = diffuseWeights(rawResult, geometry, options);
-
-  geometry.setAttribute(
-    'skinIndex',
-    new THREE.BufferAttribute(result.skinIndex,  4),
-  );
-  geometry.setAttribute(
-    'skinWeight',
-    new THREE.BufferAttribute(result.skinWeight, 4),
-  );
-
-  return geometry;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. Async variant — event-loop-friendly for large meshes
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Async version of `diffuseWeights` that yields to the event loop between
- * iterations, keeping the UI responsive for dense meshes (100k+ vertices).
- *
- * Each iteration is a full Laplacian pass; `setTimeout(0)` between iterations
- * lets layout and input events run without needing a Web Worker.
- */
-export async function diffuseWeightsAsync(
-  rawResult: WeightTransferResult,
-  geometry:  THREE.BufferGeometry,
-  options:   DiffusionOptions = {},
-): Promise<DiffusionResult> {
-  const iterations    = Math.max(1, Math.round(options.iterations    ?? 4));
-  const lambda        = Math.max(0, Math.min(1, options.lambda       ?? 0.35));
+  geometry: THREE.BufferGeometry,
+  options: DiffusionOptions = {},
+): DiffusionResult {
+  const iterations = Math.max(1, Math.round(options.iterations ?? 4));
+  const lambda = Math.max(0, Math.min(1, options.lambda ?? 0.35));
   const maxInfluences = Math.min(4, Math.max(1, options.maxInfluences ?? 4));
-  const minWeight     = options.minWeight     ?? 0.001;
+  const minWeight = options.minWeight ?? 0.001;
   const anchorStrength = options.anchorStrength;
-  const onProgress    = options.onProgress;
+  const onProgress = options.onProgress;
 
   const { vertexCount, skinIndex: rawIdx, skinWeight: rawWgt } = rawResult;
-
   const adjacency = buildAdjacency(geometry);
-  let current = unpackToMaps(rawIdx, rawWgt, vertexCount);
-  let next: VertexWeightMap[] = new Array(vertexCount);
+  const ws = createWorkspace(rawIdx, rawWgt, vertexCount);
 
   const CONVERGE_THRESHOLD = 5e-5;
   let iterationsRun = 0;
   let finalMaxDelta = 0;
 
   for (let iter = 0; iter < iterations; iter++) {
-    // Yield before each iteration
-    await new Promise<void>((r) => setTimeout(r, 0));
-
-    finalMaxDelta = laplacianPass(current, next, adjacency, lambda, anchorStrength);
+    finalMaxDelta = stepVertexRange(0, vertexCount, ws, adjacency, lambda, anchorStrength);
+    swapWorkspaceBuffers(ws);
     iterationsRun++;
-
-    const tmp = current;
-    current   = next;
-    next      = tmp;
 
     if (onProgress) onProgress((iter + 1) / iterations);
     if (finalMaxDelta < CONVERGE_THRESHOLD) break;
   }
 
-  const { skinIndex, skinWeight } = packFromMaps(current, vertexCount, maxInfluences, minWeight);
+  const { skinIndex, skinWeight } = packWorkspace(ws, vertexCount, maxInfluences, minWeight);
+  return { skinIndex, skinWeight, vertexCount, iterationsRun, finalMaxDelta };
+}
+
+export function applyDiffusedWeightsToGeometry(
+  rawResult: WeightTransferResult,
+  geometry: THREE.BufferGeometry,
+  options?: DiffusionOptions,
+): THREE.BufferGeometry {
+  const result = diffuseWeights(rawResult, geometry, options);
+
+  geometry.setAttribute('skinIndex', new THREE.BufferAttribute(result.skinIndex, 4));
+  geometry.setAttribute('skinWeight', new THREE.BufferAttribute(result.skinWeight, 4));
+  return geometry;
+}
+
+/**
+ * Chunked async Laplacian diffusion yielding every ~25,000 vertices so dense
+ * external sculpts (500k+ verts) stay responsive without freezing the browser tab.
+ */
+export async function diffuseWeightsAsync(
+  rawResult: WeightTransferResult,
+  geometry: THREE.BufferGeometry,
+  options: DiffusionOptions = {},
+): Promise<DiffusionResult> {
+  const iterations = Math.max(1, Math.round(options.iterations ?? 4));
+  const lambda = Math.max(0, Math.min(1, options.lambda ?? 0.35));
+  const maxInfluences = Math.min(4, Math.max(1, options.maxInfluences ?? 4));
+  const minWeight = options.minWeight ?? 0.001;
+  const anchorStrength = options.anchorStrength;
+  const onProgress = options.onProgress;
+
+  const { vertexCount, skinIndex: rawIdx, skinWeight: rawWgt } = rawResult;
+  const adjacency = buildAdjacency(geometry);
+  const ws = createWorkspace(rawIdx, rawWgt, vertexCount);
+
+  const CONVERGE_THRESHOLD = 5e-5;
+  const CHUNK_VERTS = 25000;
+  let iterationsRun = 0;
+  let finalMaxDelta = 0;
+
+  for (let iter = 0; iter < iterations; iter++) {
+    let iterMaxDelta = 0;
+    for (let start = 0; start < vertexCount; start += CHUNK_VERTS) {
+      await new Promise<void>((r) => setTimeout(r, 0));
+      const end = Math.min(vertexCount, start + CHUNK_VERTS);
+      const chunkMax = stepVertexRange(start, end, ws, adjacency, lambda, anchorStrength);
+      if (chunkMax > iterMaxDelta) iterMaxDelta = chunkMax;
+      if (onProgress) {
+        onProgress((iter + end / Math.max(1, vertexCount)) / iterations);
+      }
+    }
+
+    finalMaxDelta = iterMaxDelta;
+    swapWorkspaceBuffers(ws);
+    iterationsRun++;
+
+    if (finalMaxDelta < CONVERGE_THRESHOLD) break;
+  }
+
+  const { skinIndex, skinWeight } = packWorkspace(ws, vertexCount, maxInfluences, minWeight);
   return { skinIndex, skinWeight, vertexCount, iterationsRun, finalMaxDelta };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. Anchor helpers
+// 4. Anchor & diagnostic helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Builds an anchor-strength buffer that pins vertices near joint centres
- * (bone endpoints) so their weights don't blur away during diffusion.
- *
- * Vertices within `pinRadius` metres of any bone endpoint get anchor = 1.0.
- * Vertices beyond `blendRadius` get anchor = 0.0.
- * In between, a smooth ramp is applied.
- *
- * @param geometry         The mesh geometry.
- * @param boneWorldPositions  Map from bone name → world position (from FitResult).
- * @param meshWorldMatrix  World matrix of the mesh.
- * @param pinRadius        Distance from joint centre that gets fully pinned. Default: 0.03 m.
- * @param blendRadius      Distance at which anchor fades to zero. Default: 0.08 m.
- */
 export function buildJointAnchorStrength(
   geometry: THREE.BufferGeometry,
   boneWorldPositions: Map<string, THREE.Vector3>,
   meshWorldMatrix: THREE.Matrix4 = new THREE.Matrix4(),
-  pinRadius   = 0.03,
+  pinRadius = 0.03,
   blendRadius = 0.08,
 ): Float32Array {
   const posAttr = geometry.getAttribute('position');
@@ -549,7 +531,6 @@ export function buildJointAnchorStrength(
   const vertexCount = posAttr.count;
   const anchor = new Float32Array(vertexCount);
 
-  // Pre-collect joint positions as a plain array for fast iteration
   const jointPositions = Array.from(boneWorldPositions.values());
   if (jointPositions.length === 0) return anchor;
 
@@ -559,43 +540,25 @@ export function buildJointAnchorStrength(
   for (let vi = 0; vi < vertexCount; vi++) {
     vWorld.fromBufferAttribute(posAttr, vi).applyMatrix4(meshWorldMatrix);
 
-    // Find the closest joint
     let minDist = Infinity;
     for (const jPos of jointPositions) {
       const d = vWorld.distanceTo(jPos);
       if (d < minDist) minDist = d;
     }
 
-    // Map distance → anchor strength
     if (minDist <= pinRadius) {
       anchor[vi] = 1.0;
     } else if (minDist >= blendRadius) {
       anchor[vi] = 0.0;
     } else {
-      // Smooth ramp: 1 → 0 from pinRadius → blendRadius
       const t = (minDist - pinRadius) / bandWidth;
-      anchor[vi] = 1 - t * t * (3 - 2 * t); // smoothstep(1 → 0)
+      anchor[vi] = 1 - t * t * (3 - 2 * t);
     }
   }
 
   return anchor;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 8. Diagnostic helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Computes the average "entropy" of the weight map — a measure of how spread
- * out the influences are. High entropy = many bones share similar weights
- * (soft, well-blended). Low entropy = single-bone dominance (hard, stiff).
- *
- * Uses the normalised Shannon entropy per vertex:
- *   H(v) = -Σ w·log2(w) / log2(N)   for all non-zero w
- *
- * Returns a value in [0, 1]. A well-smoothed character body typically lands
- * in [0.3, 0.7].
- */
 export function computeWeightEntropy(skinWeight: Float32Array, vertexCount: number): number {
   let totalEntropy = 0;
   const LOG2_4 = Math.log2(4);
@@ -607,23 +570,15 @@ export function computeWeightEntropy(skinWeight: Float32Array, vertexCount: numb
       const w = skinWeight[base + s]!;
       if (w > 1e-7) H -= w * Math.log2(w);
     }
-    totalEntropy += H / LOG2_4; // normalise to [0,1]
+    totalEntropy += H / LOG2_4;
   }
 
   return totalEntropy / vertexCount;
 }
 
-/**
- * Returns a diagnostic summary of a `DiffusionResult`.
- *
- * Example:
- *   Iterations:   4 / 4
- *   Final Δmax:   0.000312  (converged: no)
- *   Weight entropy: 0.42  (well-blended)
- */
 export function diffusionSummary(result: DiffusionResult, maxIterations: number): string {
   const converged = result.finalMaxDelta < 5e-5;
-  const entropy   = computeWeightEntropy(result.skinWeight, result.vertexCount);
+  const entropy = computeWeightEntropy(result.skinWeight, result.vertexCount);
 
   const entropyLabel =
     entropy > 0.6 ? 'very soft / over-smoothed' :

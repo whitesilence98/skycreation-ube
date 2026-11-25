@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { useMemo } from 'react';
 import { Line } from '@react-three/drei';
 import type { FitResult } from '@/lib/rigger/templateFitter';
-import { VRM_BONE_DEFS } from '@/lib/rigger/vrmSkeleton';
+import { RIG_BONE_BY_NAME, type RigBoneName } from '@/lib/rigger/vrmSkeleton';
 
 // ── Region → colour map ──────────────────────────────────────────────────────
 
@@ -17,10 +17,11 @@ const REGION_COLORS: Record<string, string> = {
   rightLeg:    '#c8ff00',
   leftFinger:  '#888888',
   rightFinger: '#888888',
+  secondary:   '#f472b6',
 };
 
 function regionColor(boneName: string): string {
-  const def = VRM_BONE_DEFS.find((d) => d.name === boneName);
+  const def = RIG_BONE_BY_NAME[boneName as RigBoneName];
   return REGION_COLORS[def?.region ?? ''] ?? '#ffffff';
 }
 

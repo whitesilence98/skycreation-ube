@@ -90,6 +90,26 @@ export type VrmBoneName =
   | 'rightFoot'
   | 'rightToes';
 
+export type SecondaryBoneName =
+  | 'pelvisLower'
+  | 'leftButt'
+  | 'rightButt'
+  | 'leftBreast'
+  | 'rightBreast';
+
+export type RigBoneName = VrmBoneName | SecondaryBoneName;
+
+export type BoneRegion =
+  | 'spine'
+  | 'head'
+  | 'leftArm'
+  | 'rightArm'
+  | 'leftLeg'
+  | 'rightLeg'
+  | 'leftFinger'
+  | 'rightFinger'
+  | 'secondary';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. Bone definition table
 // ─────────────────────────────────────────────────────────────────────────────
@@ -111,6 +131,14 @@ export interface VrmBoneDef {
    * during landmark-based fitting.
    */
   region: 'spine' | 'head' | 'leftArm' | 'rightArm' | 'leftLeg' | 'rightLeg' | 'leftFinger' | 'rightFinger';
+}
+
+export interface RigBoneDef {
+  name: RigBoneName;
+  required: boolean;
+  parent: RigBoneName | null;
+  localPosition: readonly [x: number, y: number, z: number];
+  region: BoneRegion;
 }
 
 /**
@@ -540,12 +568,69 @@ export const VRM_BONE_DEFS: readonly VrmBoneDef[] = [
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 2b. Optional non-VRM secondary bones (pelvis / glutes / chest)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SECONDARY_BONE_DEFS: readonly RigBoneDef[] = [
+  {
+    name: 'pelvisLower',
+    required: false,
+    parent: 'hips',
+    localPosition: [0, -0.065, 0.015],
+    region: 'secondary',
+  },
+  {
+    name: 'leftButt',
+    required: false,
+    parent: 'hips',
+    localPosition: [0.085, -0.035, -0.085],
+    region: 'secondary',
+  },
+  {
+    name: 'rightButt',
+    required: false,
+    parent: 'hips',
+    localPosition: [-0.085, -0.035, -0.085],
+    region: 'secondary',
+  },
+  {
+    name: 'leftBreast',
+    required: false,
+    parent: 'upperChest',
+    localPosition: [0.085, -0.045, 0.095],
+    region: 'secondary',
+  },
+  {
+    name: 'rightBreast',
+    required: false,
+    parent: 'upperChest',
+    localPosition: [-0.085, -0.045, 0.095],
+    region: 'secondary',
+  },
+] as const;
+
+/** All VRM 1.0 + optional non-VRM secondary bone definitions. */
+export const ALL_RIG_BONE_DEFS: readonly RigBoneDef[] = [
+  ...VRM_BONE_DEFS,
+  ...SECONDARY_BONE_DEFS,
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 3. Lookup helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** O(1) lookup by VRM bone name. */
 export const VRM_BONE_BY_NAME: Readonly<Record<VrmBoneName, VrmBoneDef>> =
   Object.fromEntries(VRM_BONE_DEFS.map((d) => [d.name, d])) as Record<VrmBoneName, VrmBoneDef>;
+
+/** O(1) lookup across all VRM + secondary rig bone names. */
+export const RIG_BONE_BY_NAME: Readonly<Record<RigBoneName, RigBoneDef>> =
+  Object.fromEntries(ALL_RIG_BONE_DEFS.map((d) => [d.name, d])) as Record<RigBoneName, RigBoneDef>;
+
+/** Type guard: returns true iff `name` is a standard VRM 1.0 humanoid bone. */
+export function isVrmBoneName(name: string): name is VrmBoneName {
+  return Object.prototype.hasOwnProperty.call(VRM_BONE_BY_NAME, name);
+}
 
 /** Ordered list of only the required VRM 1.0 bones (22 bones). */
 export const VRM_REQUIRED_BONES: readonly VrmBoneDef[] = VRM_BONE_DEFS.filter((d) => d.required);
@@ -580,7 +665,7 @@ export function vrmChildren(boneName: VrmBoneName): VrmBoneName[] {
  * The 8 anatomical landmarks needed to place the full skeleton.
  * These are the minimum user-provided or auto-detected points.
  */
-export type LandmarkId =
+export type RequiredLandmarkId =
   | 'headTop'       // Crown of skull
   | 'neckBase'      // C7 vertebra / pit of the neck
   | 'leftShoulder'  // Left glenohumeral joint
@@ -590,15 +675,38 @@ export type LandmarkId =
   | 'leftAnkle'     // Left ankle joint
   | 'rightAnkle';   // Right ankle joint
 
-export type LandmarkMap = Record<LandmarkId, THREE.Vector3>;
+export const LIMB_LANDMARK_IDS = [
+  'leftElbow',
+  'rightElbow',
+  'leftWrist',
+  'rightWrist',
+  'leftKnee',
+  'rightKnee',
+] as const;
+
+export const DETAIL_LANDMARK_IDS = [
+  'chin',
+  'groin',
+] as const;
+
+export type LimbLandmarkId = (typeof LIMB_LANDMARK_IDS)[number];
+export type DetailLandmarkId = (typeof DETAIL_LANDMARK_IDS)[number];
+export type OptionalLandmarkId = LimbLandmarkId | DetailLandmarkId;
+
+/** All 16 supported anatomical landmarks (8 required core + 6 limb + 2 detail). */
+export type LandmarkId = RequiredLandmarkId | OptionalLandmarkId;
+
+/** Placement preset controlling how many landmark slots are surfaced in the UI. */
+export type LandmarkPreset = '8' | '14' | '16';
+
+export type LandmarkMap = Record<RequiredLandmarkId, THREE.Vector3> &
+  Partial<Record<OptionalLandmarkId, THREE.Vector3>>;
 
 /**
- * The canonical landmark set and its placement order — the single source of
- * truth. `store.ts`, `LandmarkEditor` and `RiggerSidebar` all used to keep
- * their own copy, so the "next unplaced landmark" advance had three orders to
- * disagree about.
+ * The canonical 8-marker core landmark set and its placement order — the
+ * single source of truth for required landmarks.
  */
-export const LANDMARK_IDS: readonly LandmarkId[] = [
+export const LANDMARK_IDS: readonly RequiredLandmarkId[] = [
   'headTop',
   'neckBase',
   'leftShoulder',
@@ -609,16 +717,49 @@ export const LANDMARK_IDS: readonly LandmarkId[] = [
   'rightAnkle',
 ] as const;
 
-/** The next landmark after `current` that has no position yet, else null. */
+/** All 16 landmarks ordered cleanly top-to-bottom. */
+export const ALL_LANDMARK_IDS: readonly LandmarkId[] = [
+  'headTop',
+  'chin',
+  'neckBase',
+  'leftShoulder',
+  'rightShoulder',
+  'leftElbow',
+  'rightElbow',
+  'leftWrist',
+  'rightWrist',
+  'leftHip',
+  'rightHip',
+  'groin',
+  'leftKnee',
+  'rightKnee',
+  'leftAnkle',
+  'rightAnkle',
+] as const;
+
+const PRESET_14_IDS: readonly LandmarkId[] = ALL_LANDMARK_IDS.filter(
+  (id) => !(DETAIL_LANDMARK_IDS as readonly string[]).includes(id),
+);
+
+/** Returns the ordered landmark list for a given placement preset ('8' | '14' | '16'). */
+export function getLandmarkIdsForPreset(preset: LandmarkPreset): readonly LandmarkId[] {
+  if (preset === '8') return LANDMARK_IDS;
+  if (preset === '14') return PRESET_14_IDS;
+  return ALL_LANDMARK_IDS;
+}
+
+/** The next landmark after `current` in `orderedIds` that has no position yet, else null. */
 export function nextUnplacedLandmark(
   current: LandmarkId | null,
   landmarks: Partial<LandmarkMap>,
+  orderedIds: readonly LandmarkId[] = LANDMARK_IDS,
 ): LandmarkId | null {
-  const start = current ? LANDMARK_IDS.indexOf(current) : -1;
+  if (orderedIds.length === 0) return null;
+  const start = current ? orderedIds.indexOf(current) : -1;
   // Walk forward from the current marker, then wrap, so placement always
   // continues from where the user is rather than jumping back to the top.
-  for (let step = 1; step <= LANDMARK_IDS.length; step++) {
-    const id = LANDMARK_IDS[(start + step) % LANDMARK_IDS.length];
+  for (let step = 1; step <= orderedIds.length; step++) {
+    const id = orderedIds[(start + step) % orderedIds.length];
     if (!landmarks[id]) return id;
   }
   return null;
@@ -633,8 +774,8 @@ export function nextUnplacedLandmark(
  */
 export interface BoneLandmarkBinding {
   bone: VrmBoneName;
-  from: LandmarkId;
-  to: LandmarkId;
+  from: RequiredLandmarkId;
+  to: RequiredLandmarkId;
   /**
    * Parametric position along the from→to axis in world space (0=from, 1=to).
    * Derived from anatomical ratios — not arbitrary.
@@ -675,9 +816,15 @@ export interface SkeletonBuildOptions {
   scale?: number;
   /**
    * When true, only required VRM 1.0 bones are created (22 bones).
-   * When false (default), all 54 bones including fingers and face are created.
+   * When false (default), all 54 VRM bones including fingers and face are created.
    */
   requiredOnly?: boolean;
+  /**
+   * When true (and `requiredOnly` is false), appends optional non-VRM secondary
+   * bones (`pelvisLower`, `leftButt`, `rightButt`, `leftBreast`, `rightBreast`).
+   * Default: false.
+   */
+  includeSecondaryBones?: boolean;
 }
 
 export interface BuiltSkeleton {
@@ -685,8 +832,8 @@ export interface BuiltSkeleton {
   root: THREE.Bone;
   /** All created bones, ordered to match `skeleton.bones`. */
   bones: THREE.Bone[];
-  /** VRM bone name → Three.js Bone. */
-  boneMap: Map<VrmBoneName, THREE.Bone>;
+  /** Rig bone name → Three.js Bone. */
+  boneMap: Map<RigBoneName, THREE.Bone>;
   /** Ready-to-use Three.js Skeleton with identity bind matrices. */
   skeleton: THREE.Skeleton;
 }
@@ -709,11 +856,14 @@ export interface BuiltSkeleton {
  */
 export function buildTPoseSkeleton(options: SkeletonBuildOptions = {}): BuiltSkeleton {
   const scale = options.scale ?? 1.0;
-  const defs = options.requiredOnly
+  const requiredOnly = options.requiredOnly ?? false;
+  const defs: readonly RigBoneDef[] = requiredOnly
     ? VRM_BONE_DEFS.filter((d) => d.required)
+    : options.includeSecondaryBones
+    ? ALL_RIG_BONE_DEFS
     : VRM_BONE_DEFS;
 
-  const boneMap = new Map<VrmBoneName, THREE.Bone>();
+  const boneMap = new Map<RigBoneName, THREE.Bone>();
   const bones: THREE.Bone[] = [];
 
   // Create all bones and wire parent→child relationships
@@ -727,13 +877,15 @@ export function buildTPoseSkeleton(options: SkeletonBuildOptions = {}): BuiltSke
     boneMap.set(def.name, bone);
     bones.push(bone);
 
-    if (def.parent !== null) {
-      const parentBone = boneMap.get(def.parent);
-      if (parentBone) {
-        parentBone.add(bone);
-      }
-      // If parent was excluded (requiredOnly), the bone becomes a root-level
-      // orphan — callers should handle or avoid this case.
+    // Walk up the canonical ancestor chain so `requiredOnly: true` doesn't leave
+    // required bones (`neck`, `leftUpperArm`, `rightUpperArm`) detached when optional
+    // bones (`upperChest`, `leftShoulder`, `rightShoulder`) are omitted.
+    let parentName = def.parent;
+    while (parentName !== null && !boneMap.has(parentName)) {
+      parentName = RIG_BONE_BY_NAME[parentName]?.parent ?? null;
+    }
+    if (parentName !== null) {
+      boneMap.get(parentName)!.add(bone);
     }
   }
 
@@ -762,8 +914,10 @@ export function buildTPoseSkeleton(options: SkeletonBuildOptions = {}): BuiltSke
  *
  * Call this AFTER `root.updateMatrixWorld(true)`.
  */
-export function getTPoseWorldPositions(boneMap: Map<VrmBoneName, THREE.Bone>): Map<VrmBoneName, THREE.Vector3> {
-  const positions = new Map<VrmBoneName, THREE.Vector3>();
+export function getTPoseWorldPositions<TName extends string = RigBoneName>(
+  boneMap: Map<TName, THREE.Bone>,
+): Map<TName, THREE.Vector3> {
+  const positions = new Map<TName, THREE.Vector3>();
   for (const [name, bone] of boneMap) {
     positions.set(name, bone.getWorldPosition(new THREE.Vector3()));
   }
@@ -777,16 +931,16 @@ export function getTPoseWorldPositions(boneMap: Map<VrmBoneName, THREE.Bone>): M
  * A bone's segment runs from its own world position to the centroid of its
  * children's world positions (or just its own tip offset for leaf bones).
  */
-export interface BoneSegment {
-  name: VrmBoneName;
+export interface BoneSegment<TName extends string = RigBoneName> {
+  name: TName;
   start: THREE.Vector3;
   end: THREE.Vector3;
 }
 
-export function getTPoseBoneSegments(
-  boneMap: Map<VrmBoneName, THREE.Bone>,
-): Map<VrmBoneName, BoneSegment> {
-  const segments = new Map<VrmBoneName, BoneSegment>();
+export function getTPoseBoneSegments<TName extends string = RigBoneName>(
+  boneMap: Map<TName, THREE.Bone>,
+): Map<TName, BoneSegment<TName>> {
+  const segments = new Map<TName, BoneSegment<TName>>();
   const _tmp = new THREE.Vector3();
 
   for (const [name, bone] of boneMap) {

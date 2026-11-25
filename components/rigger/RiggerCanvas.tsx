@@ -1,25 +1,35 @@
 'use client';
 
 import * as THREE from 'three';
-import { useEffect, useRef, useState, useMemo } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import { GLTFLoader, OBJLoader } from 'three-stdlib';
 import { useRiggerStore } from '@/lib/rigger/store';
-import { nextUnplacedLandmark, LANDMARK_IDS, type LandmarkId, type VrmBoneName } from '@/lib/rigger/vrmSkeleton';
+import { getLandmarkIdsForPreset, nextUnplacedLandmark, type LandmarkId, type VrmBoneName } from '@/lib/rigger/vrmSkeleton';
 import { SkeletonOverlay } from '@/components/rigger/SkeletonOverlay';
-import { LandmarkEditor, LANDMARK_META } from '@/components/rigger/LandmarkEditor';
+import { LandmarkEditor, LANDMARK_META, type OrbitControlsLike } from '@/components/rigger/LandmarkEditor';
 import { buildWeightHeatmapColors } from '@/lib/rigger/weightTransfer';
 import { createRiggedSkinnedMesh } from '@/lib/rigger/exportRiggedGlb';
 import { driveTestAnimation, captureRestPose } from '@/lib/rigger/testAnimations';
+import { bakeAndMergeSceneMeshes, transformMeshGeometry } from '@/lib/rigger/normalizeMesh';
+
+type CameraViewPreset = 'front' | 'side' | 'back' | 'fit';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Inner 3D Scene
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SceneContent() {
+interface SceneContentProps {
+  cameraSnapRef: React.MutableRefObject<((preset: CameraViewPreset) => void) | null>;
+  meshTransformRef: React.MutableRefObject<((axis: 'x' | 'y' | 'z', deg: number) => void) | null>;
+  onDraggingChange: (id: LandmarkId | null, shiftHeld: boolean) => void;
+}
+
+function SceneContent({ cameraSnapRef, meshTransformRef, onDraggingChange }: SceneContentProps) {
   const meshUrl         = useRiggerStore((s) => s.meshUrl);
   const meshFile        = useRiggerStore((s) => s.meshFile);
+  const meshBbox        = useRiggerStore((s) => s.meshBbox);
   const stage           = useRiggerStore((s) => s.stage);
   const fitResult       = useRiggerStore((s) => s.fitResult);
   const showSkeleton    = useRiggerStore((s) => s.showSkeleton);
@@ -31,16 +41,74 @@ function SceneContent() {
   const activeLandmark  = useRiggerStore((s) => s.activeLandmark);
   const setLandmark     = useRiggerStore((s) => s.setLandmark);
   const setActiveLandmark = useRiggerStore((s) => s.setActiveLandmark);
+  const clearLandmarks  = useRiggerStore((s) => s.clearLandmarks);
+  const setStage        = useRiggerStore((s) => s.setStage);
   const setMeshGeometry = useRiggerStore((s) => s.setMeshGeometry);
+  const setMeshMaterial = useRiggerStore((s) => s.setMeshMaterial);
   const setMeshBbox     = useRiggerStore((s) => s.setMeshBbox);
   const setError        = useRiggerStore((s) => s.setError);
   const landmarks       = useRiggerStore((s) => s.landmarks);
   const setLandmarkMissFlash = useRiggerStore((s) => s.setLandmarkMissFlash);
 
+  const { camera } = useThree();
+  const orbitControlsRef = useRef<OrbitControlsLike | null>(null);
   const [loadedObject, setLoadedObject] = useState<THREE.Object3D | null>(null);
   const primaryMeshRef = useRef<THREE.Mesh | null>(null);
   const pendingPoint = useRef<THREE.Vector3 | null>(null);
   const [ghost, setGhost] = useState<THREE.Vector3 | null>(null);
+
+  // ── Camera snap presets (Mixamo Front / Side / Back / Fit) ─────────────────
+  const snapCamera = useCallback(
+    (preset: CameraViewPreset, boxOverride?: THREE.Box3 | null) => {
+      const bb = boxOverride ?? meshBbox;
+      const center = bb ? bb.getCenter(new THREE.Vector3()) : new THREE.Vector3(0, 0.85, 0);
+      const size   = bb ? bb.getSize(new THREE.Vector3())   : new THREE.Vector3(0.6, 1.7, 0.4);
+      const span   = Math.max(size.y, size.x * 0.85, 0.6);
+      const dist   = span * 1.7;
+
+      const controls = orbitControlsRef.current;
+      if (preset === 'front') {
+        camera.position.set(center.x, center.y + size.y * 0.03, center.z + dist);
+      } else if (preset === 'back') {
+        camera.position.set(center.x, center.y + size.y * 0.03, center.z - dist);
+      } else if (preset === 'side') {
+        camera.position.set(center.x + dist, center.y + size.y * 0.03, center.z);
+      } else {
+        // Fit: keep current viewing angle, re-center & scale distance to bbox
+        const prevTarget = controls ? controls.target : center;
+        const dir = camera.position.clone().sub(prevTarget);
+        if (dir.lengthSq() < 1e-6) dir.set(0, 0.05, 1);
+        dir.normalize();
+        camera.position.copy(center).addScaledVector(dir, dist);
+      }
+
+      if (controls) {
+        controls.target.copy(center);
+        controls.update();
+      } else {
+        camera.lookAt(center);
+      }
+    },
+    [camera, meshBbox],
+  );
+
+  useEffect(() => {
+    cameraSnapRef.current = (preset) => snapCamera(preset);
+    return () => { cameraSnapRef.current = null; };
+  }, [cameraSnapRef, snapCamera]);
+
+  useEffect(() => {
+    meshTransformRef.current = (axis, deg) => {
+      const mesh = primaryMeshRef.current;
+      if (!mesh || stage === 'rigging' || stage === 'done') return;
+      const bb = transformMeshGeometry(mesh, axis, (deg * Math.PI) / 180);
+      clearLandmarks();
+      setStage('mesh-loaded');
+      setMeshBbox(bb);
+      snapCamera('front', bb);
+    };
+    return () => { meshTransformRef.current = null; };
+  }, [meshTransformRef, stage, clearLandmarks, setStage, setMeshBbox, snapCamera]);
 
   // ── Skinned mesh for animation preview ────────────────────────────────────
   const weights = smoothWeights || rawWeights;
@@ -82,12 +150,14 @@ function SceneContent() {
       setLoadedObject(null);
       primaryMeshRef.current = null;
       setMeshGeometry(null);
+      setMeshMaterial(null);
       setMeshBbox(null);
       return;
     }
 
     const isObj = meshFile?.name.toLowerCase().endsWith('.obj');
     let isCancelled = false;
+    let bakedMesh: THREE.Mesh | null = null;
 
     if (isObj) {
       new OBJLoader().load(
@@ -106,28 +176,25 @@ function SceneContent() {
     }
 
     function processLoadedScene(scene: THREE.Object3D) {
-      scene.updateMatrixWorld(true);
-      let targetMesh: THREE.Mesh | null = null;
-      scene.traverse((child) => {
-        const asMesh = child as THREE.Mesh;
-        if (asMesh.isMesh) {
-          if (!asMesh.raycast) asMesh.raycast = THREE.Mesh.prototype.raycast.bind(asMesh);
-          asMesh.castShadow = true;
-          asMesh.receiveShadow = true;
-          if (!targetMesh) targetMesh = asMesh;
-        }
-      });
-      if (!targetMesh) { setError('No mesh geometry found in uploaded file.'); return; }
-      const geom = (targetMesh as THREE.Mesh).geometry;
+      const merged = bakeAndMergeSceneMeshes(scene);
+      if (!merged) { setError('No mesh geometry found in uploaded file.'); return; }
+      bakedMesh = merged;
+      const geom = merged.geometry;
       geom.computeBoundingBox();
-      geom.computeVertexNormals();
-      primaryMeshRef.current = targetMesh;
+      primaryMeshRef.current = merged;
+      const bb = geom.boundingBox?.clone() ?? new THREE.Box3().setFromObject(merged);
       setMeshGeometry(geom);
-      setMeshBbox(new THREE.Box3().setFromObject(scene));
-      setLoadedObject(scene);
+      setMeshMaterial(merged.material);
+      setMeshBbox(bb);
+      setLoadedObject(merged);
+      snapCamera('front', bb);
     }
 
-    return () => { isCancelled = true; };
+    return () => {
+      isCancelled = true;
+      bakedMesh?.geometry.dispose();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meshUrl, meshFile, setError, setMeshBbox, setMeshGeometry]);
 
   // ── Heatmap colors ─────────────────────────────────────────────────────────
@@ -189,7 +256,17 @@ function SceneContent() {
   const pressOrigin = useRef<{ x: number; y: number; id: LandmarkId } | null>(null);
   const CLICK_SLOP_PX = 5;
 
-  const handleMeshPointerDown = (e: { stopPropagation: () => void; point: THREE.Vector3; clientX?: number; clientY?: number }) => {
+  const handleMeshPointerDown = (e: {
+    stopPropagation: () => void;
+    point: THREE.Vector3;
+    clientX?: number;
+    clientY?: number;
+    intersections?: Array<{ object: THREE.Object3D }>;
+  }) => {
+    // Always let Mixamo-style landmark handles win even if buried inside the mesh
+    if (e.intersections?.some((hit) => Boolean(hit.object.userData?.landmarkHandleId))) {
+      return;
+    }
     if (!activeLandmark) return;
     e.stopPropagation();
     pressOrigin.current = { x: e.clientX ?? 0, y: e.clientY ?? 0, id: activeLandmark };
@@ -211,7 +288,8 @@ function SceneContent() {
     setLandmark(origin.id, point);
     // Advance straight to the next empty marker — Mixamo-style — instead of
     // dropping the user back to the sidebar after every single click.
-    const next = nextUnplacedLandmark(origin.id, { ...landmarks, [origin.id]: point });
+    const activeOrder = getLandmarkIdsForPreset(useRiggerStore.getState().landmarkPreset);
+    const next = nextUnplacedLandmark(origin.id, { ...landmarks, [origin.id]: point }, activeOrder);
     setActiveLandmark(next);
   };
 
@@ -267,7 +345,9 @@ function SceneContent() {
       {stage !== 'idle' && (
         <LandmarkEditor
           targetMeshRef={primaryMeshRef}
+          orbitControlsRef={orbitControlsRef}
           showLivePreview={showLivePreview}
+          onDraggingChange={onDraggingChange}
         />
       )}
 
@@ -282,7 +362,13 @@ function SceneContent() {
 
       {/* Orbit stays live during placement — the click/drag slop in
           `handleMeshPointerUp` separates the two gestures. */}
-      <OrbitControls makeDefault minDistance={0.2} maxDistance={20} enabled={!isDraggingLandmark} />
+      <OrbitControls
+        ref={orbitControlsRef as React.RefObject<React.ComponentRef<typeof OrbitControls>>}
+        makeDefault
+        minDistance={0.2}
+        maxDistance={20}
+        enabled={!isDraggingLandmark}
+      />
       <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
         <GizmoViewport axisColors={['#ef4444', '#22c55e', '#3b82f6']} labelColor="#ffffff" />
       </GizmoHelper>
@@ -299,8 +385,20 @@ export function RiggerCanvas() {
   const activeLandmark     = useRiggerStore((s) => s.activeLandmark);
   const setActiveLandmark  = useRiggerStore((s) => s.setActiveLandmark);
   const landmarks          = useRiggerStore((s) => s.landmarks);
-  const landmarkCount      = Object.keys(landmarks).length;
+  const landmarkPreset     = useRiggerStore((s) => s.landmarkPreset);
+  const activeIds          = getLandmarkIdsForPreset(landmarkPreset);
+  const placedInPreset     = activeIds.filter((id) => Boolean(landmarks[id])).length;
+  const totalInPreset      = activeIds.length;
   const missFlash          = useRiggerStore((s) => s.landmarkMissFlash);
+  const useSymmetry        = useRiggerStore((s) => s.useSymmetry);
+
+  const cameraSnapRef    = useRef<((preset: CameraViewPreset) => void) | null>(null);
+  const meshTransformRef = useRef<((axis: 'x' | 'y' | 'z', deg: number) => void) | null>(null);
+  const [dragInfo, setDragInfo] = useState<{ id: LandmarkId; shiftHeld: boolean } | null>(null);
+
+  const handleDraggingChange = useCallback((id: LandmarkId | null, shiftHeld: boolean) => {
+    setDragInfo(id ? { id, shiftHeld } : null);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -315,14 +413,91 @@ export function RiggerCanvas() {
   return (
     <div
       className="relative w-full h-full bg-zinc-950 select-none"
-      style={{ cursor: activeLandmark ? 'crosshair' : 'default' }}
+      style={{ cursor: dragInfo ? 'grabbing' : activeLandmark ? 'crosshair' : 'default' }}
     >
       <Canvas camera={{ position: [0, 1.2, 2.5], fov: 40 }} gl={{ antialias: true, alpha: false }} className="w-full h-full">
-        <SceneContent />
+        <SceneContent
+          cameraSnapRef={cameraSnapRef}
+          meshTransformRef={meshTransformRef}
+          onDraggingChange={handleDraggingChange}
+        />
       </Canvas>
 
+      {/* Camera quick-snap bar + Mesh orientation fixes */}
+      {stage !== 'idle' && (
+        <div className="absolute top-3 left-3 z-10 flex flex-wrap items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/90 p-1 backdrop-blur-sm shadow-lg">
+          {([
+            ['front', 'Front'],
+            ['side',  'Side'],
+            ['back',  'Back'],
+            ['fit',   'Fit'],
+          ] as const).map(([preset, label]) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => cameraSnapRef.current?.(preset)}
+              className="min-h-[26px] px-2.5 py-1 rounded-md text-[10px] font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+            >
+              {label}
+            </button>
+          ))}
+          {stage !== 'done' && stage !== 'rigging' && (
+            <>
+              <div className="h-4 w-px bg-zinc-700 mx-0.5" />
+              <button
+                type="button"
+                title="Rotate model 90° around Y axis"
+                onClick={() => meshTransformRef.current?.('y', 90)}
+                className="min-h-[26px] px-2 py-1 rounded-md text-[10px] font-medium text-sky-300 hover:text-white hover:bg-sky-950/60 transition-colors"
+              >
+                ↺ 90°
+              </button>
+              <button
+                type="button"
+                title="Flip model 180° around Y axis"
+                onClick={() => meshTransformRef.current?.('y', 180)}
+                className="min-h-[26px] px-2 py-1 rounded-md text-[10px] font-medium text-sky-300 hover:text-white hover:bg-sky-950/60 transition-colors"
+              >
+                ⇄ 180°
+              </button>
+              <button
+                type="button"
+                title="Rotate model 90° around X axis (fix Z-up / lying down)"
+                onClick={() => meshTransformRef.current?.('x', -90)}
+                className="min-h-[26px] px-2 py-1 rounded-md text-[10px] font-medium text-sky-300 hover:text-white hover:bg-sky-950/60 transition-colors"
+              >
+                ↕ X90°
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Live drag feedback banner */}
+      {dragInfo && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-10">
+          <div className="bg-zinc-900/95 border border-zinc-700 text-zinc-100 text-xs font-medium px-4 py-2 rounded-full backdrop-blur-sm shadow-xl flex items-center gap-2">
+            <span
+              className="w-2.5 h-2.5 rounded-full inline-block"
+              style={{ background: LANDMARK_META[dragInfo.id].color }}
+            />
+            <span>
+              Dragging <strong className="text-white">{LANDMARK_META[dragInfo.id].label}</strong>
+            </span>
+            <span className="text-zinc-500">·</span>
+            <span className={`text-[10px] ${useSymmetry ? 'text-sky-400' : 'text-zinc-400'}`}>
+              Mirror {useSymmetry ? 'ON' : 'OFF'}
+            </span>
+            <span className="text-zinc-500">·</span>
+            <span className={`text-[10px] font-medium ${dragInfo.shiftHeld ? 'text-emerald-400' : 'text-zinc-400'}`}>
+              {dragInfo.shiftHeld ? 'Surface Snap ON' : 'Hold Shift for Surface Snap'}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Active landmark placement banner */}
-      {activeLandmark && (
+      {!dragInfo && activeLandmark && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-10">
           <div className="bg-sky-900/95 border border-sky-400/60 text-sky-100 text-xs font-semibold px-5 py-2.5 rounded-full backdrop-blur-sm shadow-xl flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse inline-block" />
@@ -339,10 +514,10 @@ export function RiggerCanvas() {
       )}
 
       {/* Landmark placement progress badge */}
-      {stage !== 'idle' && stage !== 'done' && !activeLandmark && landmarkCount > 0 && landmarkCount < 8 && (
+      {stage !== 'idle' && stage !== 'done' && !activeLandmark && placedInPreset > 0 && placedInPreset < totalInPreset && (
         <div className="absolute top-4 right-4 pointer-events-none z-10">
           <div className="bg-zinc-900/90 border border-zinc-700 text-zinc-300 text-[11px] px-3 py-1.5 rounded-lg backdrop-blur-sm flex items-center gap-2">
-            <span className="font-mono font-bold text-sky-400">{landmarkCount}/8</span>
+            <span className="font-mono font-bold text-sky-400">{placedInPreset}/{totalInPreset}</span>
             <span>markers placed</span>
           </div>
         </div>

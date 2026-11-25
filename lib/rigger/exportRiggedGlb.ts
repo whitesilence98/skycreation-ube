@@ -48,7 +48,7 @@ import { GLTFExporter } from 'three-stdlib';
 import type { FitResult }             from '@/lib/rigger/templateFitter';
 import type { DiffusionResult }       from '@/lib/rigger/heatDiffusion';
 import type { WeightTransferResult }  from '@/lib/rigger/weightTransfer';
-import { buildVrmHumanoidExtension, type VrmBoneName } from '@/lib/rigger/vrmSkeleton';
+import { buildVrmHumanoidExtension, isVrmBoneName, type VrmBoneName } from '@/lib/rigger/vrmSkeleton';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public types
@@ -250,12 +250,15 @@ function patchRiggedGlb(
       if (nodeName) nodeIndexByName.set(nodeName, i);
     }
 
-    // Build humanoid bone map — only include bones that exist in the exported nodes
+    // Build humanoid bone map — only include standard VRM 1.0 humanoid bones that exist in exported nodes.
+    // Non-VRM secondary bones (pelvisLower, leftButt, rightButt, leftBreast, rightBreast) are safely
+    // skipped here while remaining exported as glTF skin nodes and vertex weights.
     const boneToNodeIndex = new Map<VrmBoneName, number>();
     for (const boneName of boneNames) {
+      if (!isVrmBoneName(boneName)) continue;
       const nodeIdx = nodeIndexByName.get(boneName);
       if (nodeIdx !== undefined) {
-        boneToNodeIndex.set(boneName as VrmBoneName, nodeIdx);
+        boneToNodeIndex.set(boneName, nodeIdx);
       }
     }
 
@@ -543,11 +546,16 @@ export function exportSummary(
   characterName: string,
 ): string {
   const mb = (glbByteLength / 1_048_576).toFixed(2);
+  const vrmCount = fitResult.built.bones.filter((b) => isVrmBoneName(b.name)).length;
+  const secCount = fitResult.built.bones.length - vrmCount;
+  const boneLabel = secCount > 0
+    ? `${fitResult.built.bones.length} (${vrmCount} VRM 1.0 + ${secCount} custom)`
+    : `${fitResult.built.bones.length} (VRM 1.0 humanoid)`;
   return [
     `Character: ${characterName}`,
     `Height:    ${fitResult.characterHeight.toFixed(3)} m`,
     `Scale:     ${fitResult.scale.toFixed(3)}× (ref 1.70 m)`,
-    `Bones:     ${fitResult.built.bones.length} (VRM 1.0 humanoid)`,
+    `Bones:     ${boneLabel}`,
     `Vertices:  ${weights.vertexCount}`,
     `File size: ${mb} MB`,
   ].join('\n');
