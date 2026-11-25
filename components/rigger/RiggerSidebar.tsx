@@ -9,6 +9,7 @@ import { fitSkeletonToLandmarks, estimateLandmarksFromBounds, validateLandmarks 
 import { transferWeightsAsync } from '@/lib/rigger/weightTransfer';
 import { diffuseWeightsAsync } from '@/lib/rigger/heatDiffusion';
 import { exportRiggedGlb, exportSummary } from '@/lib/rigger/exportRiggedGlb';
+import type { TestAnimationMode } from '@/lib/rigger/testAnimations';
 
 /* Order comes from `vrmSkeleton.ts` so it matches the auto-advance sequence. */
 const ORDERED_LANDMARKS: readonly LandmarkId[] = LANDMARK_IDS;
@@ -96,6 +97,8 @@ export function RiggerSidebar() {
   const setError           = useRiggerStore((s) => s.setError);
   const toggleSkeleton     = useRiggerStore((s) => s.toggleSkeleton);
   const toggleWeightMap    = useRiggerStore((s) => s.toggleWeightMap);
+  const setTestAnimation   = useRiggerStore((s) => s.setTestAnimation);
+  const testAnimation      = useRiggerStore((s) => s.testAnimation);
   const setCharacterName   = useRiggerStore((s) => s.setCharacterName);
   const setOption          = useRiggerStore((s) => s.setOption);
   const reset              = useRiggerStore((s) => s.reset);
@@ -519,6 +522,28 @@ export function RiggerSidebar() {
                   🎨 Weights {smoothWeights && showWeightMap ? 'ON' : 'OFF'}
                 </button>
               </div>
+
+              {/* Test animation selector — only shown after rigging is done */}
+              {stage === 'done' && (
+                <div className="border-t border-zinc-800 pt-2 flex flex-col gap-1.5">
+                  <span className="text-[10px] text-zinc-400 uppercase tracking-wider">Test Animation</span>
+                  <div className="grid grid-cols-4 gap-1">
+                    {(['tpose', 'idle', 'walk', 'run'] as TestAnimationMode[]).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setTestAnimation(mode)}
+                        className={`py-1.5 text-[10px] font-semibold rounded-lg border transition-all ${
+                          testAnimation === mode
+                            ? 'border-sky-400 bg-sky-950/50 text-sky-200 shadow-[0_0_6px_rgba(14,165,233,0.3)]'
+                            : 'border-zinc-800 bg-zinc-900/50 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700'
+                        }`}
+                      >
+                        {mode === 'tpose' ? 'T-Pose' : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

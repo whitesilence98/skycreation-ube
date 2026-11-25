@@ -14,6 +14,7 @@ import { LANDMARK_IDS, nextUnplacedLandmark, type LandmarkId, type LandmarkMap }
 import type { FitResult } from '@/lib/rigger/templateFitter';
 import type { WeightTransferResult } from '@/lib/rigger/weightTransfer';
 import type { DiffusionResult } from '@/lib/rigger/heatDiffusion';
+import type { TestAnimationMode } from '@/lib/rigger/testAnimations';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Domain types
@@ -77,6 +78,7 @@ export interface RiggerState {
   // ── Preview toggles ─────────────────────────────────────────────────────
   showSkeleton: boolean;
   showWeightMap: boolean;
+  testAnimation: TestAnimationMode;
 
   // ── Options ─────────────────────────────────────────────────────────────
   characterName: string;
@@ -108,6 +110,7 @@ export interface RiggerState {
   setError: (e: string | null) => void;
   toggleSkeleton: () => void;
   toggleWeightMap: () => void;
+  setTestAnimation: (mode: TestAnimationMode) => void;
   setCharacterName: (n: string) => void;
   setOption: <
     K extends keyof Pick<
@@ -148,6 +151,7 @@ type RiggerStateData = Omit<
   | 'setError'
   | 'toggleSkeleton'
   | 'toggleWeightMap'
+  | 'setTestAnimation'
   | 'setCharacterName'
   | 'setOption'
   | 'reset'
@@ -178,6 +182,7 @@ const DEFAULT_STATE: RiggerStateData = {
   // Preview toggles
   showSkeleton: true,
   showWeightMap: false,
+  testAnimation: 'tpose' as TestAnimationMode,
   // Options
   characterName: '',
   includeVrm: true,
@@ -213,6 +218,7 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
         smoothWeights: null,
         progress: null,
         error: null,
+        testAnimation: 'tpose' as TestAnimationMode,
       };
     });
   },
@@ -345,6 +351,8 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
   toggleSkeleton: () => set((s) => ({ showSkeleton: !s.showSkeleton })),
 
   toggleWeightMap: () => set((s) => ({ showWeightMap: !s.showWeightMap })),
+
+  setTestAnimation: (mode) => set({ testAnimation: mode }),
 
   // ── Options ───────────────────────────────────────────────────────────────
 

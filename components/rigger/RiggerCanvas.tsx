@@ -2,14 +2,16 @@
 
 import * as THREE from 'three';
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import { GLTFLoader, OBJLoader } from 'three-stdlib';
 import { useRiggerStore } from '@/lib/rigger/store';
-import { nextUnplacedLandmark, LANDMARK_IDS, type LandmarkId } from '@/lib/rigger/vrmSkeleton';
+import { nextUnplacedLandmark, LANDMARK_IDS, type LandmarkId, type VrmBoneName } from '@/lib/rigger/vrmSkeleton';
 import { SkeletonOverlay } from '@/components/rigger/SkeletonOverlay';
 import { LandmarkEditor, LANDMARK_META } from '@/components/rigger/LandmarkEditor';
 import { buildWeightHeatmapColors } from '@/lib/rigger/weightTransfer';
+import { createRiggedSkinnedMesh } from '@/lib/rigger/exportRiggedGlb';
+import { driveTestAnimation, captureRestPose } from '@/lib/rigger/testAnimations';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Inner 3D Scene
@@ -24,6 +26,7 @@ function SceneContent() {
   const showWeightMap   = useRiggerStore((s) => s.showWeightMap);
   const smoothWeights   = useRiggerStore((s) => s.smoothWeights);
   const rawWeights      = useRiggerStore((s) => s.rawWeights);
+  const testAnimation   = useRiggerStore((s) => s.testAnimation);
   const isDraggingLandmark = useRiggerStore((s) => s.isDraggingLandmark);
   const activeLandmark  = useRiggerStore((s) => s.activeLandmark);
   const setLandmark     = useRiggerStore((s) => s.setLandmark);
@@ -38,6 +41,40 @@ function SceneContent() {
   const primaryMeshRef = useRef<THREE.Mesh | null>(null);
   const pendingPoint = useRef<THREE.Vector3 | null>(null);
   const [ghost, setGhost] = useState<THREE.Vector3 | null>(null);
+
+  // ── Skinned mesh for animation preview ────────────────────────────────────
+  const weights = smoothWeights || rawWeights;
+  const skinnedMesh = useMemo(() => {
+    if (!fitResult || !weights || !primaryMeshRef.current?.geometry) return null;
+    const geo = primaryMeshRef.current.geometry;
+    const mat = primaryMeshRef.current.material ?? new THREE.MeshStandardMaterial({ color: 0xcccccc });
+    return createRiggedSkinnedMesh(geo, mat, fitResult, weights);
+  }, [fitResult, weights]);
+
+  // Capture rest pose quaternions once when skinnedMesh is built
+  const restQuatsRef = useRef<Map<VrmBoneName, THREE.Quaternion>>(new Map());
+  const boneMapRef   = useRef<Map<VrmBoneName, THREE.Bone>>(new Map());
+  useEffect(() => {
+    if (!fitResult || !skinnedMesh) return;
+    boneMapRef.current = fitResult.built.boneMap as Map<VrmBoneName, THREE.Bone>;
+    restQuatsRef.current = captureRestPose(boneMapRef.current);
+  }, [fitResult, skinnedMesh]);
+
+  // Immediately reset bones to rest pose when returning to T-pose
+  useEffect(() => {
+    if (testAnimation === 'tpose' && fitResult && restQuatsRef.current.size > 0) {
+      driveTestAnimation(boneMapRef.current, restQuatsRef.current, 'tpose', 0);
+      fitResult.built.root.updateMatrixWorld(true);
+    }
+  }, [testAnimation, fitResult]);
+
+  // Animation loop
+  useFrame(({ clock }) => {
+    if (stage !== 'done' || !skinnedMesh || !fitResult || restQuatsRef.current.size === 0) return;
+    if (testAnimation === 'tpose') return;
+    driveTestAnimation(boneMapRef.current, restQuatsRef.current, testAnimation, clock.getElapsedTime());
+    fitResult.built.root.updateMatrixWorld(true);
+  });
 
   // ── Load Mesh ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -94,25 +131,54 @@ function SceneContent() {
   }, [meshUrl, meshFile, setError, setMeshBbox, setMeshGeometry]);
 
   // ── Heatmap colors ─────────────────────────────────────────────────────────
-  const weights = smoothWeights || rawWeights;
   const heatmapColors = useMemo(() => {
     if (!showWeightMap || !weights || !fitResult) return null;
     return buildWeightHeatmapColors(weights, fitResult.built.bones.length);
   }, [showWeightMap, weights, fitResult]);
 
   useEffect(() => {
-    const mesh = primaryMeshRef.current;
-    if (!mesh) return;
-    if (heatmapColors) {
-      mesh.geometry.setAttribute('color', new THREE.BufferAttribute(heatmapColors, 3));
+    const targets = [primaryMeshRef.current, skinnedMesh].filter(
+      (m): m is THREE.Mesh => m !== null,
+    );
+    if (targets.length === 0) return;
+
+    for (const mesh of targets) {
+      if (heatmapColors) {
+        mesh.geometry.setAttribute('color', new THREE.BufferAttribute(heatmapColors, 3));
+      } else if (mesh.geometry.getAttribute('color')) {
+        mesh.geometry.deleteAttribute('color');
+      }
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      mats.forEach((m) => { m.vertexColors = true; m.needsUpdate = true; });
-    } else {
-      if (mesh.geometry.getAttribute('color')) mesh.geometry.deleteAttribute('color');
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      mats.forEach((m) => { m.vertexColors = false; m.needsUpdate = true; });
+      mats.forEach((m) => {
+        m.vertexColors = Boolean(heatmapColors);
+        m.needsUpdate = true;
+      });
     }
-  }, [heatmapColors]);
+  }, [heatmapColors, skinnedMesh]);
+
+  // Dispose cloned skinned geometry when replaced or unmounted
+  useEffect(() => {
+    return () => {
+      skinnedMesh?.geometry.dispose();
+    };
+  }, [skinnedMesh]);
+
+  // Live SkeletonHelper that tracks animated bones
+  const liveSkeletonHelper = useMemo(() => {
+    if (!fitResult) return null;
+    const helper = new THREE.SkeletonHelper(fitResult.built.root);
+    const mat = helper.material as THREE.LineBasicMaterial;
+    mat.depthTest = false;
+    mat.transparent = true;
+    mat.opacity = 0.85;
+    return helper;
+  }, [fitResult]);
+
+  useEffect(() => {
+    return () => {
+      liveSkeletonHelper?.dispose();
+    };
+  }, [liveSkeletonHelper]);
 
   // ── Click-to-place active landmark ────────────────────────────────────────
   /* Orbiting and placing used to be mutually exclusive: selecting a marker
@@ -170,6 +236,7 @@ function SceneContent() {
       {loadedObject && (
         <primitive
           object={loadedObject}
+          visible={!(stage === 'done' && skinnedMesh && testAnimation !== 'tpose')}
           onPointerDown={handleMeshPointerDown}
           onPointerUp={handleMeshPointerUp}
           onPointerMissed={handleMissed}
@@ -178,6 +245,14 @@ function SceneContent() {
             setGhost(e.point.clone());
           }}
         />
+      )}
+
+      {/* Live-animated SkinnedMesh — shown only when rig is done and animating */}
+      {stage === 'done' && skinnedMesh && testAnimation !== 'tpose' && (
+        <>
+          <primitive object={skinnedMesh} />
+          {fitResult && <primitive object={fitResult.built.root} />}
+        </>
       )}
 
       {/* Ghost marker: shows where the click would land. Placement was blind
@@ -196,10 +271,14 @@ function SceneContent() {
         />
       )}
 
-      {/* Confirmed rig skeleton overlay */}
-      {fitResult && (
+      {/* Confirmed rig skeleton overlay (static joint spheres in T-pose, live SkeletonHelper when animating) */}
+      {fitResult && (stage === 'done' && testAnimation !== 'tpose' ? (
+        liveSkeletonHelper && showSkeleton ? (
+          <primitive object={liveSkeletonHelper} />
+        ) : null
+      ) : (
         <SkeletonOverlay fitResult={fitResult} visible={showSkeleton} />
-      )}
+      ))}
 
       {/* Orbit stays live during placement — the click/drag slop in
           `handleMeshPointerUp` separates the two gestures. */}
