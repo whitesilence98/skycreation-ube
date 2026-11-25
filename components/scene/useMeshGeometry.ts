@@ -525,7 +525,7 @@ export type TextureState = 'idle' | 'pending' | 'loaded' | 'failed';
 
 export function useMaterialTexture(
   material: THREE.MeshStandardMaterial,
-  slot: 'map' | 'normalMap' | 'roughnessMap',
+  slot: 'map' | 'normalMap' | 'roughnessMap' | 'emissiveMap',
   src: string | undefined,
   opts: { colorSpace?: THREE.ColorSpace; wrap?: boolean } = {},
 ): TextureState {

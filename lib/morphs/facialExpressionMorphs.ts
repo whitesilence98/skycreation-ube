@@ -43,7 +43,7 @@ export type FacialExpressionId = keyof typeof EXPRESSION_ALIASES;
 
 const UBE_EXPR_URL = '/assets/morphs/head/ube-facial-expressions.json';
 const UBE_EXPR_FLAG = '__ubeFacialExpressions';
-const UBE_HEAD_VERT_COUNT = 11498;
+const UBE_HEAD_VERT_COUNT = 11761;
 const UBE_MOUTH_VERT_COUNT = 9043;
 
 const SMILE_TARGET_NAMES = new Set<string>([

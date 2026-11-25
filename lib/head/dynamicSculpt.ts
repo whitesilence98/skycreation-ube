@@ -167,7 +167,7 @@ export async function replaySculptPayload(payload: SculptPayload, fileName: stri
   if (!checked.ok) throw new Error(checked.reason);
   const base = await fetchBaseMesh(CANONICAL_HEAD_URL);
   if (!base || base.positions.length !== CANONICAL_HEAD_VERTICES * 3 ||
-      base.indices.length !== 22044 * 3 || base.uvs.length !== CANONICAL_HEAD_VERTICES * 2 ||
+      base.indices.length !== 22380 * 3 || base.uvs.length !== CANONICAL_HEAD_VERTICES * 2 ||
       !Array.from(base.positions).every(Number.isFinite) || !Array.from(base.uvs).every(Number.isFinite) ||
       !base.indices.every(index => Number.isInteger(index) && index >= 0 && index < CANONICAL_HEAD_VERTICES)) {
     throw new Error('Canonical UBE base is missing or invalid; regenerate the preset pack');
@@ -289,7 +289,7 @@ export async function resolveOrBuildSculptHead(
       bytes: 0,
       version: '1.0',
       nodes: [],
-      shapes: { vertexCount: 11498, triangleCount: 22044 },
+      shapes: { vertexCount: 11761, triangleCount: 22380 },
     };
   }
 
@@ -311,7 +311,7 @@ export async function resolveOrBuildSculptHead(
       bytes: 0,
       version: '1.0',
       nodes: [],
-      shapes: { vertexCount: 11498, triangleCount: 22044 },
+      shapes: { vertexCount: 11761, triangleCount: 22380 },
     };
   }
 

@@ -120,7 +120,7 @@ checkGeometry(geometry, [synthetic.length / 3 - 2, synthetic.length / 3 - 1], 's
 const fixture = path.resolve(root, process.argv[2] || 'public/assets/preset-pack/meshes/headMesh-96612a53f30f4e56.json');
 if (fs.existsSync(fixture)) {
   const data = JSON.parse(fs.readFileSync(fixture, 'utf8'));
-  assert.equal(data.positions.length / 3, 11498, 'canonical seam fixture must be the UBE base head');
+  assert.equal(data.positions.length / 3, 11761, 'canonical seam fixture must be the UBE base head');
   const pack = new THREE.BufferGeometry();
   pack.setAttribute('position', new THREE.Float32BufferAttribute(data.positions, 3));
   pack.setAttribute('normal', new THREE.Float32BufferAttribute(data.normals, 3));

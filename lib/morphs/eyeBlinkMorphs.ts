@@ -33,7 +33,7 @@ export const BLINK_RIGHT_ALIASES = [
 
 export const UBE_EYE_BLINK_URL = '/assets/morphs/head/ube-eye-blink.json';
 const UBE_BLINK_FLAG = '__ubeProceduralBlink';
-const UBE_HEAD_VERT_COUNT = 11498;
+const UBE_HEAD_VERT_COUNTS: ReadonlySet<number> = new Set([11498, 11761]);
 const UBE_LASH_VERT_COUNT = 1216;
 const MANAGED_BLINK_NAMES: ReadonlySet<string> = new Set(['eyeBlinkLeft', 'eyeBlinkRight']);
 
@@ -43,17 +43,20 @@ export interface UbeEyeSideLandmark {
   baseClosingGap: number;
 }
 
+export interface UbeEyeBlinkHeadData {
+  vertexCount: number;
+  landmarks: {
+    left: UbeEyeSideLandmark;
+    right: UbeEyeSideLandmark;
+  };
+  eyeBlinkLeft: SparseMorphDelta;
+  eyeBlinkRight: SparseMorphDelta;
+}
+
 export interface UbeEyeBlinkBundle {
   version: number;
-  head: {
-    vertexCount: number;
-    landmarks: {
-      left: UbeEyeSideLandmark;
-      right: UbeEyeSideLandmark;
-    };
-    eyeBlinkLeft: SparseMorphDelta;
-    eyeBlinkRight: SparseMorphDelta;
-  };
+  head: UbeEyeBlinkHeadData;
+  headsByVertCount?: Record<string, UbeEyeBlinkHeadData>;
   lashes: {
     vertexCount: number;
     eyeBlinkLeft: SparseMorphDelta;
@@ -128,7 +131,8 @@ function measureSideScale(
 ): number {
   if (!pos || pos.count <= Math.max(landmark.upper, landmark.lower)) return 1.0;
   const openGap = Math.max(0.002, pos.getY(landmark.upper) - pos.getY(landmark.lower));
-  return Math.min(1.32, Math.max(0.75, openGap / Math.max(0.004, landmark.baseClosingGap)));
+  // Slight 6% seal bias prevents sub-millimeter midline sclera slivers across tall almond eye sculpts.
+  return Math.min(1.36, Math.max(0.75, (openGap / Math.max(0.004, landmark.baseClosingGap)) * 1.06));
 }
 
 function collectAnteriorEyePoints(
@@ -335,6 +339,21 @@ function attachBlinkPair(
   return mergeNamedMorphTargets(geo, entries, MANAGED_BLINK_NAMES, UBE_BLINK_FLAG);
 }
 
+function resolveUbeHeadBlinkData(
+  ubeData: UbeEyeBlinkBundle | null | undefined,
+  vertCount: number | undefined,
+): UbeEyeBlinkHeadData | null {
+  if (!ubeData || !vertCount) return null;
+  const byCount = ubeData.headsByVertCount?.[String(vertCount)];
+  if (byCount && byCount.vertexCount === vertCount && byCount.eyeBlinkLeft && byCount.eyeBlinkRight) {
+    return byCount;
+  }
+  if (ubeData.head && ubeData.head.vertexCount === vertCount) {
+    return ubeData.head;
+  }
+  return null;
+}
+
 /**
  * Ensures `headGeo` and `lashesGeo` carry `eyeBlinkLeft` and `eyeBlinkRight`
  * relative morph targets + morph normals. Preserves any pre-authored
@@ -357,14 +376,16 @@ export function attachBlinkMorphTargets(
   const needsUbeWait =
     !ubeData &&
     !ubeBundleAttempted &&
-    (headPos?.count === UBE_HEAD_VERT_COUNT || lashPos?.count === UBE_LASH_VERT_COUNT);
+    ((headPos !== undefined && UBE_HEAD_VERT_COUNTS.has(headPos.count)) ||
+      lashPos?.count === UBE_LASH_VERT_COUNT);
   if (needsUbeWait) return false;
 
-  const isUbeHead = Boolean(ubeData && headPos && headPos.count === ubeData.head.vertexCount);
+  const ubeHead = resolveUbeHeadBlinkData(ubeData, headPos?.count);
+  const isUbeHead = Boolean(ubeHead && headPos);
   const isUbeLashes = Boolean(ubeData && lashPos && lashPos.count === ubeData.lashes.vertexCount);
 
-  const leftScale = isUbeHead && ubeData ? measureSideScale(headPos, ubeData.head.landmarks.left) : 1.0;
-  const rightScale = isUbeHead && ubeData ? measureSideScale(headPos, ubeData.head.landmarks.right) : 1.0;
+  const leftScale = ubeHead && headPos ? measureSideScale(headPos, ubeHead.landmarks.left) : 1.0;
+  const rightScale = ubeHead && headPos ? measureSideScale(headPos, ubeHead.landmarks.right) : 1.0;
 
   const leftBounds = isUbeHead ? null : measureLashSideBounds(lashesGeo, eyeGeo, true);
   const rightBounds = isUbeHead ? null : measureLashSideBounds(lashesGeo, eyeGeo, false);
@@ -375,9 +396,9 @@ export function attachBlinkMorphTargets(
     let leftDeltas: Float32Array | null = null;
     let rightDeltas: Float32Array | null = null;
 
-    if (isUbeHead && ubeData) {
-      leftDeltas = expandSparseMorph(headPos.count, ubeData.head.eyeBlinkLeft, leftScale);
-      rightDeltas = expandSparseMorph(headPos.count, ubeData.head.eyeBlinkRight, rightScale);
+    if (ubeHead) {
+      leftDeltas = expandSparseMorph(headPos.count, ubeHead.eyeBlinkLeft, leftScale);
+      rightDeltas = expandSparseMorph(headPos.count, ubeHead.eyeBlinkRight, rightScale);
       if (eyeGeo) {
         enforceCorneaClearance(headPos, leftDeltas, collectAnteriorEyePoints(eyeGeo, true));
         enforceCorneaClearance(headPos, rightDeltas, collectAnteriorEyePoints(eyeGeo, false));

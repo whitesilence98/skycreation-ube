@@ -1,7 +1,7 @@
 // Generated Smart sculpts only; general RaceMenu imports retain their own contract.
 export const CANONICAL_HEAD_URL = '/assets/preset-pack/meshes/headMesh-96612a53f30f4e56.json';
-export const CANONICAL_HEAD_VERTICES = 11498;
-export const CANONICAL_HEAD_TOPOLOGY = '6cc05326819d20076753d565d74d910436eb439c4d261b6fd0d963c8ef59329e';
+export const CANONICAL_HEAD_VERTICES = 11761;
+export const CANONICAL_HEAD_TOPOLOGY = '5b84d38b834a42317ea48098defeed23de887425cae7e6bc163bf6742a21b70e';
 export const CANONICAL_SCULPT_HOST = '!UBE\\Head\\femaleHeadCharGen.tri';
 export const MAX_OBJ_BYTES = 64 * 1024 * 1024;
 

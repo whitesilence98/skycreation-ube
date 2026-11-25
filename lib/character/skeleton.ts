@@ -185,10 +185,19 @@ export class SkeletonRegistry {
    *  in render space, so nothing below should re-scale them. */
   readonly group = new THREE.Group();
   private readonly frame: string;
+  private readonly listeners = new Set<() => void>();
 
   constructor(frame = 'head') {
     this.frame = frame;
     this.group.name = 'SkeletonRoot';
+  }
+
+  /** Subscribe to asynchronous bone-table additions/re-parenting. */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   private restOf(bone: THREE.Bone): BoneRest {
@@ -257,7 +266,10 @@ export class SkeletonRegistry {
     }
     /* A later mesh can supply the parent of a bone an earlier one registered
        flat, so rebuild whenever anything new arrived. */
-    if (changed) this.rebuild();
+    if (changed) {
+      this.rebuild();
+      for (const listener of this.listeners) listener();
+    }
 
     const bones = meshBones.map((def) => this.byName.get(def.name)!);
     const inverses = bones.map((b) => this.restOf(b).world.clone().invert());
@@ -285,7 +297,8 @@ export class SkeletonRegistry {
       }
       const parent = parentName ? this.byName.get(parentName) : undefined;
       const parentObject: THREE.Object3D = parent ?? this.group;
-      if (bone.parent !== parentObject) {
+      const reparented = bone.parent !== parentObject;
+      if (reparented) {
         /* `add` re-parents; it does not mutate the removed bone's own TRS. */
         parentObject.add(bone);
       }
@@ -296,11 +309,13 @@ export class SkeletonRegistry {
         parentInverse.copy(rest.world);
       }
       parentInverse.decompose(rest.pose.position, rest.pose.quaternion, rest.pose.scale);
-      /* The bone starts at rest; a pose is applied on top of `rest.pose` and
-         never written back into it. */
-      bone.position.copy(rest.pose.position);
-      bone.quaternion.copy(rest.pose.quaternion);
-      bone.scale.copy(rest.pose.scale);
+      /* Only write rest TRS to newly attached or re-parented bones so async
+         secondary meshes (e.g. .nif hair) cannot wipe live pose/body scale. */
+      if (reparented) {
+        bone.position.copy(rest.pose.position);
+        bone.quaternion.copy(rest.pose.quaternion);
+        bone.scale.copy(rest.pose.scale);
+      }
     }
     this.updateWorld();
   }

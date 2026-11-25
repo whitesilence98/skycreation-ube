@@ -483,6 +483,9 @@ export interface CharacterState extends AnatomySnapshot {
   /** When true, static _GND.nif meshes are included in the equipment list. */
   showGroundMeshes: boolean;
   setShowGroundMeshes: (val: boolean) => void;
+  /** When true and LDD PBR eyes are selected, renders LDD Wetness & Eyelid Shadow shells. */
+  eyeShellsEnabled: boolean;
+  setEyeShellsEnabled: (val: boolean) => void;
 
   setActiveRegion: (id: RegionId) => void;
   setPrimaryTab: (t: string) => void;
@@ -1156,6 +1159,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   toggleUnrestrictedSlots: () => set((s) => ({ unrestrictedSlots: !s.unrestrictedSlots })),
   showGroundMeshes: false,
   setShowGroundMeshes: (showGroundMeshes) => set({ showGroundMeshes }),
+  eyeShellsEnabled: true,
+  setEyeShellsEnabled: (eyeShellsEnabled) => set({ eyeShellsEnabled }),
 
   sliders: presetSliderBank(PRESETS[0]),
   poses: buildPoseBank(),

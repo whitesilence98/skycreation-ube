@@ -204,20 +204,35 @@ export function resolveManifest(
     const base = defaultRowFor(kind, list as PartOption[]) as PartOption | undefined;
     const url = (mode: Parameters<typeof convertUrl>[0]['mode'], entryId = entry.id) => convertUrl({ kind, id: entryId, mode });
     const normal = entry.normalId ? url('normal', entry.normalId) : undefined;
+    const prebaked = entry as CatalogueEntry & {
+      meshUrl?: string;
+      texture?: string;
+      normalTexture?: string;
+      roughnessTexture?: string;
+      emissiveTexture?: string;
+      thumbnailUrl?: string;
+      iris?: string;
+      mean?: string;
+      atlas?: NonNullable<Mo2Manifest['eye']>['atlas'];
+    };
     return {
       ...base, ...entry,
       ...(mesh ? {
-        meshUrl: url('mesh'), isRealMesh: true, version: 'FRTRI003 / OBJ', nodes: [], shapes: {},
+        meshUrl: prebaked.meshUrl ?? url('mesh'), isRealMesh: true, version: 'FRTRI003 / OBJ', nodes: [], shapes: {},
       } : {
-        texture: url('atlas'), normalTexture: normal,
+        texture: prebaked.texture ?? url('atlas'),
+        normalTexture: prebaked.normalTexture ?? normal,
+        roughnessTexture: prebaked.roughnessTexture,
         ...(kind === 'skin' ? {
           palette: (base as Mo2SkinOption | undefined)?.palette ?? manifest.skin,
           atlasFit: manifest.atlasFit ? { ...manifest.atlasFit, measured: false } : undefined,
         } : {}),
         ...(kind === 'eyes' ? {
-          iris: manifest.eye?.iris ?? '#80705b', mean: manifest.eye?.mean ?? '#80705b',
-          atlas: { ...(manifest.eye?.atlas ?? { cx: 0.497, cy: 0.754, r: 0.126 }), measured: false },
-          discTexture: url('disc'),
+          iris: prebaked.iris ?? manifest.eye?.iris ?? '#80705b',
+          mean: prebaked.mean ?? manifest.eye?.mean ?? '#80705b',
+          atlas: prebaked.atlas ?? { ...(manifest.eye?.atlas ?? { cx: 0.497, cy: 0.754, r: 0.126 }), measured: false },
+          discTexture: prebaked.thumbnailUrl ?? prebaked.texture ?? url('disc'),
+          emissiveTexture: prebaked.emissiveTexture,
         } : {}),
         ...(kind === 'hair' ? { groups: undefined, capWindow: undefined, usable: true } : {}),
       }),
@@ -491,6 +506,8 @@ export function resolveManifest(
          of that row explicitly or the eyeball draws flat. */
       texture: eye?.texture ?? manifest.eye?.texture,
       normalTexture: eye?.normalTexture ?? manifest.eye?.normalTexture,
+      roughnessTexture: (eye as { roughnessTexture?: string } | undefined)?.roughnessTexture ?? (manifest.eye as { roughnessTexture?: string } | undefined)?.roughnessTexture,
+      emissiveTexture: (eye as { emissiveTexture?: string } | undefined)?.emissiveTexture ?? (manifest.eye as { emissiveTexture?: string } | undefined)?.emissiveTexture,
       meshUrl: companionEyeMesh ?? eyeMesh?.meshUrl ?? eye?.meshUrl ?? manifest.eye?.meshUrl,
       lashesMeshUrl: companionLashesMesh ?? parts.lashes.meshUrl ?? manifest.eye?.lashesMeshUrl,
       lashesTexture: parts.lashes.texture ?? manifest.eye?.lashesTexture,

@@ -272,7 +272,7 @@ function WuxiaOverlayLayerControls({
 
 export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null }) {
   const [activeSection, setActiveSection] = useState<MakeupSectionId | null>(null);
-  const [eyeFilter, setEyeFilter] = useState<'ALL' | 'ZHIZHEN' | 'UBE'>('ALL');
+  const [eyeFilter, setEyeFilter] = useState<'ALL' | 'LDD PBR' | 'ZHIZHEN' | 'UBE'>('ALL');
   const [eyeMakeupFilter, setEyeMakeupFilter] = useState<'ALL' | 'EYELINER' | 'EYESHADOW'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -280,6 +280,8 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
   const selection = useCharacter((s) => s.assetSelection);
   const setAssets = useCharacter((s) => s.setAssets);
   const setCatalogue = useCharacter((s) => s.setAssetCatalogue);
+  const eyeShellsEnabled = useCharacter((s) => s.eyeShellsEnabled);
+  const setEyeShellsEnabled = useCharacter((s) => s.setEyeShellsEnabled);
   const showToast = useCharacter((s) => s.showToast);
 
   // ── 1. Skin & Foundation State ─────────────────────────────────────
@@ -332,14 +334,16 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
     Promise.all([
       fetchCatalogue('brows'),
       fetchCatalogue('eyes'),
+      fetchCatalogue('eyeMesh'),
       fetchCatalogue('skin'),
       fetchCatalogue('makeup'),
       fetchCatalogue('tattoo'),
       fetchCatalogue('lashes'),
-    ]).then(([brows, eyes, skin, makeup, tattoo, lashes]) => {
+    ]).then(([brows, eyes, eyeMesh, skin, makeup, tattoo, lashes]) => {
       if (cancelled) return;
       if (brows.length) setCatalogue('brows', brows);
       if (eyes.length) setCatalogue('eyes', eyes);
+      if (eyeMesh.length) setCatalogue('eyeMesh', eyeMesh);
       if (skin.length) setCatalogue('skin', skin);
       if (makeup.length) setCatalogue('makeup', makeup);
       if (tattoo.length) setCatalogue('tattoo', tattoo);
@@ -472,9 +476,22 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
       const raw = (catalogues.eyes ?? []) as CatalogueEntry[];
       return filterBySearch(
         raw.filter((e) => {
-          if (e.file.endsWith('_n.dds') || e.mapRole === 'normal') return false;
-          if (eyeFilter === 'ZHIZHEN') return e.file.toLowerCase().includes('zhizhen');
-          if (eyeFilter === 'UBE') return e.file.toLowerCase().includes('ube');
+          const low = e.file.toLowerCase();
+          if (
+            e.mapRole === 'normal' ||
+            low.endsWith('_n.dds') ||
+            low.endsWith('_rmaos.dds') ||
+            low.endsWith('_g.dds') ||
+            low === 'eye_o_d.dds' ||
+            low === 'wetness_d.dds' ||
+            low === 'shadow_d.dds'
+          ) {
+            return false;
+          }
+          const isLdd = e.id.startsWith('eyes-ldd-') || Boolean(e.mod?.includes('LDD'));
+          if (eyeFilter === 'LDD PBR') return isLdd;
+          if (eyeFilter === 'ZHIZHEN') return low.includes('zhizhen');
+          if (eyeFilter === 'UBE') return low.includes('ube') && !isLdd;
           return true;
         }),
       );
@@ -771,22 +788,65 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
 
             {/* Sub-Filters */}
             {currentSection?.id === 'pupils' && (
-              <div className="mt-2 flex items-center gap-1 border-b border-white/10 pb-1.5 font-mono text-[10px]">
-                {(['ALL', 'ZHIZHEN', 'UBE'] as const).map((tab) => (
+              <div className="mt-2 flex flex-col gap-1.5 border-b border-white/10 pb-2 font-mono text-[10px]">
+                <div className="flex flex-wrap items-center gap-1">
+                  {(['ALL', 'LDD PBR', 'ZHIZHEN', 'UBE'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setEyeFilter(tab)}
+                      className={cn(
+                        'min-h-[24px] px-2 py-0.5 rounded-[2px] transition-colors',
+                        eyeFilter === tab
+                          ? 'bg-[#dfba73]/25 text-[#f2dfbe] font-bold'
+                          : 'text-[#8e8c95] hover:text-white',
+                      )}
+                    >
+                      {tab}
+                    </button>
+                  ))}
                   <button
-                    key={tab}
                     type="button"
-                    onClick={() => setEyeFilter(tab)}
+                    onClick={() => setEyeShellsEnabled(!eyeShellsEnabled)}
                     className={cn(
-                      'min-h-[24px] px-2 py-0.5 rounded-[2px] transition-colors',
-                      eyeFilter === tab
-                        ? 'bg-[#dfba73]/25 text-[#f2dfbe] font-bold'
-                        : 'text-[#8e8c95] hover:text-white',
+                      'ml-auto min-h-[24px] px-2 py-0.5 rounded-[2px] border transition-colors',
+                      eyeShellsEnabled
+                        ? 'border-[#dfba73]/50 bg-[#dfba73]/15 text-[#f2dfbe]'
+                        : 'border-white/10 text-[#8e8c95] hover:text-white',
                     )}
+                    title="Toggle LDD Wetness & Eyelid Shadow overlay shells"
                   >
-                    {tab}
+                    SHELLS {eyeShellsEnabled ? 'ON' : 'OFF'}
                   </button>
-                ))}
+                </div>
+
+                {/* Eye Mesh Selector (Default + LDD Inner 1-4 + Glow) */}
+                {(catalogues.eyeMesh ?? []).some((m) => m.id.startsWith('eyeMesh-ldd-')) && (
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    <span className="shrink-0 text-[#9f9da6]">MESH</span>
+                    <select
+                      aria-label="Eye Mesh Model"
+                      value={selection.eyeMesh ?? ''}
+                      onChange={(e) => {
+                        const val = e.target.value || undefined;
+                        setAssets({ eyeMesh: val });
+                        showToast?.(val ? 'Updated eye mesh' : 'Reset to default UBE eye mesh');
+                      }}
+                      className="min-h-[24px] w-full rounded-[2px] border border-white/15 bg-black/50 px-2 py-0.5 text-[10px] text-[#e8d4af] outline-none focus:border-[#eac87f]"
+                    >
+                      <option value="" className="bg-[#12100d] text-[#e8d4af]">
+                        Default UBE (eyesfemale)
+                      </option>
+                      {(catalogues.eyeMesh ?? [])
+                        .filter((m) => m.id.startsWith('eyeMesh-ldd-'))
+                        .map((m) => (
+                          <option key={m.id} value={m.id} className="bg-[#12100d] text-[#e8d4af]">
+                            {m.label || m.file}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
               </div>
             )}
 
@@ -920,6 +980,7 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
                   currentSection?.categoryKind ??
                   (currentSection?.id === 'lashes' ? 'lashes' : 'makeup');
                 const thumbSrc =
+                  (item as { thumbnailUrl?: string }).thumbnailUrl ??
                   item.texture ??
                   (item.file?.startsWith('/')
                     ? item.file

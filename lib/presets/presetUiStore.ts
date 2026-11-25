@@ -53,9 +53,11 @@ export const INITIAL_PRESET_SLOTS: PresetSlot[] = [
   },
   {
     id: 'preset-slot-6',
+    presetId: 'zhizhen2025',
     label: 'Face Preset 6',
-    thumb: null,
-    isEmpty: true,
+    customName: 'Zhizhen 2025',
+    thumb: '/assets/preset-pack/textures/presets/ubezhizhen2025.webp',
+    isEmpty: false,
   },
   {
     id: 'preset-slot-7',

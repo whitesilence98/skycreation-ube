@@ -218,6 +218,8 @@ export interface Mo2Manifest {
     texture?: string;
     atlas?: Mo2EyeAtlas;
     normalTexture?: string;
+    roughnessTexture?: string;
+    emissiveTexture?: string;
     meshUrl?: string;
     lashesMeshUrl?: string;
     lashesTexture?: string;

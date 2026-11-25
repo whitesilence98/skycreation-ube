@@ -390,6 +390,28 @@ export const PRESETS: PresetDef[] = [
       },
     ],
   },
+  {
+    id: 'zhizhen2025',
+    label: 'Zhizhen 2025',
+    seed: 0.25,
+    bias: { nose: 0.0, jaw: 0.0 },
+    sliders: {
+      forehead: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
+      eyebrows: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
+      nose: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
+      cheeks: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
+      lips: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
+      jaw: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
+    },
+    headMeshId: 'headMesh-zhizhen2025-face',
+    weight: 0.0,
+    assets: {
+      skin: 'skin-zhizhen-ube',
+      headMesh: 'headMesh-zhizhen2025-face',
+      preset: 'preset-zhizhen2025',
+    },
+    equipment: {},
+  },
 ];
 
 /**

@@ -710,7 +710,7 @@ export function applyNeckDelta(
   bodyContext?: NeckBodyContext | null,
 ): void {
   const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
-  if (!posAttr || posAttr.count < 11498) return;
+  if (!posAttr || posAttr.count !== 11761) return;
 
   let current = posAttr.array as Float32Array;
   if (current === basePositions) {
