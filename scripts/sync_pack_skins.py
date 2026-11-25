@@ -90,6 +90,16 @@ SKIN_MOD_SPECS = [
         "body_d": r"textures\!UBE\Body\femalebody_1_d.dds",
         "body_n": r"textures\!UBE\Body\femalebody_1_n.dds",
     },
+    {
+        "id": "skin-necoco-v17",
+        "slug": "necoco_v17",
+        "label": "Necoco Skin Recreation v17 (UBE)",
+        "mod": "Necoco Skin Recreation v17",
+        "head_d": r"textures\!UBE\Head\femalehead_d.dds",
+        "head_n": r"textures\!UBE\Head\femalehead_n.dds",
+        "body_d": r"textures\!UBE\Body\femalebody_1_d.dds",
+        "body_n": r"textures\!UBE\Body\femalebody_1_n.dds",
+    },
 ]
 
 

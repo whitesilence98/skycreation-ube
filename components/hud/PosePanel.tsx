@@ -37,6 +37,15 @@ export function PosePanel({ onClose }: PosePanelProps = {}) {
   const setAnimationId = useCharacter((s) => s.setAnimationId);
   const animationPlaying = useCharacter((s) => s.animationPlaying);
   const setAnimationPlaying = useCharacter((s) => s.setAnimationPlaying);
+  const autoBlink = useCharacter((s) => s.autoBlink);
+  const setAutoBlink = useCharacter((s) => s.setAutoBlink);
+  const blinkPreview = useCharacter((s) => s.blinkPreview);
+  const setBlinkPreview = useCharacter((s) => s.setBlinkPreview);
+  const triggerBlink = useCharacter((s) => s.triggerBlink);
+  const facialExpressions = useCharacter((s) => s.facialExpressions);
+  const setFacialExpression = useCharacter((s) => s.setFacialExpression);
+  const setFacialExpressions = useCharacter((s) => s.setFacialExpressions);
+  const resetFacialExpressions = useCharacter((s) => s.resetFacialExpressions);
   const autoRigUnskinned = useCharacter((s) => s.autoRigUnskinned);
   const setAutoRigUnskinned = useCharacter((s) => s.setAutoRigUnskinned);
   const [exportStatus, setExportStatus] = useState('');
@@ -158,7 +167,145 @@ export function PosePanel({ onClose }: PosePanelProps = {}) {
           className="border border-[#d4b483]/40 px-2 py-1 hover:bg-[#d4b483]/10 focus-visible:outline focus-visible:outline-[#eac87f]">
           {animationPlaying ? 'PAUSE' : 'PLAY'}
         </button>
-        <label className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2 min-h-[24px]">
+        <label className="flex items-center gap-2 min-h-[24px] cursor-pointer">
+            <input type="checkbox" checked={autoBlink} onChange={(e) => setAutoBlink(e.target.checked)} />
+            Auto eye blink (eyeBlinkLeft / eyeBlinkRight)
+          </label>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={triggerBlink}
+              title="Play one natural blink"
+              className="min-h-[24px] rounded border border-[#d4b483]/35 px-2 text-[10px] tracking-wider text-[#d5ccbb] transition-colors hover:border-[#d4b483]/60 focus-visible:outline focus-visible:outline-[#eac87f]"
+            >
+              BLINK
+            </button>
+            <button
+              type="button"
+              onClick={() => setBlinkPreview(blinkPreview === null ? 1 : null)}
+              aria-pressed={blinkPreview !== null}
+              title="Freeze eyes closed to inspect eyelid closure and lashes"
+              className={cn(
+                'min-h-[24px] rounded border px-2 text-[10px] tracking-wider transition-colors focus-visible:outline focus-visible:outline-[#eac87f]',
+                blinkPreview !== null
+                  ? 'border-[#eac87f] bg-[#eac87f]/20 text-[#f5ecd8]'
+                  : 'border-[#d4b483]/35 text-[#d5ccbb] hover:border-[#d4b483]/60',
+              )}
+            >
+              {blinkPreview !== null ? 'OPEN EYES' : 'HOLD CLOSED'}
+            </button>
+          </div>
+        </div>
+        {blinkPreview !== null && (
+          <label className="flex items-center justify-between gap-2 min-h-[24px] text-[10px] text-[#b6ad9c]/85">
+            <span>Eye Closure</span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.02"
+              value={blinkPreview}
+              onChange={(e) => setBlinkPreview(parseFloat(e.target.value))}
+              aria-label="Eye closure preview"
+              className="h-1 flex-1 cursor-pointer accent-[#d4b483] bg-black/60 rounded"
+            />
+            <span className="w-8 text-right font-mono text-[#eac87f]">{Math.round(blinkPreview * 100)}%</span>
+          </label>
+        )}
+        <div className="flex flex-col gap-1.5 rounded border border-[#d4b483]/18 bg-black/35 p-2 text-[10px]">
+          <div className="flex items-center justify-between gap-2">
+            <span className="tracking-wider text-[#d5ccbb]">EXPRESSIONS &amp; SPEECH</span>
+            <button
+              type="button"
+              onClick={resetFacialExpressions}
+              className="min-h-[24px] rounded border border-[#d4b483]/30 px-2 text-[10px] tracking-wider text-[#d5ccbb] hover:border-[#d4b483]/60 focus-visible:outline focus-visible:outline-[#eac87f]"
+            >
+              RESET
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                ['smallSmile', 'Small Smile'],
+                ['smile', 'Smile'],
+                ['closedSmile', 'Closed Smile'],
+                ['moodHappy', 'Happy'],
+              ] as const
+            ).map(([id, label]) => {
+              const active = (facialExpressions[id] ?? 0) > 0;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setFacialExpressions(active ? {} : { [id]: 1 })}
+                  className={cn(
+                    'min-h-[24px] rounded border px-2 text-[10px] tracking-wide transition-colors focus-visible:outline focus-visible:outline-[#eac87f]',
+                    active
+                      ? 'border-[#eac87f] bg-[#eac87f]/20 text-[#f5ecd8]'
+                      : 'border-white/10 bg-black/40 text-[#b6ad9c] hover:border-[#d4b483]/50 hover:text-[#e2d8c6]',
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <label className="flex items-center justify-between gap-2 min-h-[24px] text-[10px] text-[#b6ad9c]/85">
+            <span>Smile Depth</span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={facialExpressions.smile ?? facialExpressions.smallSmile ?? 0}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                const key = facialExpressions.smile !== undefined ? 'smile' : 'smallSmile';
+                setFacialExpression(key, v);
+              }}
+              aria-label="Smile intensity"
+              className="h-1 flex-1 cursor-pointer accent-[#d4b483] bg-black/60 rounded"
+            />
+            <span className="w-8 text-right font-mono text-[#eac87f]">
+              {Math.round((facialExpressions.smile ?? facialExpressions.smallSmile ?? 0) * 100)}%
+            </span>
+          </label>
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                ['jawOpen', 'Jaw Open'],
+                ['viseme_aa', 'Aah'],
+                ['viseme_O', 'Oh'],
+                ['viseme_E', 'Eh'],
+                ['viseme_U', 'OohQ'],
+                ['viseme_I', 'Eee'],
+                ['viseme_PP', 'BMP'],
+                ['viseme_FF', 'FV'],
+              ] as const
+            ).map(([id, label]) => {
+              const active = (facialExpressions[id] ?? 0) > 0;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setFacialExpressions(active ? {} : { [id]: 0.9 })}
+                  className={cn(
+                    'min-h-[24px] rounded border px-1.5 text-[10px] tracking-wide transition-colors focus-visible:outline focus-visible:outline-[#eac87f]',
+                    active
+                      ? 'border-[#eac87f] bg-[#eac87f]/20 text-[#f5ecd8]'
+                      : 'border-white/10 bg-black/40 text-[#b6ad9c] hover:border-[#d4b483]/50 hover:text-[#e2d8c6]',
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <label className="flex items-center gap-2 min-h-[24px] cursor-pointer">
           <input type="checkbox" checked={autoRigUnskinned} onChange={(e) => setAutoRigUnskinned(e.target.checked)} />
           Auto-rig unweighted body / clothing
         </label>

@@ -6,9 +6,13 @@ import * as THREE from 'three';
 import { useCharacter } from '@/lib/store';
 import type { SkeletonRegistry } from '@/lib/character/skeleton';
 import { buildIdleClip, stepMixer, toAdditiveClip } from '@/lib/character/animation';
+import { BlinkController, applyBlinkWeights } from '@/lib/morphs/blinkController';
+import { applyFacialExpressionWeights } from '@/lib/morphs/facialExpressionMorphs';
 
 export interface AnimationDirectorProps {
   registry: SkeletonRegistry;
+  /** Optional head/face root traversed for named blink morph targets (`eyeBlinkLeft`, `eyeBlinkRight`, etc.). */
+  rigRoot?: THREE.Object3D | null;
   /**
    * Snapshot of the applied pose, built by `HeadModel` immediately after it
    * writes the pose to the bones. Passing the clip (rather than snapshotting
@@ -45,6 +49,7 @@ const POSE_FADE_SECONDS = 0.35;
  */
 export function AnimationDirector({
   registry,
+  rigRoot,
   poseClip,
   poseId,
   onAfterFrame,
@@ -52,6 +57,12 @@ export function AnimationDirector({
   const animationId = useCharacter((s) => s.animationId);
   const animationPlaying = useCharacter((s) => s.animationPlaying);
   const animationSpeed = useCharacter((s) => s.animationSpeed);
+  const autoBlink = useCharacter((s) => s.autoBlink);
+  const blinkPreview = useCharacter((s) => s.blinkPreview);
+  const blinkPulseNonce = useCharacter((s) => s.blinkPulseNonce);
+  const facialExpressions = useCharacter((s) => s.facialExpressions);
+  const blinkController = useMemo(() => new BlinkController(), []);
+  const lastPulseRef = useRef(blinkPulseNonce);
 
   const mixer = useMemo(() => new THREE.AnimationMixer(registry.group), [registry]);
 
@@ -123,9 +134,39 @@ export function AnimationDirector({
     idleActionRef.current?.setEffectiveWeight(animationId === 'idle' ? 1 : 0);
   }, [animationId]);
 
+  useEffect(() => {
+    if (blinkPulseNonce === lastPulseRef.current) return;
+    lastPulseRef.current = blinkPulseNonce;
+    blinkController.triggerBlink();
+  }, [blinkPulseNonce, blinkController]);
+
+  useEffect(() => {
+    const w = blinkPreview ?? 0;
+    if (blinkPreview !== null || !autoBlink) {
+      applyBlinkWeights(rigRoot, w, w);
+      applyBlinkWeights(registry.group, w, w);
+    }
+  }, [autoBlink, blinkPreview, rigRoot, registry]);
+
+  useEffect(() => {
+    applyFacialExpressionWeights(rigRoot, facialExpressions);
+    applyFacialExpressionWeights(registry.group, facialExpressions);
+  }, [facialExpressions, rigRoot, registry]);
+
   useFrame((_, delta) => {
     if (!poseActionRef.current) return;
     stepMixer(mixer, delta, animationPlaying, animationSpeed);
+    const { left, right } =
+      blinkPreview !== null
+        ? { left: blinkPreview, right: blinkPreview }
+        : blinkController.step(
+            delta * (animationPlaying ? animationSpeed : 1),
+            autoBlink && animationPlaying,
+          );
+    applyBlinkWeights(rigRoot, left, right);
+    applyBlinkWeights(registry.group, left, right);
+    applyFacialExpressionWeights(rigRoot, facialExpressions);
+    applyFacialExpressionWeights(registry.group, facialExpressions);
     /* The head-follow and BodyPhysics read world matrices this frame; they
        must reflect the mixer's output before either runs. */
     registry.updateWorld();

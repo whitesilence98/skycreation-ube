@@ -54,6 +54,20 @@ import {
   applyPartFaceMorphs,
   type FaceTriBundle,
 } from '@/lib/morphs/faceMorphLoader';
+import {
+  attachBlinkMorphTargets,
+  getCachedUbeEyeBlinkData,
+  hasUbeEyeBlinkSettled,
+  loadUbeEyeBlinkData,
+  type UbeEyeBlinkBundle,
+} from '@/lib/morphs/eyeBlinkMorphs';
+import {
+  attachExpressionMorphTargets,
+  getCachedUbeExpressionData,
+  hasUbeExpressionSettled,
+  loadUbeExpressionData,
+  type UbeExpressionBundle,
+} from '@/lib/morphs/facialExpressionMorphs';
 import { BodyPhysics } from '@/components/scene/BodyPhysics';
 import { SecondaryPhysics } from '@/components/scene/SecondaryPhysics';
 import { AnimationDirector } from '@/components/scene/AnimationDirector';
@@ -675,6 +689,87 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   const rig = useMemo(() => createRig(headBuild.geometry), [headBuild.geometry]);
   const browsMesh = useMemo(() => browsGeo ? createBrowMesh(browsGeo, rig) : null, [browsGeo, rig]);
   useEffect(() => () => { browsMesh?.geometry.dispose(); }, [browsMesh]);
+
+  const [ubeBlinkData, setUbeBlinkData] = useState<UbeEyeBlinkBundle | null>(() =>
+    getCachedUbeEyeBlinkData(),
+  );
+  const [ubeBlinkSettled, setUbeBlinkSettled] = useState<boolean>(() =>
+    Boolean(getCachedUbeEyeBlinkData()) || hasUbeEyeBlinkSettled(),
+  );
+  useEffect(() => {
+    if (ubeBlinkSettled && ubeBlinkData) return;
+    let cancelled = false;
+    void loadUbeEyeBlinkData().then((data) => {
+      if (cancelled) return;
+      if (data) setUbeBlinkData(data);
+      setUbeBlinkSettled(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ubeBlinkData, ubeBlinkSettled]);
+
+  const [ubeExprData, setUbeExprData] = useState<UbeExpressionBundle | null>(() =>
+    getCachedUbeExpressionData(),
+  );
+  const [ubeExprSettled, setUbeExprSettled] = useState<boolean>(() =>
+    Boolean(getCachedUbeExpressionData()) || hasUbeExpressionSettled(),
+  );
+  useEffect(() => {
+    if (ubeExprSettled && ubeExprData) return;
+    let cancelled = false;
+    void loadUbeExpressionData().then((data) => {
+      if (cancelled) return;
+      if (data) setUbeExprData(data);
+      setUbeExprSettled(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ubeExprData, ubeExprSettled]);
+
+  /* Attach standard ARKit/MetaHuman-compatible blink (`eyeBlinkLeft` / `eyeBlinkRight`)
+     and facial expression + speech viseme relative morph targets & smooth morph normals
+     onto Head, Lashes, and Mouth geometries, syncing dictionaries & shaders. */
+  useEffect(() => {
+    if (importedHead) return;
+    const blinkAttached = attachBlinkMorphTargets(headBuild.geometry, lashesGeo, eyeGeo, {
+      force: true,
+      ubeData: ubeBlinkData,
+    });
+    const exprAttached = attachExpressionMorphTargets(headBuild.geometry, mouthGeo, {
+      force: true,
+      ubeData: ubeExprData,
+    });
+    if (!blinkAttached && !exprAttached) return;
+    rig.root.traverse((obj) => {
+      if (
+        obj instanceof THREE.Mesh &&
+        (obj.geometry === headBuild.geometry || obj.geometry === lashesGeo || obj.geometry === mouthGeo)
+      ) {
+        obj.updateMorphTargets();
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        for (const mat of mats) {
+          if (mat) mat.needsUpdate = true;
+        }
+      }
+    });
+    onDirty();
+  }, [
+    rig,
+    headBuild.geometry,
+    lashesGeo,
+    eyeGeo,
+    mouthGeo,
+    faceTriBundle,
+    faceSliders,
+    ubeBlinkData,
+    ubeBlinkSettled,
+    ubeExprData,
+    ubeExprSettled,
+    importedHead,
+    onDirty,
+  ]);
 
   /* ── the pack skeleton ────────────────────────────────────────────
      One registry for the whole character. Every skinned part registers its own
@@ -1722,6 +1817,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           then BodyPhysics settles soft-body bones on top of it (priority 0). */}
       <AnimationDirector
         registry={skeletonRegistry}
+        rigRoot={rig.root}
         poseClip={poseClip}
         poseId={bodyPoseId}
         onAfterFrame={followAnimatedFrame}

@@ -9,6 +9,7 @@ import { parsePreset } from '@/lib/presetIO';
 export interface PresetSlot {
   id: string;
   presetId?: string;
+  presetUrl?: string;
   label: string;
   customName?: string;
   thumb?: string | null;
@@ -20,42 +21,35 @@ export const INITIAL_PRESET_SLOTS: PresetSlot[] = [
   {
     id: 'preset-slot-1',
     presetId: 'lyra',
-    label: 'Face Preset 1',
+    presetUrl: '/assets/preset-pack/presets/default.json',
+    label: 'Default',
     customName: 'Default',
-    thumb: '/assets/preset-pack/textures/presets/lyra.webp?v=20261117',
+    thumb: '/assets/preset-pack/textures/presets/default.webp',
     isEmpty: false,
   },
   {
     id: 'preset-slot-2',
-    presetId: 'seraphine',
     label: 'Face Preset 2',
-    customName: 'Frau',
-    thumb: '/assets/preset-pack/textures/presets/seraphine.webp',
-    isEmpty: false,
+    thumb: null,
+    isEmpty: true,
   },
   {
     id: 'preset-slot-3',
-    presetId: 'isolde',
     label: 'Face Preset 3',
-    customName: 'Iced Coffee',
-    thumb: '/assets/preset-pack/textures/presets/isolde.webp?v=20261117',
-    isEmpty: false,
+    thumb: null,
+    isEmpty: true,
   },
   {
     id: 'preset-slot-4',
-    presetId: 'miren',
     label: 'Face Preset 4',
-    customName: 'Lan Xin',
-    thumb: '/assets/preset-pack/textures/presets/miren.webp',
-    isEmpty: false,
+    thumb: null,
+    isEmpty: true,
   },
   {
     id: 'preset-slot-5',
-    presetId: 'seraphine',
     label: 'Face Preset 5',
-    customName: 'Wanderer',
-    thumb: '/assets/preset-pack/textures/presets/isolde.jpg',
-    isEmpty: false,
+    thumb: null,
+    isEmpty: true,
   },
   {
     id: 'preset-slot-6',
@@ -99,8 +93,7 @@ interface PresetUiStore {
 export const usePresetUiStore = create<PresetUiStore>()(
   persist(
     (set, get) => ({
-      // Default to slot 7 (index 6) to match target Image 2's highlighted state
-      selectedIndex: 6,
+      selectedIndex: 0,
       slots: INITIAL_PRESET_SLOTS,
       isRenaming: false,
       renameValue: '',
@@ -226,11 +219,39 @@ export const usePresetUiStore = create<PresetUiStore>()(
           return;
         }
 
-        try {
-          if (currentSlot.presetData) {
+        if (currentSlot.presetData) {
+          try {
             const payload = parsePreset(JSON.stringify(currentSlot.presetData));
             characterStore.loadPreset(payload);
-          } else if (currentSlot.presetId) {
+            flashStatus(`Applied ${currentSlot.label}`);
+          } catch {
+            flashStatus(`Failed to apply ${currentSlot.label}`);
+          }
+          return;
+        }
+
+        if (currentSlot.presetUrl) {
+          void fetch(currentSlot.presetUrl)
+            .then((res) => {
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              return res.text();
+            })
+            .then((text) => {
+              const payload = parsePreset(text, 'default.json');
+              characterStore.loadPreset(payload);
+              flashStatus(`Applied ${currentSlot.label}`);
+            })
+            .catch(() => {
+              if (currentSlot.presetId) {
+                characterStore.applyPreset(currentSlot.presetId as any);
+              }
+              flashStatus(`Failed to load ${currentSlot.label}`);
+            });
+          return;
+        }
+
+        try {
+          if (currentSlot.presetId) {
             characterStore.applyPreset(currentSlot.presetId as any);
             characterStore.setName((currentSlot.customName || currentSlot.label).toUpperCase());
             characterStore.setAssets({ preset: undefined });
@@ -266,7 +287,7 @@ export const usePresetUiStore = create<PresetUiStore>()(
       },
     }),
     {
-      name: 'wuxia-preset-slots-v1',
+      name: 'wuxia-preset-slots-v2',
       partialize: (state) => ({
         selectedIndex: state.selectedIndex,
         slots: state.slots,

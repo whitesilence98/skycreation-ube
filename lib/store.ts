@@ -266,6 +266,19 @@ export interface CharacterState extends AnatomySnapshot {
   setAnimationId: (id: 'idle' | 'rest') => void;
   animationPlaying: boolean;
   setAnimationPlaying: (v: boolean) => void;
+  autoBlink: boolean;
+  setAutoBlink: (v: boolean) => void;
+  /** Transient closed-eye inspection weight (`[0..1]` overrides auto-blink; `null` uses auto-blink). */
+  blinkPreview: number | null;
+  setBlinkPreview: (v: number | null) => void;
+  /** Incrementing nonce to trigger an immediate one-shot natural blink cycle. */
+  blinkPulseNonce: number;
+  triggerBlink: () => void;
+  /** Transient facial expression & speech viseme morph weights (`[0..1]`). */
+  facialExpressions: Record<string, number>;
+  setFacialExpression: (id: string, weight: number) => void;
+  setFacialExpressions: (next: Record<string, number>) => void;
+  resetFacialExpressions: () => void;
   autoRigUnskinned: boolean;
   setAutoRigUnskinned: (v: boolean) => void;
   /** Active category tab in the Poses panel. */
@@ -956,6 +969,27 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   setAnimationId: (animationId) => { if (animationId === 'idle' || animationId === 'rest') set({ animationId }); },
   animationPlaying: true,
   setAnimationPlaying: (animationPlaying) => set({ animationPlaying }),
+  autoBlink: true,
+  setAutoBlink: (autoBlink) => set({ autoBlink }),
+  blinkPreview: null,
+  setBlinkPreview: (v) =>
+    set({ blinkPreview: v === null ? null : Math.min(1, Math.max(0, v)) }),
+  blinkPulseNonce: 0,
+  triggerBlink: () => set((s) => ({ blinkPreview: null, blinkPulseNonce: s.blinkPulseNonce + 1 })),
+  facialExpressions: {},
+  setFacialExpression: (id, weight) =>
+    set((s) => {
+      const clamped = Math.min(1, Math.max(0, weight));
+      const next = { ...s.facialExpressions };
+      if (clamped <= 0.001) {
+        delete next[id];
+      } else {
+        next[id] = clamped;
+      }
+      return { facialExpressions: next };
+    }),
+  setFacialExpressions: (next) => set({ facialExpressions: { ...next } }),
+  resetFacialExpressions: () => set({ facialExpressions: {} }),
   autoRigUnskinned: true,
   setAutoRigUnskinned: (autoRigUnskinned) => set({ autoRigUnskinned }),
   poseCategory: 'IDLE',

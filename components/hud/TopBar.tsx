@@ -7,8 +7,50 @@ import { WuxiaExportDropdown } from '@/components/hud/common/WuxiaExportDropdown
 import { WuxiaImportButton } from '@/components/hud/common/WuxiaImportButton';
 
 function TopBarRightActions({ manifest }: { manifest: Mo2Manifest | null }) {
+  const blinkPreview = useCharacter((s) => s.blinkPreview);
+  const setBlinkPreview = useCharacter((s) => s.setBlinkPreview);
+  const triggerBlink = useCharacter((s) => s.triggerBlink);
+  const facialExpressions = useCharacter((s) => s.facialExpressions);
+  const setFacialExpressions = useCharacter((s) => s.setFacialExpressions);
+  const isClosedHeld = blinkPreview !== null;
+  const isSmiling = (facialExpressions.smile ?? 0) > 0 || (facialExpressions.smallSmile ?? 0) > 0;
+
   return (
     <div className="flex items-center gap-1.5 sm:gap-2 select-none">
+      <button
+        type="button"
+        onClick={() => setFacialExpressions(isSmiling ? {} : { smile: 0.85 })}
+        aria-pressed={isSmiling}
+        title="Preview smooth anatomical Duchenne smile"
+        className={`pointer-events-auto h-7 px-2 sm:px-2.5 rounded-[2px] text-[10px] font-mono tracking-wider transition-all flex items-center gap-1 uppercase focus-visible:outline focus-visible:outline-[#eac87f] border ${
+          isSmiling
+            ? 'text-[#f5ecd8] bg-[#dfba73]/25 border-[#dfba73] shadow-[0_0_10px_rgba(223,186,115,0.3)]'
+            : 'text-[#d9d2c5] bg-[#1e1f26]/80 hover:bg-[#282a34] border-white/15 hover:border-[#dfba73]/50'
+        }`}
+      >
+        Smile
+      </button>
+      <button
+        type="button"
+        onClick={triggerBlink}
+        title="Play one natural eye blink"
+        className="pointer-events-auto h-7 px-2 sm:px-2.5 rounded-[2px] text-[10px] font-mono tracking-wider text-[#d9d2c5] bg-[#1e1f26]/80 hover:bg-[#282a34] border border-white/15 hover:border-[#dfba73]/50 transition-all flex items-center gap-1 uppercase focus-visible:outline focus-visible:outline-[#eac87f]"
+      >
+        Blink
+      </button>
+      <button
+        type="button"
+        onClick={() => setBlinkPreview(isClosedHeld ? null : 1)}
+        aria-pressed={isClosedHeld}
+        title="Hold eyes closed to inspect eyelid seam, shading, and lashes"
+        className={`pointer-events-auto h-7 px-2 sm:px-2.5 rounded-[2px] text-[10px] font-mono tracking-wider transition-all flex items-center gap-1 uppercase focus-visible:outline focus-visible:outline-[#eac87f] border ${
+          isClosedHeld
+            ? 'text-[#f5ecd8] bg-[#dfba73]/25 border-[#dfba73] shadow-[0_0_10px_rgba(223,186,115,0.3)]'
+            : 'text-[#d9d2c5] bg-[#1e1f26]/80 hover:bg-[#282a34] border-white/15 hover:border-[#dfba73]/50'
+        }`}
+      >
+        {isClosedHeld ? 'Open Eyes' : 'Hold Closed'}
+      </button>
       <WuxiaImportButton manifest={manifest} />
       <WuxiaExportDropdown />
       <a

@@ -84,7 +84,7 @@ const CLOTHING_KEYWORDS = [
 ] as const;
 
 const SKIN_KEYWORDS = [
-  'femalebody', 'malebody', 'base', 'hand', 'feet', 'foot', 'head', 'face', 'mouth',
+  'femalebody', 'malebody', 'base', 'hand', 'feet', 'foot', 'head', 'face', 'mouth', 'skin_atlas',
 ] as const;
 
 const HAIR_KEYWORDS = [
@@ -101,7 +101,7 @@ function classifyExportMaterial(
   const isSkin =
     !isLashesOrBrows &&
     !isClothingKeyword &&
-    (lower === 'body' || SKIN_KEYWORDS.some((kw) => lower.includes(kw)));
+    (lower === 'body' || lower === 'skin' || SKIN_KEYWORDS.some((kw) => lower.includes(kw)));
   const isEyes = !isLashesOrBrows && !isSkin && lower.includes('eye');
   const isHair =
     !isLashesOrBrows &&
@@ -1607,7 +1607,8 @@ export async function exportCharacterScene(
         const sanitize = (m: THREE.Material): THREE.Material => {
           if (!(m as any).isMeshStandardMaterial && !(m as any).isMeshPhysicalMaterial) return m;
           const std = m as THREE.MeshStandardMaterial;
-          const matName = std.name || mesh.name || '';
+          const rawStdName = std.name && std.name.toLowerCase() !== 'default' ? std.name : '';
+          const matName = rawStdName || mesh.name || '';
           const { lower, isLashesOrBrows, isSkin, isEyes, isHair, isGarment } = classifyExportMaterial(matName, {
             alphaMasked: Boolean(std.transparent || std.alphaTest > 0),
           });
@@ -1677,7 +1678,7 @@ export async function exportCharacterScene(
           }
 
           return new THREE.MeshStandardMaterial({
-            name: std.name || mesh.name,
+            name: matName || mesh.name,
             color: exportColor,
             map: finalMap,
             normalMap: std.normalMap ?? null,
@@ -1716,15 +1717,17 @@ export async function exportCharacterScene(
       }
     });
 
-    // 4.75. Consolidate visible skin body parts (Body+Face+Hands+Feet -> Body) and
-    //       multi-part hairstyles (... + HairlineUnderlay -> Hair) into clean single meshes.
+    // 4.75. Always merge multi-part hairstyles (... + HairlineUnderlay -> Hair),
+    //       and only merge Body+Face+Hands+Feet into a consolidated Skin Atlas
+    //       mesh when `mergeSkinAtlas` is requested (default 3D Model & Rig exports
+    //       keep Body, Face, Hands, and Feet as separate mesh objects).
     const skinBodyParts: THREE.SkinnedMesh[] = [];
     const hairParts: THREE.SkinnedMesh[] = [];
     character.traverse((child) => {
       if (!(child as any).isSkinnedMesh) return;
       if (!isVisibleInBranch(child, character)) return;
       const sm = child as THREE.SkinnedMesh;
-      if (SKIN_BODY_PART_ORDER[sm.name] !== undefined) {
+      if (options?.mergeSkinAtlas && SKIN_BODY_PART_ORDER[sm.name] !== undefined) {
         skinBodyParts.push(sm);
       } else if (isHairExportCandidate(sm)) {
         hairParts.push(sm);
@@ -1736,17 +1739,15 @@ export async function exportCharacterScene(
     );
     hairParts.sort((a, b) => (a.name === 'HairlineUnderlay' ? 1 : 0) - (b.name === 'HairlineUnderlay' ? 1 : 0));
 
-    if (skinBodyParts.length >= 2) {
+    if (options?.mergeSkinAtlas && skinBodyParts.length >= 2) {
       const merged = mergeSkinnedMeshesForExport('Body', skinBodyParts, rootBone!);
-      if (options?.mergeSkinAtlas) {
-        const atlasResult = applySkinAtlasToSkinnedMesh(merged.mergedMesh, {
-          atlasSize: 4096,
-          paddingPx: 8,
-          materialName: 'Skin_Atlas',
-          smoothBoundaryNormals: true,
-        });
-        tempTextures.push(...atlasResult.packedTextures);
-      }
+      const atlasResult = applySkinAtlasToSkinnedMesh(merged.mergedMesh, {
+        atlasSize: 4096,
+        paddingPx: 8,
+        materialName: 'Skin_Atlas',
+        smoothBoundaryNormals: true,
+      });
+      tempTextures.push(...atlasResult.packedTextures);
       for (const part of skinBodyParts) hide(part);
       tempMergedEntries.push({ mesh: merged.mergedMesh, skeleton: merged.mergedSkeleton });
       character.add(merged.mergedMesh);

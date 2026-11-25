@@ -94,6 +94,7 @@ export interface PersistedSession extends AnatomySnapshot {
   bodyPoseId: string;
   animationId?: 'idle' | 'rest';
   animationPlaying?: boolean;
+  autoBlink?: boolean;
   animationSpeed?: number;
   autoRigUnskinned?: boolean;
   weight: number;
@@ -267,6 +268,7 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     bodyPoseId: typeof o.bodyPoseId === 'string' ? o.bodyPoseId : defaults.bodyPoseId,
     animationId: o.animationId === 'rest' || o.animationId === 'idle' ? o.animationId : (defaults.animationId ?? 'idle'),
     animationPlaying: bool(o.animationPlaying, defaults.animationPlaying ?? true),
+    autoBlink: bool(o.autoBlink, defaults.autoBlink ?? true),
     animationSpeed: bounded(o.animationSpeed, defaults.animationSpeed ?? 1, 0.2, 2),
     autoRigUnskinned: bool(o.autoRigUnskinned, defaults.autoRigUnskinned ?? true),
     /* Body weight defaults to 0 (slim _0 mesh). Restores user saved weight if valid. */
@@ -348,6 +350,7 @@ export function pickSession(s: PersistedSession): PersistedSession {
     bodyPoseId: s.bodyPoseId,
     animationId: s.animationId ?? 'idle',
     animationPlaying: s.animationPlaying ?? true,
+    autoBlink: s.autoBlink ?? true,
     animationSpeed: s.animationSpeed ?? 1,
     autoRigUnskinned: s.autoRigUnskinned ?? true,
     weight: s.weight,
