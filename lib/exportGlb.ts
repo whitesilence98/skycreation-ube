@@ -11,6 +11,8 @@ import { detectFabricProfile } from '@/components/scene/fabricPbr';
 export interface ExportOptions {
   /** Include the `Pose` + `Idle` clips. `false` (or omitted) is a static mesh. */
   animated?: boolean;
+  /** Embed 3-point studio lighting (`KHR_lights_punctual`). Defaults to `true`. */
+  includeLighting?: boolean;
 }
 
 export interface ExportTransform {
@@ -23,6 +25,8 @@ export interface ExportTransform {
   translation?: [number, number, number];
   rotation?: [number, number, number, number];
   rootName?: string;
+  /** Embed 3-point studio lighting (`KHR_lights_punctual`). Defaults to `true`. */
+  includeLighting?: boolean;
 }
 
 /**
@@ -570,7 +574,7 @@ export function patchGlbIor(
   }
 
   // 3. Inject embedded 3-Point Studio Lighting (Key, Rim, Fill) via KHR_lights_punctual
-  if (json.nodes && json.scenes && json.scenes.length > 0) {
+  if (transform?.includeLighting !== false && json.nodes && json.scenes && json.scenes.length > 0) {
     json.extensions = json.extensions ?? {};
     // glTF light intensity is in candela (cd = lm/sr); Blender's importer divides by ~54.35
     // (PBR_WATTS_TO_LUMENS / (4*pi)) to convert candela into Blender Watts.
@@ -1765,6 +1769,7 @@ export async function exportCharacterScene(
        the head bone below, so only body/XP32 motion is exported. */
     const keep = new Set(essentialList.flatMap((bone) => [bone.uuid, bone.name]));
     const animated = options?.animated !== false;
+    const includeLighting = options?.includeLighting !== false;
     const clips = animated ? buildExportClips(essentialList, keep) : [];
 
     const exporter = new GLTFExporter();
@@ -1782,6 +1787,7 @@ export async function exportCharacterScene(
           translation: [0, groundOffset, 0],
           rotation: [0, 1, 0, 0],
           rootName: safeName,
+          includeLighting,
         }),
       ],
       { type: 'model/gltf-binary' },
@@ -1789,7 +1795,7 @@ export async function exportCharacterScene(
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${safeName}.glb`;
+    a.download = includeLighting ? `${safeName}.glb` : `${safeName}_nolight.glb`;
     document.body.appendChild(a);
     a.click();
     a.remove();

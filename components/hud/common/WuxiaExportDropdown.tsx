@@ -152,18 +152,18 @@ export function WuxiaExportDropdown() {
                 <span className="h-1.5 w-1.5 rounded-full bg-[#dfba73] shadow-[0_0_5px_#dfba73]" />
                 <span className="font-semibold text-[#f2dfbe]">EXPORT CHARACTER</span>
               </div>
-              <span className="text-[10px] text-[#8c8477]">3 OPTIONS</span>
+              <span className="text-[10px] text-[#8c8477]">4 OPTIONS</span>
             </div>
 
             {/* Menu options */}
             <div className="flex flex-col gap-1 py-1">
-              {/* 1. 3D Model & Rig .GLB */}
+              {/* 1. 3D Model & Rig .GLB (Studio Lit) */}
               <button
                 type="button"
                 role="menuitem"
                 onClick={() => {
                   setOpen(false);
-                  onExportGlb();
+                  onExportGlb({ includeLighting: true });
                 }}
                 disabled={exportingGlb}
                 className="group relative flex w-full items-start gap-2.5 rounded-[2px] border border-transparent px-2.5 py-2 text-left transition-all duration-150 hover:border-[#dfba73]/45 hover:bg-[#dfba73]/12 disabled:opacity-40"
@@ -178,14 +178,49 @@ export function WuxiaExportDropdown() {
                 <div className="flex min-w-0 flex-1 flex-col">
                   <div className="flex items-center justify-between gap-1.5">
                     <span className="text-[11px] font-medium tracking-[0.08em] text-[#f2dfbe] group-hover:text-white">
-                      3D MODEL &amp; RIG
+                      3D MODEL &amp; RIG (STUDIO LIT)
                     </span>
-                    <span className="rounded-xs border border-[#dfba73]/40 bg-[#dfba73]/15 px-1 py-0.5 font-mono text-[9px] tracking-wider text-[#dfba73]">
+                    <span className="rounded-xs border border-[#dfba73]/40 bg-[#dfba73]/15 px-1 py-0.5 font-mono text-[10px] tracking-wider text-[#dfba73]">
                       .GLB
                     </span>
                   </div>
                   <span className="mt-0.5 text-[10px] leading-tight text-[#9a9182] group-hover:text-[#c4bcad]">
-                    Blender/WebGL mesh with baked roughness map
+                    Mesh, rig &amp; embedded 3-point studio lighting
+                  </span>
+                </div>
+              </button>
+
+              <div className="mx-1 h-px bg-[#dfba73]/15" />
+
+              {/* 2. 3D Model & Rig .GLB (No Lighting) */}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onExportGlb({ includeLighting: false });
+                }}
+                disabled={exportingGlb}
+                className="group relative flex w-full items-start gap-2.5 rounded-[2px] border border-transparent px-2.5 py-2 text-left transition-all duration-150 hover:border-[#dfba73]/45 hover:bg-[#dfba73]/12 disabled:opacity-40"
+              >
+                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[2px] border border-[#dfba73]/40 bg-black/50 text-[#dfba73] transition-all group-hover:border-[#dfba73] group-hover:text-white group-hover:shadow-[0_0_8px_rgba(223,186,115,0.4)]">
+                  {exportingGlb ? (
+                    <span className="h-3 w-3 animate-spin rounded-full border border-t-transparent border-[#dfba73]" />
+                  ) : (
+                    <IconCube className="h-3.5 w-3.5" />
+                  )}
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="text-[11px] font-medium tracking-[0.08em] text-[#f2dfbe] group-hover:text-white">
+                      3D MODEL &amp; RIG (NO LIGHTING)
+                    </span>
+                    <span className="rounded-xs border border-[#dfba73]/40 bg-[#dfba73]/15 px-1 py-0.5 font-mono text-[10px] tracking-wider text-[#dfba73]">
+                      .GLB
+                    </span>
+                  </div>
+                  <span className="mt-0.5 text-[10px] leading-tight text-[#9a9182] group-hover:text-[#c4bcad]">
+                    Clean mesh &amp; rig without embedded lights
                   </span>
                 </div>
               </button>
