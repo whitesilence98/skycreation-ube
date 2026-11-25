@@ -7,12 +7,15 @@ import * as THREE from 'three';
 import { useCharacter } from '@/lib/store';
 import { buildExportClips, restInverses } from '@/lib/character/animation';
 import { detectFabricProfile } from '@/components/scene/fabricPbr';
+import { applySkinAtlasToSkinnedMesh } from '@/lib/export/skinAtlasPacker';
 
 export interface ExportOptions {
   /** Include the `Pose` + `Idle` clips. `false` (or omitted) is a static mesh. */
   animated?: boolean;
   /** Embed 3-point studio lighting (`KHR_lights_punctual`). Defaults to `true`. */
   includeLighting?: boolean;
+  /** Pack Head + Body + Hands + Feet UVs & textures into 1 unified Skin Atlas material. */
+  mergeSkinAtlas?: boolean;
 }
 
 export interface ExportTransform {
@@ -1735,6 +1738,15 @@ export async function exportCharacterScene(
 
     if (skinBodyParts.length >= 2) {
       const merged = mergeSkinnedMeshesForExport('Body', skinBodyParts, rootBone!);
+      if (options?.mergeSkinAtlas) {
+        const atlasResult = applySkinAtlasToSkinnedMesh(merged.mergedMesh, {
+          atlasSize: 4096,
+          paddingPx: 8,
+          materialName: 'Skin_Atlas',
+          smoothBoundaryNormals: true,
+        });
+        tempTextures.push(...atlasResult.packedTextures);
+      }
       for (const part of skinBodyParts) hide(part);
       tempMergedEntries.push({ mesh: merged.mergedMesh, skeleton: merged.mergedSkeleton });
       character.add(merged.mergedMesh);
@@ -1795,7 +1807,11 @@ export async function exportCharacterScene(
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = includeLighting ? `${safeName}.glb` : `${safeName}_nolight.glb`;
+    a.download = options?.mergeSkinAtlas
+      ? `${safeName}_atlas.glb`
+      : includeLighting
+      ? `${safeName}.glb`
+      : `${safeName}_nolight.glb`;
     document.body.appendChild(a);
     a.click();
     a.remove();

@@ -8,6 +8,7 @@ export type ExportStatus = { kind: 'ok' | 'error'; text: string };
 export interface GlbExportOptions {
   includeLighting?: boolean;
   animated?: boolean;
+  mergeSkinAtlas?: boolean;
 }
 
 export function useGlbExport(report?: (status: ExportStatus) => void) {
@@ -17,17 +18,26 @@ export function useGlbExport(report?: (status: ExportStatus) => void) {
     if (busy.current) return;
     const includeLighting = options?.includeLighting !== false;
     const animated = options?.animated ?? true;
+    const mergeSkinAtlas = Boolean(options?.mergeSkinAtlas);
     busy.current = true; setExportingGlb(true);
     const flash = (status: ExportStatus) => report ? report(status) : useCharacter.getState().showToast(status.text);
     const characterName = useCharacter.getState().name;
     flash({
       kind: 'ok',
-      text: includeLighting ? 'EXPORTING MODEL & RIG (.GLB)...' : 'EXPORTING MODEL (NO LIGHTING .GLB)...',
+      text: mergeSkinAtlas
+        ? 'PACKING SKIN UV ATLAS & EXPORTING (.GLB)...'
+        : includeLighting
+        ? 'EXPORTING MODEL & RIG (.GLB)...'
+        : 'EXPORTING MODEL (NO LIGHTING .GLB)...',
     });
     try {
-      await exportCharacterGlb(characterName, { animated, includeLighting });
+      await exportCharacterGlb(characterName, { animated, includeLighting, mergeSkinAtlas });
       const safeName = (characterName || 'Character').trim().replace(/[^a-zA-Z0-9_\-]/g, '_') || 'Character';
-      const fileName = includeLighting ? `${safeName}.glb` : `${safeName}_nolight.glb`;
+      const fileName = mergeSkinAtlas
+        ? `${safeName}_atlas.glb`
+        : includeLighting
+        ? `${safeName}.glb`
+        : `${safeName}_nolight.glb`;
       flash({ kind: 'ok', text: `EXPORTED ${fileName}` });
     } catch (err) {
       flash({ kind: 'error', text: err instanceof Error ? err.message : 'GLB export failed' });

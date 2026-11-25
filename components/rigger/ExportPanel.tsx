@@ -3,10 +3,11 @@
 import * as THREE from 'three';
 import { useState } from 'react';
 import { useRiggerStore } from '@/lib/rigger/store';
-import { exportRiggedGlb, exportSummary } from '@/lib/rigger/exportRiggedGlb';
+import { exportRiggedGlb, exportSummary, type WeightSource } from '@/lib/rigger/exportRiggedGlb';
 import { exportRiggedFbx, type FbxAnimationClipOption } from '@/lib/rigger/exportRiggedFbx';
 import { getEngineProfile } from '@/lib/rigger/engineProfiles';
 import { TargetEngineSelector } from '@/components/rigger/TargetEngineSelector';
+import { packGeometryAndMaterialsIntoAtlas, isDefaultPackableMaterial } from '@/lib/export/skinAtlasPacker';
 import { isVrmBoneName } from '@/lib/rigger/vrmSkeleton';
 import type { TestAnimationMode } from '@/lib/rigger/testAnimations';
 
@@ -24,7 +25,9 @@ function stripVertexColors(mat: THREE.Material): THREE.Material {
 async function withCleanExportAssets<T>(
   meshGeometry: THREE.BufferGeometry,
   meshMaterial: THREE.Material | THREE.Material[] | null,
-  fn: (geo: THREE.BufferGeometry, mat: THREE.Material | THREE.Material[]) => Promise<T>,
+  weights: WeightSource,
+  packTextureAtlas: boolean,
+  fn: (geo: THREE.BufferGeometry, mat: THREE.Material | THREE.Material[], exportWeights: WeightSource) => Promise<T>,
 ): Promise<T> {
   const exportMaterial: THREE.Material | THREE.Material[] = meshMaterial
     ? Array.isArray(meshMaterial)
@@ -34,12 +37,49 @@ async function withCleanExportAssets<T>(
   const geoForExport = meshGeometry.clone();
   if (geoForExport.getAttribute('color')) geoForExport.deleteAttribute('color');
 
+  const extraTextures: THREE.Texture[] = [];
+  let activeGeo = geoForExport;
+  let activeMat: THREE.Material | THREE.Material[] = exportMaterial;
+  let activeWeights: WeightSource = weights;
+
+  if (packTextureAtlas && Array.isArray(exportMaterial) && exportMaterial.length >= 2) {
+    geoForExport.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint16Array(weights.skinIndex), 4));
+    geoForExport.setAttribute('skinWeight', new THREE.BufferAttribute(new Float32Array(weights.skinWeight), 4));
+
+    const packed = packGeometryAndMaterialsIntoAtlas(geoForExport, exportMaterial, {
+      atlasSize: 2048,
+      paddingPx: 8,
+      materialName: 'Skin_Atlas',
+      smoothBoundaryNormals: true,
+    });
+    if (packed.packedSlotCount >= 2) {
+      geoForExport.dispose();
+      activeGeo = packed.geometry;
+      activeMat = packed.materials.length === 1 ? packed.materials[0]! : packed.materials;
+      extraTextures.push(...packed.packedTextures);
+
+      const sIdx = packed.geometry.getAttribute('skinIndex');
+      const sWt = packed.geometry.getAttribute('skinWeight');
+      if (sIdx && sWt) {
+        activeWeights = {
+          ...weights,
+          vertexCount: packed.geometry.getAttribute('position').count,
+          skinIndex: Uint16Array.from(sIdx.array as ArrayLike<number>),
+          skinWeight: Float32Array.from(sWt.array as ArrayLike<number>),
+        };
+      }
+    }
+  }
+
   try {
-    return await fn(geoForExport, exportMaterial);
+    return await fn(activeGeo, activeMat, activeWeights);
   } finally {
-    geoForExport.dispose();
-    const mats = Array.isArray(exportMaterial) ? exportMaterial : [exportMaterial];
-    mats.forEach((m) => m.dispose());
+    activeGeo.dispose();
+    const origMats = Array.isArray(exportMaterial) ? exportMaterial : [exportMaterial];
+    origMats.forEach((m) => m.dispose());
+    const finalMats = Array.isArray(activeMat) ? activeMat : [activeMat];
+    finalMats.forEach((m) => m.dispose());
+    extraTextures.forEach((t) => t.dispose());
   }
 }
 
@@ -67,10 +107,11 @@ export function ExportPanel() {
   const [animClip, setAnimClip] = useState<FbxAnimationClipOption>(() =>
     testAnimation === 'tpose' ? 'walk' : testAnimation,
   );
-  const [busyAction, setBusyAction] = useState<'glb' | 'fbx-skel' | 'fbx-anim' | null>(null);
+  const [busyAction, setBusyAction] = useState<'glb' | 'fbx-skel' | 'fbx-anim' | 'atlas-glb' | 'atlas-fbx' | null>(null);
   const [lastGlbSummary, setLastGlbSummary] = useState<string | null>(null);
   const [lastFbxSkelInfo, setLastFbxSkelInfo] = useState<string | null>(null);
   const [lastFbxAnimInfo, setLastFbxAnimInfo] = useState<string | null>(null);
+  const [lastAtlasInfo, setLastAtlasInfo] = useState<string | null>(null);
 
   if (!fitResult || !weights || !meshGeometry) {
     return (
@@ -83,6 +124,9 @@ export function ExportPanel() {
   const safeName = characterName.trim() || 'Character';
   const activeProfile = getEngineProfile(exportTarget);
   const preferFbx = exportTarget === 'unity' || exportTarget === 'ue5';
+  const packableMaterialCount = Array.isArray(meshMaterial)
+    ? meshMaterial.filter((m) => isDefaultPackableMaterial(m)).length
+    : 0;
   const vrmCount = fitResult.built.bones.filter((b) => isVrmBoneName(b.name)).length;
   const secCount = fitResult.built.bones.length - vrmCount;
 
@@ -99,13 +143,13 @@ export function ExportPanel() {
     setBusyAction('glb');
     setError(null);
     try {
-      await withCleanExportAssets(meshGeometry, meshMaterial, async (geo, mat) => {
-        const buffer = await exportRiggedGlb(geo, mat, fitResult, weights, {
+      await withCleanExportAssets(meshGeometry, meshMaterial, weights, false, async (geo, mat, exportWts) => {
+        const buffer = await exportRiggedGlb(geo, mat, fitResult, exportWts, {
           name: safeName,
           includeVrmExtension: includeVrm,
           download: true,
         });
-        setLastGlbSummary(exportSummary(fitResult, weights, buffer.byteLength, safeName));
+        setLastGlbSummary(exportSummary(fitResult, exportWts, buffer.byteLength, safeName));
       });
     } catch (err) {
       setError(`GLB export failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -118,8 +162,8 @@ export function ExportPanel() {
     setBusyAction('fbx-skel');
     setError(null);
     try {
-      await withCleanExportAssets(meshGeometry, meshMaterial, async (geo, mat) => {
-        const res = await exportRiggedFbx(geo, mat, fitResult, weights, {
+      await withCleanExportAssets(meshGeometry, meshMaterial, weights, false, async (geo, mat, exportWts) => {
+        const res = await exportRiggedFbx(geo, mat, fitResult, exportWts, {
           name: safeName,
           target: exportTarget,
           includeAnimation: false,
@@ -139,8 +183,8 @@ export function ExportPanel() {
     setBusyAction('fbx-anim');
     setError(null);
     try {
-      await withCleanExportAssets(meshGeometry, meshMaterial, async (geo, mat) => {
-        const res = await exportRiggedFbx(geo, mat, fitResult, weights, {
+      await withCleanExportAssets(meshGeometry, meshMaterial, weights, false, async (geo, mat, exportWts) => {
+        const res = await exportRiggedFbx(geo, mat, fitResult, exportWts, {
           name: safeName,
           target: exportTarget,
           includeAnimation: true,
@@ -152,6 +196,48 @@ export function ExportPanel() {
       });
     } catch (err) {
       setError(`FBX animated export failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleDownloadAtlasGlb = async () => {
+    setBusyAction('atlas-glb');
+    setError(null);
+    try {
+      await withCleanExportAssets(meshGeometry, meshMaterial, weights, true, async (geo, mat, exportWts) => {
+        const atlasName = `${safeName}_atlas`;
+        const buffer = await exportRiggedGlb(geo, mat, fitResult, exportWts, {
+          name: atlasName,
+          includeVrmExtension: includeVrm,
+          download: true,
+        });
+        const mb = (buffer.byteLength / 1_048_576).toFixed(2);
+        setLastAtlasInfo(`${atlasName}_rigged.glb · 1 Skin Material · ${mb} MB`);
+      });
+    } catch (err) {
+      setError(`Atlas GLB export failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleDownloadAtlasFbx = async () => {
+    setBusyAction('atlas-fbx');
+    setError(null);
+    try {
+      await withCleanExportAssets(meshGeometry, meshMaterial, weights, true, async (geo, mat, exportWts) => {
+        const res = await exportRiggedFbx(geo, mat, fitResult, exportWts, {
+          name: `${safeName}_atlas`,
+          target: exportTarget,
+          includeAnimation: false,
+          download: true,
+        });
+        const mb = (res.byteLength / 1_048_576).toFixed(2);
+        setLastAtlasInfo(`${res.filename} · 1 Skin Material · ${mb} MB`);
+      });
+    } catch (err) {
+      setError(`Atlas FBX export failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusyAction(null);
     }
@@ -319,8 +405,44 @@ export function ExportPanel() {
         <TargetEngineSelector variant="detailed" />
       </div>
 
-      {/* ── Primary engine export cards first, GLB fallback when FBX preferred ── */}
+      {/* ── Primary engine export cards first (existing separate-material paths) ── */}
       {preferFbx ? [fbxSkeletonCard, fbxAnimCard, glbCard] : [glbCard, fbxSkeletonCard, fbxAnimCard]}
+
+      {/* ── Option 4: Separate Skin UV Atlas Export (1 Material) ────────────── */}
+      <div className="rounded-xl border border-amber-500/35 bg-amber-950/15 p-3 flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold text-zinc-100">Skin UV Atlas · 1 Material</span>
+          <span className="text-[10px] text-amber-300 bg-amber-950/60 border border-amber-800/60 px-1.5 py-0.5 rounded">
+            {packableMaterialCount >= 2 ? `${packableMaterialCount} Parts → 1` : '1 Material'}
+          </span>
+        </div>
+        <p className="text-[10px] text-zinc-400 leading-snug">
+          {packableMaterialCount >= 2
+            ? `Separate packed export combining ${packableMaterialCount} body/skin UVs & maps into one unified PBR sheet.`
+            : 'Model already has 1 skin material; upload a multi-part mesh (Head + Body + Hands + Feet) to pack UVs.'}
+        </p>
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            disabled={busyAction !== null || packableMaterialCount < 2}
+            onClick={handleDownloadAtlasGlb}
+            className="min-h-[32px] py-1.5 px-2.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-[11px] font-semibold flex items-center justify-center transition-colors"
+          >
+            {busyAction === 'atlas-glb' ? '⏳ Packing…' : '⬇ Atlas GLB'}
+          </button>
+          <button
+            type="button"
+            disabled={busyAction !== null || packableMaterialCount < 2}
+            onClick={handleDownloadAtlasFbx}
+            className="min-h-[32px] py-1.5 px-2.5 rounded-lg bg-amber-700 hover:bg-amber-600 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-[11px] font-semibold flex items-center justify-center transition-colors"
+          >
+            {busyAction === 'atlas-fbx' ? '⏳ Packing…' : `⬇ Atlas FBX (${activeProfile.shortLabel})`}
+          </button>
+        </div>
+        {lastAtlasInfo && (
+          <div className="text-[10px] font-mono text-amber-300 break-all">{lastAtlasInfo}</div>
+        )}
+      </div>
 
       {/* ── Export name + quick preview sync ────────────────────────────────── */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 flex flex-col gap-2.5">
