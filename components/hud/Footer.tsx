@@ -19,6 +19,17 @@ import { notifyOutfitsChanged, requestOutfitSave } from '@/lib/outfits/saveReque
 import { useCharacter } from '@/lib/store';
 import { usePresetUiStore } from '@/lib/presets/presetUiStore';
 import { useBodySlideStore } from '@/lib/bodyslide/store';
+import { BatchBuildModal } from '@/components/hud/bodyslide/BatchBuildModal';
+import {
+  beginPhysiqueCompare,
+  endPhysiqueCompare,
+  redoPhysique,
+  resetPhysiqueToDefault,
+  revertPhysiqueToSaved,
+  saveAndBatchBuildPhysique,
+  undoPhysique,
+  usePhysiqueDirty,
+} from '@/lib/bodyslide/physiqueHistory';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 
 function Key({ children }: { children: React.ReactNode }) {
@@ -532,6 +543,14 @@ function PhysiqueFooter({ onToggleImport }: { onToggleImport?: () => void }) {
   const state = useCharacter.getState;
   const setPreviewMode = useCharacter(s => s.setPreviewMode);
   const preview = useCharacter(s => s.previewMode);
+  const canUndo = useBodySlideStore(s => s.bodyPast.length > 0);
+  const canRedo = useBodySlideStore(s => s.bodyFuture.length > 0);
+  const comparing = useBodySlideStore(s => s.compareStartSnapshot !== null);
+  const batchModalOpen = useBodySlideStore(s => s.batchModalOpen);
+  const batchProgress = useBodySlideStore(s => s.batchProgress);
+  const isBatchBuilding = useBodySlideStore(s => s.isBatchBuilding);
+  const setBatchModalOpen = useBodySlideStore(s => s.setBatchModalOpen);
+  const isDirty = usePhysiqueDirty();
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -543,102 +562,178 @@ function PhysiqueFooter({ onToggleImport }: { onToggleImport?: () => void }) {
       )
         return;
 
-      if (event.key.toLowerCase() === 'v') {
+      const k = event.key.toLowerCase();
+      if (k === 'v') {
         event.preventDefault();
         onToggleImport?.();
-      } else if (event.key.toLowerCase() === 't') {
+      } else if (k === 't') {
         event.preventDefault();
-        resetSliders();
-      } else if (event.key.toLowerCase() === 'r') {
+        resetPhysiqueToDefault();
+      } else if (k === 'c') {
         event.preventDefault();
-        state().showToast('Uploading customization data to the gallery…');
+        beginPhysiqueCompare();
       } else if (event.code === 'Space') {
         event.preventDefault();
         setPreviewMode(!preview);
       }
     };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === 'c') endPhysiqueCompare();
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKeyUp);
+      endPhysiqueCompare();
+    };
   }, [onToggleImport, preview, setPreviewMode]);
 
-  const resetSliders = () => {
-    useBodySlideStore.getState().resetSliders();
-    state().showToast('Reset body morph sliders to default');
-  };
-
   return (
-    <footer className="pointer-events-auto absolute inset-x-0 bottom-0 z-20 flex min-h-[54px] flex-wrap md:flex-nowrap items-center justify-between gap-3 px-4 sm:px-8 py-2 md:py-0 select-none bg-gradient-to-t from-black/80 to-transparent">
-      {/* Left Actions */}
-      <div className="flex flex-col gap-0.5">
-        <div className="flex items-center gap-3 sm:gap-5 text-xs text-[#cfcacf] flex-wrap">
-          {/* Return */}
-          <button
-            type="button"
-            onClick={() => state().setWorkspace('edit')}
-            className="flex items-center gap-1.5 transition-colors hover:text-white"
-          >
-            <span className="flex h-4 w-4 items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 font-mono text-[10px] font-medium text-[#eae5dc]">
-              ↵
-            </span>
-            <span>Return</span>
-          </button>
+    <>
+      <BatchBuildModal
+        isOpen={batchModalOpen}
+        progress={batchProgress}
+        onClose={() => setBatchModalOpen(false)}
+      />
+      <footer className="pointer-events-auto absolute inset-x-0 bottom-0 z-20 flex min-h-[54px] flex-wrap md:flex-nowrap items-center justify-between gap-3 px-4 sm:px-8 py-2 md:py-0 select-none bg-gradient-to-t from-black/80 to-transparent">
+        {/* Left Actions */}
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-3 sm:gap-4 text-xs text-[#cfcacf] flex-wrap">
+            {/* Return */}
+            <button
+              type="button"
+              onClick={() => state().setWorkspace('edit')}
+              className="flex items-center gap-1.5 transition-colors hover:text-white"
+            >
+              <span className="flex h-4 w-4 items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 font-mono text-[10px] font-medium text-[#eae5dc]">
+                ↵
+              </span>
+              <span>Return</span>
+            </button>
 
-          {/* [V] Import Customization Data */}
-          <button
-            type="button"
-            onClick={onToggleImport}
-            className="flex items-center gap-1.5 transition-colors hover:text-white"
-          >
-            <Key>V</Key>
-            <span>Import Customization Data</span>
-          </button>
+            {/* [Ctrl+Z] Undo */}
+            <button
+              type="button"
+              disabled={!canUndo || comparing}
+              onClick={() => undoPhysique()}
+              className="flex items-center gap-1.5 transition-colors hover:text-white disabled:opacity-35 disabled:pointer-events-none"
+              title="Undo previous Physique edit"
+            >
+              <Key>Ctrl+Z</Key>
+              <span>Undo</span>
+            </button>
 
-          {/* [T] Reset Sliders */}
-          <button
-            type="button"
-            onClick={resetSliders}
-            className="flex items-center gap-1.5 transition-colors hover:text-white"
-          >
-            <Key>T</Key>
-            <span>Reset Sliders</span>
-          </button>
+            {/* [Ctrl+Y] Redo */}
+            <button
+              type="button"
+              disabled={!canRedo || comparing}
+              onClick={() => redoPhysique()}
+              className="flex items-center gap-1.5 transition-colors hover:text-white disabled:opacity-35 disabled:pointer-events-none"
+              title="Redo Physique edit"
+            >
+              <Key>Ctrl+Y</Key>
+              <span>Redo</span>
+            </button>
+
+            {/* Revert to Recent Save */}
+            <button
+              type="button"
+              disabled={!isDirty || comparing}
+              onClick={() => revertPhysiqueToSaved()}
+              className="flex items-center gap-1.5 transition-colors hover:text-[#e0a898] disabled:opacity-35 disabled:pointer-events-none"
+              title="Discard unsaved tweaks and return to your last saved Physique"
+            >
+              <span>Revert to Save</span>
+            </button>
+
+            {/* [T] Reset Default */}
+            <button
+              type="button"
+              disabled={comparing}
+              onClick={() => resetPhysiqueToDefault()}
+              className="flex items-center gap-1.5 transition-colors hover:text-white disabled:opacity-35 disabled:pointer-events-none"
+              title="Reset all Physique sliders to clean _0 default (Ctrl+Z to undo)"
+            >
+              <Key>T</Key>
+              <span>Default</span>
+            </button>
+
+            {/* [V] Import Customization Data */}
+            <button
+              type="button"
+              onClick={onToggleImport}
+              className="hidden lg:flex items-center gap-1.5 transition-colors hover:text-white"
+            >
+              <Key>V</Key>
+              <span>Import</span>
+            </button>
+          </div>
+
+          {/* Watermark */}
+          <span className="font-mono text-[10px] tracking-wide text-[#7a7882]/80 select-none">
+            ID: 0507582430
+          </span>
         </div>
 
-        {/* Watermark */}
-        <span className="font-mono text-[10px] tracking-wide text-[#7a7882]/80 select-none">
-          ID: 0507582430
-        </span>
-      </div>
+        {/* Right Actions */}
+        <div className="flex items-center gap-3 sm:gap-5 text-xs text-[#cfcacf]">
+          {/* [C] Hold to Compare vs Saved */}
+          <button
+            type="button"
+            aria-pressed={comparing}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              beginPhysiqueCompare();
+            }}
+            onPointerUp={() => endPhysiqueCompare()}
+            onPointerCancel={() => endPhysiqueCompare()}
+            onLostPointerCapture={() => endPhysiqueCompare()}
+            onBlur={() => endPhysiqueCompare()}
+            onKeyDown={(e) => {
+              if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault();
+                beginPhysiqueCompare();
+              }
+            }}
+            onKeyUp={(e) => {
+              if (e.key === ' ' || e.key === 'Enter') endPhysiqueCompare();
+            }}
+            className="hidden sm:flex items-center gap-1.5 transition-colors hover:text-white"
+            title="Hold to compare current draft with your last saved Physique"
+          >
+            <Key>C</Key>
+            <span>{comparing ? 'Showing saved' : 'Hold to compare'}</span>
+          </button>
 
-      {/* Right Actions */}
-      <div className="flex items-center gap-4 sm:gap-6 text-xs text-[#cfcacf]">
-        {/* [R] Upload to the Gallery */}
-        <button
-          type="button"
-          onClick={() => state().showToast('Uploading customization data to the gallery…')}
-          className="flex items-center gap-1.5 transition-colors hover:text-white"
-        >
-          <Key>R</Key>
-          <span>Upload to the Gallery</span>
-        </button>
+          {/* Save Physique & Fit All Outfits */}
+          <button
+            type="button"
+            disabled={isBatchBuilding}
+            onClick={() => void saveAndBatchBuildPhysique()}
+            title="Save Physique checkpoint & conform all 51 wardrobe outfits"
+            className={
+              isDirty
+                ? 'flex items-center gap-1.5 rounded-sm border border-[#eac87f] bg-[#d4b483]/25 px-3 py-1.5 text-xs font-semibold text-[#f5e6c8] shadow-[0_0_12px_rgba(234,200,127,0.3)] transition-all hover:bg-[#d4b483]/35 disabled:opacity-50'
+                : 'flex items-center gap-1.5 rounded-sm border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-[#d4d3d9] transition-all hover:border-[#dfba73]/50 hover:text-white disabled:opacity-50'
+            }
+          >
+            <span className="text-[#eac87f]">✦</span>
+            <span>{isDirty ? 'Save Physique' : 'Save & Fit Outfits'}</span>
+          </button>
 
-        {/* Select */}
-        <span className="hidden sm:inline-flex items-center gap-1 text-[#8f8d97]">
-          <span className="text-[11px] font-mono">✕</span>
-          <span>Select</span>
-        </span>
-
-        {/* Gold Preview Button */}
-        <button
-          type="button"
-          onClick={() => setPreviewMode(!preview)}
-          className="flex items-center gap-2 rounded-sm bg-[#dfba73] px-3.5 py-1.5 text-xs font-semibold text-black shadow-md transition-all hover:bg-[#eac87f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
-        >
-          <span className="font-mono text-[10px] bg-black/20 px-1 rounded-[2px] text-black">Space</span>
-          <span>Preview</span>
-        </button>
-      </div>
-    </footer>
+          {/* Gold Preview Button */}
+          <button
+            type="button"
+            onClick={() => setPreviewMode(!preview)}
+            className="flex items-center gap-2 rounded-sm bg-[#dfba73] px-3.5 py-1.5 text-xs font-semibold text-black shadow-md transition-all hover:bg-[#eac87f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+          >
+            <span className="font-mono text-[10px] bg-black/20 px-1 rounded-[2px] text-black">Space</span>
+            <span>Preview</span>
+          </button>
+        </div>
+      </footer>
+    </>
   );
 }
 

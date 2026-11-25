@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react';
 import { useCharacter, type Workspace, type EnbPreset } from '@/lib/store';
+import { useBodySlideStore } from '@/lib/bodyslide/store';
+import { redoPhysique, undoPhysique } from '@/lib/bodyslide/physiqueHistory';
 import { cn } from '@/lib/cn';
 
 const ENB_LABELS: Record<EnbPreset, string> = {
@@ -37,9 +39,13 @@ export function ToolStrip() {
   const setEnbPreset = useCharacter((s) => s.setEnbPreset);
   const showToast = useCharacter((s) => s.showToast);
 
+  const primaryTab = useCharacter((s) => s.primaryTab);
   const facePast = useCharacter((s) => s.facePast);
   const faceFuture = useCharacter((s) => s.faceFuture);
+  const bodyPast = useBodySlideStore((s) => s.bodyPast);
+  const bodyFuture = useBodySlideStore((s) => s.bodyFuture);
 
+  const isBodyTab = primaryTab === 'BODY';
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
 
   const cycleEnbPreset = (e: React.MouseEvent) => {
@@ -56,17 +62,25 @@ export function ToolStrip() {
   };
 
   const handleUndo = () => {
-    useCharacter.getState().undoFace();
-    showToast('Undo');
+    if (isBodyTab) {
+      undoPhysique();
+    } else {
+      useCharacter.getState().undoFace();
+      showToast('Undo');
+    }
   };
 
   const handleRedo = () => {
-    useCharacter.getState().redoFace();
-    showToast('Redo');
+    if (isBodyTab) {
+      redoPhysique();
+    } else {
+      useCharacter.getState().redoFace();
+      showToast('Redo');
+    }
   };
 
-  const canUndo = facePast.length > 0;
-  const canRedo = faceFuture.length > 0;
+  const canUndo = isBodyTab ? bodyPast.length > 0 : facePast.length > 0;
+  const canRedo = isBodyTab ? bodyFuture.length > 0 : faceFuture.length > 0;
 
   return (
     <nav

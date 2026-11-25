@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { useBodySlideStore } from '@/lib/bodyslide/store';
 import { NECOCO_HAND_CATEGORIES, type BodySlideSliderDef } from '@/lib/bodyslide/categories';
 import { BracketSlider } from '@/components/hud/common/BracketSlider';
+import { beginPhysiqueEdit, endPhysiqueEdit, recordPhysiqueStep } from '@/lib/bodyslide/physiqueHistory';
 
 /** Determine slider min/max bounds, enabling -100 for bipolar and directional morphs */
 function getSliderBounds(s: BodySlideSliderDef): { min: number; max: number } {
@@ -68,19 +69,23 @@ export function HandsPanel() {
   };
 
   const resetAllHands = () => {
-    for (const cat of NECOCO_HAND_CATEGORIES) {
-      for (const s of cat.sliders) {
-        resetSlider(s.name);
+    recordPhysiqueStep(() => {
+      for (const cat of NECOCO_HAND_CATEGORIES) {
+        for (const s of cat.sliders) {
+          resetSlider(s.name);
+        }
       }
-    }
+    });
   };
 
   const resetCategory = (catName: string) => {
     const cat = NECOCO_HAND_CATEGORIES.find((c) => c.name === catName);
     if (!cat) return;
-    for (const s of cat.sliders) {
-      resetSlider(s.name);
-    }
+    recordPhysiqueStep(() => {
+      for (const s of cat.sliders) {
+        resetSlider(s.name);
+      }
+    });
   };
 
   // Filter categories and sliders by search term
@@ -207,7 +212,7 @@ export function HandsPanel() {
                     return (
                       <div
                         key={s.name}
-                        onDoubleClick={() => resetSlider(s.name)}
+                        onDoubleClick={() => recordPhysiqueStep(() => resetSlider(s.name))}
                         className="group relative mb-1 cursor-pointer"
                         title={`Double-click to reset ${s.displayName}`}
                       >
@@ -218,7 +223,9 @@ export function HandsPanel() {
                           step={1}
                           value={val}
                           display={display}
+                          onChangeStart={beginPhysiqueEdit}
                           onChange={(v) => setSlider(s.name, v)}
+                          onChangeEnd={endPhysiqueEdit}
                         />
                       </div>
                     );

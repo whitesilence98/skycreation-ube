@@ -219,6 +219,7 @@ export interface CharacterState extends AnatomySnapshot {
    *  changing what is on screen. */
   applyFaceBaseline: () => void;
   setAnatomy: (id: AnatomyParamId, value: number) => void;
+  setBodyAnatomyBatch: (patch: Record<string, number>) => void;
   setAnatomyAsymmetry: (id: AnatomyParamId, value: number) => void;
   setAnatomyColor: (id: AnatomyColorId, value: string) => void;
   applyAnatomyPreset: (id: string) => void;
@@ -866,6 +867,15 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
     set(s => !Object.hasOwn(ANATOMY_BY_ID, id) || !Number.isFinite(value) ? {} :
       faceAnatomyPatch(s, { anatomy: coerceAnatomy({ ...s.anatomy, [id]: value }) }));
   },
+  setBodyAnatomyBatch: (patch) => set(s => {
+    const next = { ...s.anatomy };
+    for (const [k, v] of Object.entries(patch)) {
+      if (Object.hasOwn(ANATOMY_BY_ID, k) && ANATOMY_BY_ID[k as AnatomyParamId].group === 'body' && Number.isFinite(v)) {
+        next[k as AnatomyParamId] = v;
+      }
+    }
+    return { anatomy: coerceAnatomy(next) };
+  }),
   setAnatomyAsymmetry: (id, value) => set(s => !Object.hasOwn(ANATOMY_BY_ID, id) || !ANATOMY_BY_ID[id].bilateral || !Number.isFinite(value) ? {} :
     faceAnatomyPatch(s, { anatomyAsymmetry: coerceAsymmetry({ ...s.anatomyAsymmetry, [id]: value }) })),
   setAnatomyColor: (id, value) => set(s => !ANATOMY_COLOR_DEFS.some(p => p.id === id) || !/^#[0-9a-f]{6}$/i.test(value) ? {} :

@@ -14,6 +14,8 @@ export interface BracketSliderProps {
   disabled?: boolean;
   title?: string;
   onChange: (v: number) => void;
+  onChangeStart?: () => void;
+  onChangeEnd?: () => void;
 }
 
 export function BracketSlider({
@@ -27,6 +29,8 @@ export function BracketSlider({
   disabled = false,
   title,
   onChange,
+  onChangeStart,
+  onChangeEnd,
 }: BracketSliderProps) {
   const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
   const trackRef = useRef<HTMLDivElement>(null);
@@ -48,14 +52,19 @@ export function BracketSlider({
   useEffect(() => {
     if (!dragging) return;
     const onMove = (e: PointerEvent) => handlePointer(e);
-    const onUp = () => setDragging(false);
+    const onUp = () => {
+      setDragging(false);
+      onChangeEnd?.();
+    };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
     };
-  }, [dragging, handlePointer]);
+  }, [dragging, handlePointer, onChangeEnd]);
 
   const readout = display ?? `${Math.round(value * (max <= 1 ? 100 : 1))}${unit}`;
 
@@ -89,10 +98,17 @@ export function BracketSlider({
               : ['ArrowLeft', 'ArrowDown'].includes(e.key) ? value - step : null;
             if (next === null) return;
             e.preventDefault();
+            if (!e.repeat) onChangeStart?.();
             onChange(Math.max(min, Math.min(max, Number(next.toFixed(4)))));
+          }}
+          onKeyUp={(e) => {
+            if (['Home', 'End', 'PageUp', 'PageDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'ArrowDown'].includes(e.key)) {
+              onChangeEnd?.();
+            }
           }}
           onPointerDown={(e) => {
             if (!disabled) {
+              onChangeStart?.();
               setDragging(true);
               handlePointer(e);
             }

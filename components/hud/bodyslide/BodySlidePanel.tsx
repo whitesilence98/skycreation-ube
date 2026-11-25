@@ -7,8 +7,7 @@ import { BracketSlider } from '@/components/hud/common/BracketSlider';
 import { HudSlider } from '@/components/hud/HudSlider';
 import { useBodySlideStore } from '@/lib/bodyslide/store';
 import { NECOCO_CATEGORIES, type BodySlideCategory, type BodySlideSliderDef } from '@/lib/bodyslide/categories';
-import { runWardrobeBatchBuild, type BatchBuildProgress } from '@/lib/bodyslide/batchBuilder';
-import { BatchBuildModal } from './BatchBuildModal';
+import { beginPhysiqueEdit, endPhysiqueEdit, recordPhysiqueStep } from '@/lib/bodyslide/physiqueHistory';
 import { cn } from '@/lib/cn';
 
 /** Skeleton scale sliders preserved at the top of BodySlide (RaceMenu / bodyScale parity). */
@@ -28,35 +27,11 @@ export interface BodySlidePanelProps {
 export function BodySlidePanel({ categoryFilter, hideSkeletonHeader }: BodySlidePanelProps = {}) {
   // BodySlide store
   const sliders = useBodySlideStore((s) => s.sliders);
-  const userSliders = useBodySlideStore((s) => s.userSliders);
   const setSlider = useBodySlideStore((s) => s.setSlider);
   const resetSlider = useBodySlideStore((s) => s.resetSlider);
-  const resetToDefaults = useBodySlideStore((s) => s.resetToDefaults);
-  const clearAllSliders = useBodySlideStore((s) => s.clearAllSliders);
-  const saveBodyConfig = useBodySlideStore((s) => s.saveBodyConfig);
 
-  // Search query & batch building state
+  // Search query state
   const [searchQuery, setSearchQuery] = useState('');
-  const [batchProgress, setBatchProgress] = useState<BatchBuildProgress | null>(null);
-  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
-  const [isBatchBuilding, setIsBatchBuilding] = useState(false);
-
-  // 1-Click Save Body Config & Fit All Outfits
-  const handleSaveAndFitAll = useCallback(async () => {
-    setIsBatchBuilding(true);
-    setIsBatchModalOpen(true);
-    try {
-      const { clothedSliders } = saveBodyConfig();
-      await runWardrobeBatchBuild({
-        sliders: clothedSliders,
-        onProgress: (p) => setBatchProgress(p),
-      });
-    } catch (err) {
-      console.error('[BodySlidePanel] Batch build failed:', err);
-    } finally {
-      setIsBatchBuilding(false);
-    }
-  }, [saveBodyConfig]);
 
   const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -94,11 +69,6 @@ export function BodySlidePanel({ categoryFilter, hideSkeletonHeader }: BodySlide
       .filter((cat) => cat.sliders.length > 0);
   }, [categories, searchQuery]);
 
-  // Count active (non-zero) morphs
-  const modifiedCount = useMemo(() => {
-    return Object.keys(userSliders).length;
-  }, [userSliders]);
-
   const toggleCategory = useCallback((catName: string) => {
     setExpandedCats((prev) => ({
       ...prev,
@@ -120,75 +90,18 @@ export function BodySlidePanel({ categoryFilter, hideSkeletonHeader }: BodySlide
 
   const resetCategorySliders = useCallback(
     (category: BodySlideCategory) => {
-      for (const s of category.sliders) {
-        resetSlider(s.name);
-      }
+      recordPhysiqueStep(() => {
+        for (const s of category.sliders) {
+          resetSlider(s.name);
+        }
+      });
     },
     [resetSlider],
   );
 
   return (
     <div className="flex flex-col gap-3 text-[#efece6]">
-      {/* ── 1. Body Config Header & Save Action ────────────────── */}
-      <div className="flex flex-col gap-2 border-b border-[#d4b483]/14 pb-2.5 font-mono">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#efece6] leading-tight">
-            BODY SHAPE
-          </span>
-          <span className="text-[10px] text-[#a49a88] leading-tight">
-            {modifiedCount > 0 ? (
-              <span className="text-[#eac87f]">CUSTOM ({modifiedCount} MODIFIED)</span>
-            ) : (
-              'DEFAULT'
-            )}
-          </span>
-        </div>
-
-        {/* Primary Save & Batch Build Button */}
-        <button
-          type="button"
-          onClick={handleSaveAndFitAll}
-          disabled={isBatchBuilding}
-          className="group relative flex flex-col items-center justify-center gap-0.5 rounded-[2px] border border-[#eac87f] bg-[#d4b483]/20 py-2 px-3 text-center transition-all hover:bg-[#d4b483]/30 hover:border-[#f2dfbe] shadow-[0_0_12px_rgba(234,200,127,0.25)] min-h-[38px] disabled:opacity-50"
-          title="Save your body configuration and automatically fit femalebody + all 51 wardrobe outfits"
-        >
-          <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-[#f2dfbe]">
-            <span className="text-[#eac87f]">✦</span>
-            <span>SAVE BODY CONFIG</span>
-          </div>
-          <span className="text-[10px] text-[#d4b483]/80 tracking-normal font-sans">
-            Fits femalebody + 51 wardrobe outfits
-          </span>
-        </button>
-
-        {/* Utility row: Reset */}
-        <div className="flex items-center justify-between gap-1.5 pt-0.5">
-          <button
-            type="button"
-            onClick={resetToDefaults}
-            className="flex-1 rounded-[2px] border border-[#d4b483]/20 bg-black/30 py-1 text-[10px] tracking-wider text-[#b8ad9b] transition-all hover:border-[#d4b483]/40 hover:text-[#efece6] min-h-[24px]"
-            title="Reset all body sliders to default baseline"
-          >
-            RESET TO DEFAULTS
-          </button>
-          <button
-            type="button"
-            onClick={clearAllSliders}
-            className="flex-1 rounded-[2px] border border-[#d4b483]/20 bg-black/30 py-1 text-[10px] tracking-wider text-[#b8ad9b] transition-all hover:border-[#d09e88]/50 hover:text-[#e0a898] min-h-[24px]"
-            title="Zero all sliders"
-          >
-            ZERO ALL (0%)
-          </button>
-        </div>
-      </div>
-
-      <BatchBuildModal
-        isOpen={isBatchModalOpen}
-        progress={batchProgress}
-        onClose={() => setIsBatchModalOpen(false)}
-      />
-
-      {/* ── 2. Proportions & Stature (Skeleton Scale) ────────────── */}
+      {/* ── 1. Proportions & Stature (Skeleton Scale) ────────────── */}
       {!hideSkeletonHeader && (
         <div className="flex flex-col gap-1 border-b border-[#d4b483]/14 pb-2.5">
           <div className="mb-1 flex items-center justify-between border-b border-[#d4b483]/14 pb-1">
@@ -336,7 +249,7 @@ function MorphSliderRow({ slider }: { slider: BodySlideSliderDef }) {
 
   return (
     <div
-      onDoubleClick={() => resetSlider(slider.name)}
+      onDoubleClick={() => recordPhysiqueStep(() => resetSlider(slider.name))}
       className="cursor-pointer mb-1.5"
       title={`Double-click to reset ${slider.displayName}`}
     >
@@ -347,7 +260,9 @@ function MorphSliderRow({ slider }: { slider: BodySlideSliderDef }) {
         step={1}
         value={value}
         display={display}
+        onChangeStart={beginPhysiqueEdit}
         onChange={(v) => setSlider(slider.name, v)}
+        onChangeEnd={endPhysiqueEdit}
       />
     </div>
   );
@@ -362,7 +277,7 @@ function SkeletonSlider({ id, label }: { id: AnatomyParamId; label: string }) {
 
   return (
     <div
-      onDoubleClick={() => useCharacter.getState().setAnatomy(id, p.default)}
+      onDoubleClick={() => recordPhysiqueStep(() => useCharacter.getState().setAnatomy(id, p.default))}
       className="cursor-pointer mb-1.5"
     >
       <BracketSlider
@@ -372,10 +287,9 @@ function SkeletonSlider({ id, label }: { id: AnatomyParamId; label: string }) {
         step={p.step}
         value={value}
         display={isHeight ? `${Math.round(value)} cm` : `${Math.round(value)}%`}
-        onChange={(v) => {
-          useCharacter.getState().beginAnatomyEdit();
-          useCharacter.getState().setAnatomy(id, v);
-        }}
+        onChangeStart={beginPhysiqueEdit}
+        onChange={(v) => useCharacter.getState().setAnatomy(id, v)}
+        onChangeEnd={endPhysiqueEdit}
       />
     </div>
   );

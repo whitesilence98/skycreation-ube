@@ -13,6 +13,15 @@ import { FeetPanel } from '@/components/hud/bodyslide/FeetPanel';
 import { WuxiaSubCategoryRail } from '@/components/hud/common/WuxiaSubCategoryRail';
 import { WuxiaBreadcrumbs } from '@/components/hud/common/WuxiaBreadcrumbs';
 import { WuxiaRibbonPill } from '@/components/hud/common/WuxiaRibbonPill';
+import { useBodySlideStore } from '@/lib/bodyslide/store';
+import {
+  beginPhysiqueEdit,
+  endPhysiqueEdit,
+  recordPhysiqueStep,
+  revertPhysiqueToSaved,
+  saveAndBatchBuildPhysique,
+  usePhysiqueDirty,
+} from '@/lib/bodyslide/physiqueHistory';
 
 /** The body-build sliders grouped into 2 ergonomic sections (RaceMenu parity). */
 const PROPORTION_SLIDERS: { id: AnatomyParamId; customLabel?: string }[] = [
@@ -42,18 +51,25 @@ function BodyShapeSlider({ id, customLabel }: { id: AnatomyParamId; customLabel?
   const s = useCharacter.getState;
   const isHeight = id === 'body.heightCm';
   return (
-    <BracketSlider
-      label={customLabel ?? p.label}
-      min={p.min}
-      max={p.max}
-      step={p.step}
-      value={value}
-      display={isHeight ? `${Math.round(value)} cm` : `${Math.round(value)}%`}
-      onChange={(v) => {
-        s().beginAnatomyEdit();
-        s().setAnatomy(id, v);
-      }}
-    />
+    <div
+      onDoubleClick={() => recordPhysiqueStep(() => s().setAnatomy(id, p.default))}
+      className="cursor-pointer"
+      title={`Double-click to reset ${customLabel ?? p.label}`}
+    >
+      <BracketSlider
+        label={customLabel ?? p.label}
+        min={p.min}
+        max={p.max}
+        step={p.step}
+        value={value}
+        display={isHeight ? `${Math.round(value)} cm` : `${Math.round(value)}%`}
+        onChangeStart={beginPhysiqueEdit}
+        onChange={(v) => {
+          s().setAnatomy(id, v);
+        }}
+        onChangeEnd={endPhysiqueEdit}
+      />
+    </div>
   );
 }
 
@@ -171,6 +187,8 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
   const workspace = useCharacter((s) => s.workspace);
   const setWorkspace = useCharacter((s) => s.setWorkspace);
   const setCameraFraming = useCharacter((s) => s.setCameraFraming);
+  const isDirty = usePhysiqueDirty();
+  const isBatchBuilding = useBodySlideStore((s) => s.isBatchBuilding);
 
   const [activeSection, setActiveSection] = useState<PhysiqueSectionId | null>(null);
 
@@ -229,8 +247,20 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
              VIEW 1: PHYSIQUE ROOT MENU
              ───────────────────────────────────────────────────────────────────────── */
           <div className="flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <h1 className="text-base font-normal tracking-wide text-white">Physique</h1>
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <div className="flex items-center gap-2">
+                <h1 className="text-base font-normal tracking-wide text-white">Physique</h1>
+                <span
+                  className={cn(
+                    'rounded-[2px] px-1.5 py-0.5 font-mono text-[10px] tracking-wider',
+                    isDirty
+                      ? 'bg-[#dfba73]/20 text-[#eac87f] border border-[#dfba73]/40'
+                      : 'bg-white/5 text-[#8f8d97]',
+                  )}
+                >
+                  {isDirty ? '● UNSAVED' : 'SAVED'}
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={() => setGarmentVisible(!garmentVisible)}
@@ -253,7 +283,7 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
             </div>
 
             <div
-              className="flex flex-col gap-1.5 max-h-[calc(100vh-170px)] overflow-y-auto scrollbar-none pr-1"
+              className="flex flex-col gap-1.5 max-h-[calc(100vh-245px)] overflow-y-auto scrollbar-none pr-1"
               role="menu"
               aria-label="Physique Sub-categories"
             >
@@ -287,6 +317,35 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
                   </div>
                 </button>
               ))}
+            </div>
+
+            {/* Single Physique Save & Revert Checkpoint Bar (Root Level) */}
+            <div className="mt-2.5 flex items-center gap-2 border-t border-white/10 pt-2.5">
+              <button
+                type="button"
+                onClick={() => void saveAndBatchBuildPhysique()}
+                disabled={isBatchBuilding}
+                title="Save body configuration & conform all 51 wardrobe outfits"
+                className={cn(
+                  'flex-1 flex items-center justify-center gap-1.5 rounded-sm border px-3 py-2 font-mono text-[11px] font-semibold tracking-wider transition-all min-h-[38px] disabled:opacity-50',
+                  isDirty
+                    ? 'border-[#eac87f] bg-[#d4b483]/25 text-[#f5e6c8] shadow-[0_0_12px_rgba(234,200,127,0.28)] hover:bg-[#d4b483]/35'
+                    : 'border-white/15 bg-[#1f2026]/85 text-[#cfced4] hover:border-[#dfba73]/50 hover:text-white',
+                )}
+              >
+                <span className="text-[#eac87f]">✦</span>
+                <span>{isDirty ? 'SAVE BODY CONFIG' : 'FIT & SAVE BODY'}</span>
+              </button>
+              {isDirty && (
+                <button
+                  type="button"
+                  onClick={() => revertPhysiqueToSaved()}
+                  title="Discard unsaved tweaks and restore last saved Physique"
+                  className="rounded-sm border border-white/10 bg-[#1f2026]/85 px-3 py-2 font-mono text-[10px] tracking-wider text-[#cfc9bf] transition-colors hover:border-[#d09e88]/60 hover:text-[#e0a898] min-h-[38px]"
+                >
+                  REVERT
+                </button>
+              )}
             </div>
           </div>
         ) : (

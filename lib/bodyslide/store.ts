@@ -17,6 +17,12 @@ import {
 } from './presetLoader';
 import CONVERTING_OUTFITS_SLIDERS from './convertingOutfitsPreset.json';
 import { UBE_BODY_CATEGORIES, type BodySlideCategory } from './categories';
+import type { BatchBuildProgress } from './batchBuilder';
+
+export interface BodySnapshot {
+  userSliders: Record<string, number>;
+  bodyAnatomy: Record<string, number>;
+}
 
 /** All canonical body slider names extracted from UBE_BODY_CATEGORIES */
 export const ALL_UBE_BODY_SLIDER_NAMES: readonly string[] = Object.freeze(
@@ -178,15 +184,37 @@ export interface BodySlideState {
   presetError: string | null;
   /** Registered presets catalogue */
   presets: readonly PresetMeta[];
+  /** Last saved Physique checkpoint (userSliders + body skeleton anatomy). */
+  savedSliders: Record<string, number>;
+  savedAnatomy: Record<string, number>;
+  /** Physique undo/redo stacks (max 40 entries). */
+  bodyPast: BodySnapshot[];
+  bodyFuture: BodySnapshot[];
+  /** Transient drag transaction & hold-to-compare snapshots. */
+  editStartSnapshot: BodySnapshot | null;
+  compareStartSnapshot: BodySnapshot | null;
+  /** Shared Batch Build Modal state for Physique Save action. */
+  batchModalOpen: boolean;
+  batchProgress: BatchBuildProgress | null;
+  isBatchBuilding: boolean;
 
   // Actions
   setSlider: (name: string, value: number) => void;
   setSliders: (sliders: Record<string, number>) => void;
+  replaceUserSliders: (userSliders: Record<string, number>, activePresetId?: string | null) => void;
   resetSlider: (name: string) => void;
   resetSliders: () => void;
   resetToDefaults: () => void;
   clearAllSliders: () => void;
-  saveBodyConfig: (name?: string) => { nudeSliders: Record<string, number>; clothedSliders: Record<string, number> };
+  saveBodyConfig: (name?: string, bodyAnatomy?: Record<string, number>) => { nudeSliders: Record<string, number>; clothedSliders: Record<string, number> };
+  pushBodyPast: (snap: BodySnapshot) => void;
+  popBodyUndo: (current: BodySnapshot) => BodySnapshot | null;
+  popBodyRedo: (current: BodySnapshot) => BodySnapshot | null;
+  setEditStartSnapshot: (snap: BodySnapshot | null) => void;
+  setCompareStartSnapshot: (snap: BodySnapshot | null) => void;
+  setBatchModalOpen: (open: boolean) => void;
+  setBatchProgress: (progress: BatchBuildProgress | null) => void;
+  setIsBatchBuilding: (building: boolean) => void;
   loadPreset: (presetIdOrPath: string) => Promise<void>;
   applyPreset: (presetIdOrPath: string) => Promise<void>;
   applyPresetObject: (preset: BodySlidePreset, presetId?: string) => void;
@@ -222,7 +250,20 @@ function getInitialUserSliders(): Record<string, number> {
   }
 }
 
+function getInitialSavedAnatomy(): Record<string, number> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem('cc_user_body_anatomy');
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 const initialUserSliders = getInitialUserSliders();
+const initialSavedAnatomy = getInitialSavedAnatomy();
 const { nudeSliders: initialNude, clothedSliders: initialClothed, sliders: initialSliders } = computeDualSliders(initialUserSliders);
 
 /**
@@ -240,6 +281,15 @@ export const createBodySlideSlice: StateCreator<BodySlideState> = (set, get) => 
   isLoadingPreset: false,
   presetError: null,
   presets: BUILTIN_PRESETS,
+  savedSliders: { ...initialUserSliders },
+  savedAnatomy: { ...initialSavedAnatomy },
+  bodyPast: [],
+  bodyFuture: [],
+  editStartSnapshot: null,
+  compareStartSnapshot: null,
+  batchModalOpen: false,
+  batchProgress: null,
+  isBatchBuilding: false,
 
   setSlider: (name, value) => {
     set((state) => {
@@ -271,6 +321,18 @@ export const createBodySlideSlice: StateCreator<BodySlideState> = (set, get) => 
         clothedSliders,
         sliders,
       };
+    });
+  },
+
+  replaceUserSliders: (nextUserSliders, activePresetId = null) => {
+    const clean = { ...nextUserSliders };
+    const { nudeSliders, clothedSliders, sliders } = computeDualSliders(clean);
+    set({
+      userSliders: clean,
+      nudeSliders,
+      clothedSliders,
+      sliders,
+      activePresetId,
     });
   },
 
@@ -329,18 +391,54 @@ export const createBodySlideSlice: StateCreator<BodySlideState> = (set, get) => 
     });
   },
 
-  saveBodyConfig: (name?: string) => {
-    const userSliders = get().userSliders;
+  saveBodyConfig: (_name?: string, bodyAnatomy?: Record<string, number>) => {
+    const userSliders = { ...get().userSliders };
+    const nextAnatomy = bodyAnatomy ? { ...bodyAnatomy } : { ...get().savedAnatomy };
     const { nudeSliders, clothedSliders } = computeDualSliders(userSliders);
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('cc_user_body_sliders', JSON.stringify(userSliders));
+        localStorage.setItem('cc_user_body_anatomy', JSON.stringify(nextAnatomy));
       } catch (err) {
         console.warn('[BodySlideStore] Failed to persist user sliders:', err);
       }
     }
+    set({ savedSliders: userSliders, savedAnatomy: nextAnatomy });
     return { nudeSliders, clothedSliders };
   },
+
+  pushBodyPast: (snap) => set((state) => ({
+    bodyPast: [...state.bodyPast, snap].slice(-40),
+    bodyFuture: [],
+  })),
+
+  popBodyUndo: (current) => {
+    const past = get().bodyPast;
+    if (past.length === 0) return null;
+    const prev = past[past.length - 1];
+    set((state) => ({
+      bodyPast: state.bodyPast.slice(0, -1),
+      bodyFuture: [...state.bodyFuture, current].slice(-40),
+    }));
+    return prev;
+  },
+
+  popBodyRedo: (current) => {
+    const future = get().bodyFuture;
+    if (future.length === 0) return null;
+    const next = future[future.length - 1];
+    set((state) => ({
+      bodyFuture: state.bodyFuture.slice(0, -1),
+      bodyPast: [...state.bodyPast, current].slice(-40),
+    }));
+    return next;
+  },
+
+  setEditStartSnapshot: (snap) => set({ editStartSnapshot: snap }),
+  setCompareStartSnapshot: (snap) => set({ compareStartSnapshot: snap }),
+  setBatchModalOpen: (open) => set({ batchModalOpen: open }),
+  setBatchProgress: (progress) => set({ batchProgress: progress }),
+  setIsBatchBuilding: (building) => set({ isBatchBuilding: building }),
 
   loadPreset: async (presetIdOrPath: string) => {
     const { presets } = get();

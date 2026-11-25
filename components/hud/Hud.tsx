@@ -24,6 +24,7 @@ import { SmartCustomization } from '@/components/hud/smart/SmartCustomization';
 import { GizmoTooltip } from '@/components/hud/GizmoTooltip';
 import { editorCategory, CATEGORY_LABELS, type EditorCategory, type FaceSectionId } from '@/lib/faceControls';
 import { useCharacter } from '@/lib/store';
+import { endPhysiqueCompare, endPhysiqueEdit, redoPhysique, undoPhysique } from '@/lib/bodyslide/physiqueHistory';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { exitWardrobe, navigateCategory } from '@/lib/editorNav';
 
@@ -75,7 +76,12 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
     previousTool.current = toolOpen;
   }, [toolOpen, workspace]);
   useEffect(() => {
-    const release = () => { state().endFaceCompare(); state().endFaceEdit(); };
+    const release = () => {
+      state().endFaceCompare();
+      state().endFaceEdit();
+      endPhysiqueCompare();
+      endPhysiqueEdit();
+    };
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       if (event.key === 'Escape') {
@@ -101,6 +107,15 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
       if (category === 'face' && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault();
         if (event.shiftKey) state().redoFace(); else state().undoFace();
+      } else if (category === 'body' && (event.ctrlKey || event.metaKey)) {
+        const k = event.key.toLowerCase();
+        if (k === 'z') {
+          event.preventDefault();
+          if (event.shiftKey) redoPhysique(); else undoPhysique();
+        } else if (k === 'y') {
+          event.preventDefault();
+          redoPhysique();
+        }
       }
     };
     window.addEventListener('pointerup', release); window.addEventListener('pointercancel', release);
