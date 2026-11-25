@@ -1,7 +1,7 @@
 'use client';
 
 import * as THREE from 'three';
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { useRiggerStore, areAllLandmarksSet } from '@/lib/rigger/store';
 import {
   LANDMARK_IDS,
@@ -11,11 +11,10 @@ import {
   type LandmarkPreset,
 } from '@/lib/rigger/vrmSkeleton';
 import { LANDMARK_META } from '@/components/rigger/LandmarkEditor';
+import { ExportPanel } from '@/components/rigger/ExportPanel';
 import { fitSkeletonToLandmarks, estimateLandmarksFromBounds, validateLandmarks } from '@/lib/rigger/templateFitter';
 import { transferWeightsAsync } from '@/lib/rigger/weightTransfer';
 import { diffuseWeightsAsync } from '@/lib/rigger/heatDiffusion';
-import { exportRiggedGlb, exportSummary } from '@/lib/rigger/exportRiggedGlb';
-import type { TestAnimationMode } from '@/lib/rigger/testAnimations';
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
@@ -31,8 +30,8 @@ function StepDot({ n, active, done }: { n: number; active: boolean; done: boolea
   );
 }
 
-function StepBar({ step }: { step: 1 | 2 | 3 }) {
-  const steps = ['Upload', 'Place Markers', 'Rig & Export'];
+export function RiggerStepBar({ step }: { step: 1 | 2 | 3 }) {
+  const steps = ['Rig', 'Preview', 'Export'];
   return (
     <div className="flex items-center gap-1 px-1">
       {steps.map((label, i) => {
@@ -44,7 +43,7 @@ function StepBar({ step }: { step: 1 | 2 | 3 }) {
             <div className="flex flex-col items-center gap-0.5 min-w-0">
               <StepDot n={n} active={active} done={done} />
               <span className={`text-[10px] font-medium truncate max-w-[68px] text-center ${
-                active ? 'text-sky-300' : done ? 'text-emerald-400' : 'text-zinc-600'
+                active ? 'text-sky-300' : done ? 'text-emerald-400' : 'text-zinc-500'
               }`}>{label}</span>
             </div>
             {i < steps.length - 1 && (
@@ -64,23 +63,18 @@ export function RiggerSidebar() {
 
   // Store state
   const stage                 = useRiggerStore((s) => s.stage);
+  const uiPhase               = useRiggerStore((s) => s.uiPhase);
   const meshFile              = useRiggerStore((s) => s.meshFile);
   const meshGeometry          = useRiggerStore((s) => s.meshGeometry);
-  const meshMaterial          = useRiggerStore((s) => s.meshMaterial);
   const meshBbox              = useRiggerStore((s) => s.meshBbox);
   const landmarks             = useRiggerStore((s) => s.landmarks);
   const landmarkPreset        = useRiggerStore((s) => s.landmarkPreset);
   const landmarkMode          = useRiggerStore((s) => s.landmarkMode);
   const activeLandmark        = useRiggerStore((s) => s.activeLandmark);
-  const fitResult             = useRiggerStore((s) => s.fitResult);
-  const smoothWeights         = useRiggerStore((s) => s.smoothWeights);
   const progress              = useRiggerStore((s) => s.progress);
   const error                 = useRiggerStore((s) => s.error);
-  const showSkeleton          = useRiggerStore((s) => s.showSkeleton);
-  const showWeightMap         = useRiggerStore((s) => s.showWeightMap);
   const characterName         = useRiggerStore((s) => s.characterName);
   const useSymmetry           = useRiggerStore((s) => s.useSymmetry);
-  const includeVrm            = useRiggerStore((s) => s.includeVrm);
   const diffuseIterations     = useRiggerStore((s) => s.diffuseIterations);
   const bilateralStrength     = useRiggerStore((s) => s.bilateralStrength);
   const requiredBonesOnly     = useRiggerStore((s) => s.requiredBonesOnly);
@@ -100,24 +94,17 @@ export function RiggerSidebar() {
   const setRawWeights      = useRiggerStore((s) => s.setRawWeights);
   const setSmoothWeights   = useRiggerStore((s) => s.setSmoothWeights);
   const setStage           = useRiggerStore((s) => s.setStage);
+  const setUiPhase         = useRiggerStore((s) => s.setUiPhase);
+  const backToRig          = useRiggerStore((s) => s.backToRig);
   const setProgress        = useRiggerStore((s) => s.setProgress);
   const setError           = useRiggerStore((s) => s.setError);
-  const toggleSkeleton     = useRiggerStore((s) => s.toggleSkeleton);
-  const toggleWeightMap    = useRiggerStore((s) => s.toggleWeightMap);
   const setTestAnimation   = useRiggerStore((s) => s.setTestAnimation);
-  const testAnimation      = useRiggerStore((s) => s.testAnimation);
   const setCharacterName   = useRiggerStore((s) => s.setCharacterName);
   const setOption          = useRiggerStore((s) => s.setOption);
   const reset              = useRiggerStore((s) => s.reset);
 
-  const [lastExportBuffer, setLastExportBuffer] = useState<ArrayBuffer | null>(null);
-  const [summaryText, setSummaryText] = useState<string | null>(null);
-
-  // ── Wizard step ────────────────────────────────────────────────────────────
-  const wizardStep: 1 | 2 | 3 =
-    stage === 'idle'   ? 1 :
-    stage === 'done'   ? 3 :
-    stage === 'rigging'? 3 : 2;
+  const phaseStep: 1 | 2 | 3 =
+    uiPhase === 'export' ? 3 : uiPhase === 'preview' ? 2 : 1;
 
   const activeLandmarkIds = getLandmarkIdsForPreset(landmarkPreset);
   const placedActiveCount = activeLandmarkIds.filter((id) => Boolean(landmarks[id])).length;
@@ -133,8 +120,7 @@ export function RiggerSidebar() {
     if (pos) activeLandmarksMap[id] = pos;
   }
 
-  /* `validateLandmarks` was written but never called, so a swapped left/right
-     pair rigged a mangled character with no warning. Block on it instead. */
+  /* `validateLandmarks` blocks rigging if L/R pairs are swapped or head < ankles. */
   const landmarkWarnings = coreSet ? validateLandmarks(activeLandmarksMap as LandmarkMap) : [];
   const canRig = coreSet && landmarkWarnings.length === 0 && Boolean(meshGeometry);
 
@@ -167,7 +153,7 @@ export function RiggerSidebar() {
     confirmLandmarks();
   };
 
-  // ── Full rig pipeline ──────────────────────────────────────────────────────
+  // ── Phase 1 Rig pipeline (transitions into Phase 2 Preview) ────────────────
   const handleRig = async () => {
     if (!areAllLandmarksSet(landmarks)) {
       setError('All 8 core landmark points must be placed before rigging.');
@@ -179,76 +165,39 @@ export function RiggerSidebar() {
     }
     try {
       setStage('rigging');
+      setActiveLandmark(null);
       setError(null);
 
-      setProgress({ label: 'Fitting skeleton to landmarks…', value: 0.1 });
+      setProgress({ label: 'Fitting skeleton to landmarks…', value: 0.12 });
       const fit = fitSkeletonToLandmarks(activeLandmarksMap as LandmarkMap, {
         requiredOnly: requiredBonesOnly,
         includeSecondaryBones,
       });
       setFitResult(fit);
 
-      setProgress({ label: 'Transferring vertex weights…', value: 0.3 });
+      setProgress({ label: 'Transferring vertex weights…', value: 0.35 });
       const raw = await transferWeightsAsync(meshGeometry, fit, new THREE.Matrix4(), {
         bilateralStrength,
-        onProgress: (p) => setProgress({ label: 'Transferring vertex weights…', value: 0.3 + p * 0.3 }),
+        onProgress: (p) => setProgress({ label: 'Transferring vertex weights…', value: 0.35 + p * 0.35 }),
       });
       setRawWeights(raw);
 
-      setProgress({ label: 'Applying Laplacian diffusion smoothing…', value: 0.65 });
+      setProgress({ label: 'Smoothing joint seams…', value: 0.72 });
       const smooth = await diffuseWeightsAsync(raw, meshGeometry, {
         iterations: diffuseIterations,
-        onProgress: (p) => setProgress({ label: 'Smoothing joint seams…', value: 0.65 + p * 0.2 }),
+        onProgress: (p) => setProgress({ label: 'Smoothing joint seams…', value: 0.72 + p * 0.28 }),
       });
       setSmoothWeights(smooth);
 
-      setProgress({ label: 'Packing rigged GLB…', value: 0.9 });
-      const stripVertexColors = (m: THREE.Material): THREE.Material => {
-        const cloned = m.clone();
-        cloned.vertexColors = false;
-        cloned.needsUpdate = true;
-        return cloned;
-      };
-      const exportMaterial: THREE.Material | THREE.Material[] = meshMaterial
-        ? Array.isArray(meshMaterial)
-          ? meshMaterial.map(stripVertexColors)
-          : stripVertexColors(meshMaterial)
-        : new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.5, metalness: 0 });
-      const geoForExport = meshGeometry.clone();
-      if (geoForExport.getAttribute('color')) geoForExport.deleteAttribute('color');
-      let buffer: ArrayBuffer;
-      try {
-        buffer = await exportRiggedGlb(geoForExport, exportMaterial, fit, smooth, {
-          name: characterName || 'Character',
-          includeVrmExtension: includeVrm,
-          download: true,
-        });
-      } finally {
-        geoForExport.dispose();
-        const mats = Array.isArray(exportMaterial) ? exportMaterial : [exportMaterial];
-        mats.forEach((m) => m.dispose());
-      }
-      setLastExportBuffer(buffer);
-      setSummaryText(exportSummary(fit, smooth, buffer.byteLength, characterName || 'Character'));
-
       setProgress(null);
       setStage('done');
+      setTestAnimation('idle');
+      setUiPhase('preview');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStage('error');
       setProgress(null);
     }
-  };
-
-  // ── Re-download ────────────────────────────────────────────────────────────
-  const handleReDownload = () => {
-    if (!lastExportBuffer) return;
-    const blob = new Blob([lastExportBuffer], { type: 'model/gltf-binary' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `${characterName || 'Character'}_rigged.glb`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
   return (
@@ -259,9 +208,9 @@ export function RiggerSidebar() {
           <h1 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
             <span className="text-base">🦴</span>
             <span>Auto-Rigger Studio</span>
-            <span className="text-[10px] font-normal text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">VRM 1.0</span>
+            <span className="text-[10px] font-normal text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded">VRM 1.0</span>
           </h1>
-          <p className="text-[10px] text-zinc-500 mt-0.5">Open standards · No Blender plugin needed</p>
+          <p className="text-[10px] text-zinc-500 mt-0.5">Rig → Preview → Export (GLB &amp; FBX)</p>
         </div>
         <a
           href="/"
@@ -271,9 +220,9 @@ export function RiggerSidebar() {
         </a>
       </div>
 
-      {/* ── Step bar ───────────────────────────────────────────────────────── */}
+      {/* ── 3-Phase Step Bar (Rig → Preview → Export) ──────────────────────── */}
       <div className="px-3 py-3 border-b border-zinc-800 flex-shrink-0">
-        <StepBar step={wizardStep} />
+        <RiggerStepBar step={phaseStep} />
       </div>
 
       {/* ── Scrollable body ────────────────────────────────────────────────── */}
@@ -284,411 +233,373 @@ export function RiggerSidebar() {
           <div className="bg-red-950/80 border border-red-800 text-red-200 p-3 rounded-xl flex flex-col gap-1">
             <div className="font-semibold text-[11px] flex items-center gap-1.5">⚠️ Error</div>
             <div className="text-[10px] leading-tight">{error}</div>
-            <button onClick={() => setError(null)} className="self-end min-h-[24px] px-1 text-[10px] text-red-400 underline hover:text-white mt-0.5">
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className="self-end min-h-[24px] px-1 text-[10px] text-red-400 underline hover:text-white mt-0.5"
+            >
               Dismiss
             </button>
           </div>
         )}
 
         {/* ══════════════════════════════════════════════════════════════════
-            STEP 1 — Upload
+            PHASE 1 — Upload + Place Markers + Rig Settings
         ════════════════════════════════════════════════════════════════════ */}
-        <div className={`rounded-xl border transition-all ${
-          wizardStep === 1 ? 'border-sky-500/40 bg-sky-950/10' : 'border-zinc-800 bg-zinc-900/40'
-        }`}>
-          <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-            <StepDot n={1} active={wizardStep === 1} done={wizardStep > 1} />
-            <span className={`text-[11px] font-semibold uppercase tracking-wider ${wizardStep === 1 ? 'text-sky-300' : wizardStep > 1 ? 'text-emerald-400' : 'text-zinc-500'}`}>
-              Upload Model
-            </span>
-          </div>
-
-          <div
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`mx-3 mb-3 border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
-              meshFile ? 'border-emerald-500/50 bg-emerald-950/20' : 'border-zinc-700 hover:border-zinc-500 bg-zinc-900/50'
-            }`}
-          >
-            <input ref={fileInputRef} type="file" accept=".glb,.gltf,.obj" onChange={handleFileChange} className="hidden" />
-            {meshFile ? (
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-2xl">📦</span>
-                <div className="font-medium text-emerald-400 text-xs truncate max-w-[180px]">{meshFile.name}</div>
-                <div className="text-[10px] text-zinc-500">{(meshFile.size / 1024 / 1024).toFixed(2)} MB · Click to change</div>
+        {uiPhase === 'rig' && (
+          <>
+            {/* Upload card */}
+            <div className={`rounded-xl border transition-all ${
+              stage === 'idle' ? 'border-sky-500/40 bg-sky-950/10' : 'border-zinc-800 bg-zinc-900/40'
+            }`}>
+              <div className="flex items-center gap-2 px-3 pt-2.5 pb-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-sky-300">
+                  1 · Model
+                </span>
+                {meshFile && (
+                  <span className="ml-auto text-[10px] text-emerald-400 font-medium truncate max-w-[160px]">
+                    {meshFile.name}
+                  </span>
+                )}
               </div>
-            ) : (
-              <div className="flex flex-col items-center gap-1.5">
-                <span className="text-3xl text-zinc-500">📥</span>
-                <div className="font-semibold text-zinc-300 text-xs">Drop Humanoid Mesh Here</div>
-                <div className="text-[10px] text-zinc-500">GLB, GLTF or OBJ</div>
+
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`mx-3 mb-3 border-2 border-dashed rounded-xl ${meshFile ? 'p-2.5' : 'p-4'} text-center cursor-pointer transition-all ${
+                  meshFile ? 'border-emerald-500/50 bg-emerald-950/20' : 'border-zinc-700 hover:border-zinc-500 bg-zinc-900/50'
+                }`}
+              >
+                <input ref={fileInputRef} type="file" accept=".glb,.gltf,.obj" onChange={handleFileChange} className="hidden" />
+                {meshFile ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-lg">📦</span>
+                    <div className="text-[10px] text-zinc-400">
+                      {(meshFile.size / 1024 / 1024).toFixed(2)} MB · Click or drop to replace
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-1.5">
+                    <span className="text-3xl text-zinc-500">📥</span>
+                    <div className="font-semibold text-zinc-300 text-xs">Drop Humanoid Mesh Here</div>
+                    <div className="text-[10px] text-zinc-500">GLB, GLTF or OBJ</div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Place Markers */}
+            {stage !== 'idle' && (
+              <div className="rounded-xl border border-sky-500/40 bg-sky-950/10 transition-all">
+                <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-sky-300">
+                    2 · Place Markers
+                  </span>
+                  <span
+                    className={`ml-auto text-[10px] font-mono font-bold ${
+                      coreSet && placedActiveCount === totalActiveCount
+                        ? 'text-emerald-400'
+                        : coreSet
+                        ? 'text-sky-300'
+                        : 'text-zinc-400'
+                    }`}
+                  >
+                    {placedActiveCount}/{totalActiveCount}
+                  </span>
+                </div>
+
+                <div className="px-3 pb-3 flex flex-col gap-2.5">
+                  {/* Landmark count preset selector */}
+                  <div className="flex bg-zinc-900 rounded-lg p-0.5 text-[10px] border border-zinc-800">
+                    {([
+                      ['8', '8 Core'],
+                      ['14', '14 Limbs'],
+                      ['16', '16 + Detail'],
+                    ] as [LandmarkPreset, string][]).map(([preset, label]) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setLandmarkPreset(preset)}
+                        className={`flex-1 min-h-[26px] py-1 px-1.5 rounded-md transition-colors font-medium ${
+                          landmarkPreset === preset
+                            ? 'bg-zinc-700 text-white shadow-sm'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Mode toggle */}
+                  <div className="flex bg-zinc-900 rounded-lg p-0.5 text-[10px] border border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => setLandmarkMode('auto')}
+                      className={`flex-1 min-h-[26px] py-1 rounded-md transition-colors font-medium ${landmarkMode === 'auto' ? 'bg-sky-500 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+                    >
+                      ⚡ Auto-Detect
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLandmarkMode('manual')}
+                      className={`flex-1 min-h-[26px] py-1 rounded-md transition-colors font-medium ${landmarkMode === 'manual' ? 'bg-sky-500 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+                    >
+                      🎯 Manual
+                    </button>
+                  </div>
+
+                  {/* Symmetry Toggle */}
+                  <label className="min-h-[28px] flex items-center justify-between cursor-pointer bg-zinc-900/50 hover:bg-zinc-900 px-2.5 py-1.5 rounded-lg border border-zinc-800 transition-colors">
+                    <span className="text-[10px] text-zinc-300 flex items-center gap-1.5">
+                      <span>🪞</span> Use Symmetry (mirror L/R)
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={useSymmetry}
+                      onChange={(e) => setUseSymmetry(e.target.checked)}
+                      className="accent-sky-500 h-3.5 w-3.5 rounded"
+                    />
+                  </label>
+
+                  {landmarkMode === 'auto' ? (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-[10px] text-zinc-400 leading-relaxed">
+                        Estimates {totalActiveCount} anatomical points (
+                        {landmarkPreset === '8'
+                          ? 'core joints'
+                          : landmarkPreset === '14'
+                          ? 'core + elbows, wrists & knees'
+                          : 'core, limbs + chin & groin'}
+                        ) from mesh geometry and symmetry.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleAutoDetect}
+                        className="w-full min-h-[34px] py-2 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        ⚡ Auto-Detect All Markers
+                      </button>
+                      {placedActiveCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={clearLandmarks}
+                          className="w-full min-h-[26px] py-1 rounded-lg text-[10px] text-zinc-400 hover:text-zinc-200 bg-zinc-900 border border-zinc-800 transition-colors"
+                        >
+                          Clear &amp; Re-detect
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-zinc-400">
+                      Select a marker, then <strong className="text-zinc-200">click on the mesh</strong> to place it. Drag placed markers to adjust.
+                    </p>
+                  )}
+
+                  {/* Landmark grid */}
+                  <div className="grid grid-cols-2 gap-1">
+                    {activeLandmarkIds.map((id) => {
+                      const isSet    = Boolean(landmarks[id]);
+                      const isActive = activeLandmark === id;
+                      const meta     = LANDMARK_META[id];
+                      const isCore   = (LANDMARK_IDS as readonly string[]).includes(id);
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setActiveLandmark(isActive ? null : id)}
+                          title={`${meta.label}${isCore ? ' (Required core)' : ' (Optional precision)'}`}
+                          className={`min-h-[28px] py-1 px-1.5 rounded-lg text-left text-[10px] flex items-center gap-1 border transition-all ${
+                            isActive
+                              ? 'border-sky-400 bg-sky-950/50 text-sky-200 shadow-[0_0_8px_rgba(14,165,233,0.3)] font-semibold'
+                              : isSet
+                              ? 'border-zinc-700 bg-zinc-800/60 text-zinc-200'
+                              : 'border-zinc-800 bg-zinc-900/50 text-zinc-500 hover:border-zinc-700 hover:text-zinc-400'
+                          }`}
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full flex-shrink-0"
+                            style={{ background: meta.color, boxShadow: isSet ? `0 0 4px ${meta.color}` : 'none' }}
+                          />
+                          <span className="truncate">{meta.label}</span>
+                          {isSet ? (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Remove ${meta.label}`}
+                              title={`Remove ${meta.label}`}
+                              onClick={(ev) => { ev.stopPropagation(); deleteLandmark(id); }}
+                              onKeyDown={(ev) => {
+                                if (ev.key === 'Enter' || ev.key === ' ') {
+                                  ev.preventDefault();
+                                  ev.stopPropagation();
+                                  deleteLandmark(id);
+                                }
+                              }}
+                              className="ml-auto flex-shrink-0 min-w-[24px] min-h-[24px] flex items-center justify-center rounded text-[11px] text-zinc-400 hover:bg-red-950/60 hover:text-red-300"
+                            >
+                              ×
+                            </span>
+                          ) : (
+                            <span className="ml-auto flex-shrink-0 px-1 text-[10px]">
+                              {isActive ? '●' : isCore ? '○' : '+'}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {optionalIds.length > 0 && (
+                    <div className="flex items-center justify-between text-[10px] text-zinc-400 px-0.5">
+                      <span>
+                        Core:{' '}
+                        <strong className={coreSet ? 'text-emerald-400' : 'text-zinc-300'}>
+                          {coreCount}/8
+                        </strong>
+                      </span>
+                      <span>
+                        Optional:{' '}
+                        <strong className={placedOptionalCount === optionalIds.length ? 'text-sky-300' : 'text-zinc-300'}>
+                          {placedOptionalCount}/{optionalIds.length}
+                        </strong>
+                      </span>
+                    </div>
+                  )}
+
+                  {landmarkMode === 'manual' && (
+                    <div className="flex gap-1.5 mt-0.5">
+                      <button
+                        type="button"
+                        onClick={clearLandmarks}
+                        className="flex-1 min-h-[28px] py-1 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 text-[10px]"
+                      >
+                        Clear All
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!coreSet}
+                        onClick={confirmLandmarks}
+                        className={`flex-1 min-h-[28px] py-1 rounded-lg text-[10px] font-semibold transition-colors ${
+                          coreSet ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
+                        }`}
+                      >
+                        Confirm ({placedActiveCount}/{totalActiveCount})
+                      </button>
+                    </div>
+                  )}
+
+                  {landmarkWarnings.length > 0 && (
+                    <ul className="mt-1 flex flex-col gap-1 rounded-lg border border-amber-700/40 bg-amber-950/20 px-2 py-1.5">
+                      {landmarkWarnings.map((w) => (
+                        <li key={w} className="text-[10px] leading-snug text-amber-300">⚠ {w}</li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {/* Progress dots */}
+                  <div className="flex gap-1 mt-0.5">
+                    {activeLandmarkIds.map((id) => (
+                      <div
+                        key={id}
+                        title={LANDMARK_META[id].label}
+                        className="flex-1 h-1 rounded-full transition-all"
+                        style={{ background: landmarks[id] ? LANDMARK_META[id].color : '#3f3f46' }}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
-          </div>
-        </div>
 
-        {/* ══════════════════════════════════════════════════════════════════
-            STEP 2 — Place Markers
-        ════════════════════════════════════════════════════════════════════ */}
-        {stage !== 'idle' && (
-          <div className={`rounded-xl border transition-all ${
-            wizardStep === 2 ? 'border-sky-500/40 bg-sky-950/10' : 'border-zinc-800 bg-zinc-900/40'
-          }`}>
-            <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-              <StepDot n={2} active={wizardStep === 2} done={wizardStep > 2} />
-              <span className={`text-[11px] font-semibold uppercase tracking-wider ${wizardStep === 2 ? 'text-sky-300' : wizardStep > 2 ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                Place Markers
-              </span>
-              <span
-                className={`ml-auto text-[10px] font-mono font-bold ${
-                  coreSet && placedActiveCount === totalActiveCount
-                    ? 'text-emerald-400'
-                    : coreSet
-                    ? 'text-sky-300'
-                    : 'text-zinc-400'
-                }`}
-              >
-                {placedActiveCount}/{totalActiveCount}
-              </span>
-            </div>
-
-            <div className="px-3 pb-3 flex flex-col gap-2.5">
-              {/* Landmark count preset selector */}
-              <div className="flex bg-zinc-900 rounded-lg p-0.5 text-[10px] border border-zinc-800">
-                {([
-                  ['8', '8 Core'],
-                  ['14', '14 Limbs'],
-                  ['16', '16 + Detail'],
-                ] as [LandmarkPreset, string][]).map(([preset, label]) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setLandmarkPreset(preset)}
-                    className={`flex-1 min-h-[26px] py-1 px-1.5 rounded-md transition-colors font-medium ${
-                      landmarkPreset === preset
-                        ? 'bg-zinc-700 text-white shadow-sm'
-                        : 'text-zinc-400 hover:text-zinc-200'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Mode toggle */}
-              <div className="flex bg-zinc-900 rounded-lg p-0.5 text-[10px] border border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => setLandmarkMode('auto')}
-                  className={`flex-1 min-h-[26px] py-1 rounded-md transition-colors font-medium ${landmarkMode === 'auto' ? 'bg-sky-500 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
-                >
-                  ⚡ Auto-Detect
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLandmarkMode('manual')}
-                  className={`flex-1 min-h-[26px] py-1 rounded-md transition-colors font-medium ${landmarkMode === 'manual' ? 'bg-sky-500 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
-                >
-                  🎯 Manual
-                </button>
-              </div>
-
-              {/* Symmetry Toggle (Mixamo style) */}
-              <label className="min-h-[28px] flex items-center justify-between cursor-pointer bg-zinc-900/50 hover:bg-zinc-900 px-2.5 py-1.5 rounded-lg border border-zinc-800 transition-colors">
-                <span className="text-[10px] text-zinc-300 flex items-center gap-1.5">
-                  <span>🪞</span> Use Symmetry (mirror L/R)
+            {/* Rig Options (no animation preview bar here — clean Phase 1) */}
+            {stage !== 'idle' && (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 flex flex-col gap-2.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-300">
+                  3 · Rig Options
                 </span>
-                <input
-                  type="checkbox"
-                  checked={useSymmetry}
-                  onChange={(e) => setUseSymmetry(e.target.checked)}
-                  className="accent-sky-500 h-3.5 w-3.5 rounded"
-                />
-              </label>
 
-              {landmarkMode === 'auto' ? (
-                <div className="flex flex-col gap-2">
-                  <p className="text-[10px] text-zinc-400 leading-relaxed">
-                    Estimates {totalActiveCount} anatomical points (
-                    {landmarkPreset === '8'
-                      ? 'core joints'
-                      : landmarkPreset === '14'
-                      ? 'core + elbows, wrists & knees'
-                      : 'core, limbs + chin & groin'}
-                    ) from mesh geometry and symmetry.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleAutoDetect}
-                    className="w-full min-h-[34px] py-2 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    ⚡ Auto-Detect All Markers
-                  </button>
-                  {placedActiveCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={clearLandmarks}
-                      className="w-full min-h-[26px] py-1 rounded-lg text-[10px] text-zinc-500 hover:text-zinc-300 bg-zinc-900 border border-zinc-800 transition-colors"
-                    >
-                      Clear &amp; Re-detect
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <p className="text-[10px] text-zinc-400">
-                  Select a marker, then <strong className="text-zinc-200">click on the mesh</strong> to place it. Drag placed markers to adjust.
-                </p>
-              )}
-
-              {/* Landmark grid — Mixamo style (available in both Auto-Detect & Manual) */}
-              <div className="grid grid-cols-2 gap-1">
-                {activeLandmarkIds.map((id) => {
-                  const isSet    = Boolean(landmarks[id]);
-                  const isActive = activeLandmark === id;
-                  const meta     = LANDMARK_META[id];
-                  const isCore   = (LANDMARK_IDS as readonly string[]).includes(id);
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setActiveLandmark(isActive ? null : id)}
-                      title={`${meta.label}${isCore ? ' (Required core)' : ' (Optional precision)'}`}
-                      className={`min-h-[28px] py-1 px-1.5 rounded-lg text-left text-[10px] flex items-center gap-1 border transition-all ${
-                        isActive
-                          ? 'border-sky-400 bg-sky-950/50 text-sky-200 shadow-[0_0_8px_rgba(14,165,233,0.3)] font-semibold'
-                          : isSet
-                          ? 'border-zinc-700 bg-zinc-800/60 text-zinc-200'
-                          : 'border-zinc-800 bg-zinc-900/50 text-zinc-500 hover:border-zinc-700 hover:text-zinc-400'
-                      }`}
-                    >
-                      <span
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ background: meta.color, boxShadow: isSet ? `0 0 4px ${meta.color}` : 'none' }}
-                      />
-                      <span className="truncate">{meta.label}</span>
-                      {isSet ? (
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`Remove ${meta.label}`}
-                          title={`Remove ${meta.label}`}
-                          onClick={(ev) => { ev.stopPropagation(); deleteLandmark(id); }}
-                          onKeyDown={(ev) => {
-                            if (ev.key === 'Enter' || ev.key === ' ') {
-                              ev.preventDefault();
-                              ev.stopPropagation();
-                              deleteLandmark(id);
-                            }
-                          }}
-                          className="ml-auto flex-shrink-0 min-w-[24px] min-h-[24px] flex items-center justify-center rounded text-[11px] text-zinc-400 hover:bg-red-950/60 hover:text-red-300"
-                        >
-                          ×
-                        </span>
-                      ) : (
-                        <span className="ml-auto flex-shrink-0 px-1 text-[10px]">
-                          {isActive ? '●' : isCore ? '○' : '+'}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {optionalIds.length > 0 && (
-                <div className="flex items-center justify-between text-[10px] text-zinc-400 px-0.5">
-                  <span>
-                    Core:{' '}
-                    <strong className={coreSet ? 'text-emerald-400' : 'text-zinc-300'}>
-                      {coreCount}/8
-                    </strong>
-                  </span>
-                  <span>
-                    Optional:{' '}
-                    <strong className={placedOptionalCount === optionalIds.length ? 'text-sky-300' : 'text-zinc-300'}>
-                      {placedOptionalCount}/{optionalIds.length}
-                    </strong>
-                  </span>
-                </div>
-              )}
-
-              {landmarkMode === 'manual' && (
-                <div className="flex gap-1.5 mt-0.5">
-                  <button
-                    type="button"
-                    onClick={clearLandmarks}
-                    className="flex-1 min-h-[28px] py-1 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 text-[10px]"
-                  >
-                    Clear All
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!coreSet}
-                    onClick={confirmLandmarks}
-                    className={`flex-1 min-h-[28px] py-1 rounded-lg text-[10px] font-semibold transition-colors ${
-                      coreSet ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
-                    }`}
-                  >
-                    Confirm ({placedActiveCount}/{totalActiveCount})
-                  </button>
-                </div>
-              )}
-
-              {/* Validation: previously `validateLandmarks` was never called,
-                  so a swapped L/R pair rigged a mangled character silently. */}
-              {landmarkWarnings.length > 0 && (
-                <ul className="mt-1 flex flex-col gap-1 rounded-lg border border-amber-700/40 bg-amber-950/20 px-2 py-1.5">
-                  {landmarkWarnings.map((w) => (
-                    <li key={w} className="text-[10px] leading-snug text-amber-300">⚠ {w}</li>
-                  ))}
-                </ul>
-              )}
-
-              {/* Progress dots */}
-              <div className="flex gap-1 mt-0.5">
-                {activeLandmarkIds.map((id) => (
-                  <div
-                    key={id}
-                    title={LANDMARK_META[id].label}
-                    className="flex-1 h-1 rounded-full transition-all"
-                    style={{ background: landmarks[id] ? LANDMARK_META[id].color : '#3f3f46' }}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-zinc-400">Character Name</label>
+                  <input
+                    type="text"
+                    value={characterName}
+                    onChange={(e) => setCharacterName(e.target.value)}
+                    placeholder="Character"
+                    className="min-h-[30px] bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-zinc-100 text-xs focus:outline-none focus:border-sky-500"
                   />
-                ))}
+                </div>
+
+                <div className="border-t border-zinc-800 pt-2 flex flex-col gap-1.5">
+                  <label className="min-h-[24px] flex items-center justify-between cursor-pointer">
+                    <span className="text-[10px] text-zinc-300">Required Bones Only (22)</span>
+                    <input
+                      type="checkbox"
+                      checked={requiredBonesOnly}
+                      onChange={(e) => setOption('requiredBonesOnly', e.target.checked)}
+                      className="accent-sky-500 h-3.5 w-3.5"
+                    />
+                  </label>
+                  <label
+                    className={`min-h-[24px] flex items-center justify-between ${requiredBonesOnly ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    title={
+                      requiredBonesOnly
+                        ? 'Disable "Required Bones Only" to include custom secondary bones'
+                        : 'Adds custom pelvisLower, glute, and chest helper bones'
+                    }
+                  >
+                    <span className="text-[10px] text-zinc-300 flex items-center gap-1.5">
+                      <span>Pelvis / Glutes &amp; Chest</span>
+                      <span className="text-[10px] text-zinc-500 bg-zinc-800/80 px-1.5 py-0.5 rounded">Custom</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      disabled={requiredBonesOnly}
+                      checked={includeSecondaryBones && !requiredBonesOnly}
+                      onChange={(e) => setOption('includeSecondaryBones', e.target.checked)}
+                      className="accent-sky-500 h-3.5 w-3.5"
+                    />
+                  </label>
+                </div>
+
+                <div className="border-t border-zinc-800 pt-2 flex flex-col gap-2">
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-zinc-300">Diffusion Passes</span>
+                    <span className="font-mono text-zinc-400">{diffuseIterations}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={8}
+                    value={diffuseIterations}
+                    onChange={(e) => setOption('diffuseIterations', Number(e.target.value))}
+                    className="accent-sky-500 h-1 bg-zinc-700 rounded-lg cursor-pointer"
+                  />
+
+                  <div className="flex justify-between text-[10px] mt-1">
+                    <span className="text-zinc-300">Bilateral Symmetry</span>
+                    <span className="font-mono text-zinc-400">{(bilateralStrength * 100).toFixed(0)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={bilateralStrength}
+                    onChange={(e) => setOption('bilateralStrength', Number(e.target.value))}
+                    className="accent-sky-500 h-1 bg-zinc-700 rounded-lg cursor-pointer"
+                  />
+                </div>
               </div>
-            </div>
-          </div>
+            )}
+          </>
         )}
 
         {/* ══════════════════════════════════════════════════════════════════
-            STEP 3 — Rig Options + Export
+            PHASE 3 — Export Panel (GLB & FBX)
         ════════════════════════════════════════════════════════════════════ */}
-        {stage !== 'idle' && (
-          <div className={`rounded-xl border transition-all ${
-            wizardStep === 3 ? 'border-sky-500/40 bg-sky-950/10' : 'border-zinc-800 bg-zinc-900/40'
-          }`}>
-            <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-              <StepDot n={3} active={wizardStep === 3} done={stage === 'done'} />
-              <span className={`text-[11px] font-semibold uppercase tracking-wider ${wizardStep === 3 ? 'text-sky-300' : stage === 'done' ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                Rig &amp; Export
-              </span>
-            </div>
-
-            <div className="px-3 pb-3 flex flex-col gap-2.5">
-              {/* Character name */}
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] text-zinc-400">Character Name</label>
-                <input
-                  type="text"
-                  value={characterName}
-                  onChange={(e) => setCharacterName(e.target.value)}
-                  placeholder="Character"
-                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-zinc-100 text-xs focus:outline-none focus:border-sky-500"
-                />
-              </div>
-
-              {/* Rig options */}
-              <div className="border-t border-zinc-800 pt-2 flex flex-col gap-1.5">
-                <label className="min-h-[24px] flex items-center justify-between cursor-pointer">
-                  <span className="text-[10px] text-zinc-300">VRM 1.0 Metadata</span>
-                  <input type="checkbox" checked={includeVrm} onChange={(e) => setOption('includeVrm', e.target.checked)} className="accent-sky-500 h-3.5 w-3.5" />
-                </label>
-                <label className="min-h-[24px] flex items-center justify-between cursor-pointer">
-                  <span className="text-[10px] text-zinc-300">Required Bones Only (22)</span>
-                  <input type="checkbox" checked={requiredBonesOnly} onChange={(e) => setOption('requiredBonesOnly', e.target.checked)} className="accent-sky-500 h-3.5 w-3.5" />
-                </label>
-                <label
-                  className={`min-h-[24px] flex items-center justify-between ${requiredBonesOnly ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                  title={
-                    requiredBonesOnly
-                      ? 'Disable "Required Bones Only" to include custom secondary bones'
-                      : 'Adds custom pelvisLower, glute, and chest helper bones'
-                  }
-                >
-                  <span className="text-[10px] text-zinc-300 flex items-center gap-1.5">
-                    <span>Pelvis / Glutes &amp; Chest (Custom)</span>
-                    <span className="text-[10px] text-zinc-500 bg-zinc-800/80 px-1.5 py-0.5 rounded">Non-VRM</span>
-                  </span>
-                  <input
-                    type="checkbox"
-                    disabled={requiredBonesOnly}
-                    checked={includeSecondaryBones && !requiredBonesOnly}
-                    onChange={(e) => setOption('includeSecondaryBones', e.target.checked)}
-                    className="accent-sky-500 h-3.5 w-3.5"
-                  />
-                </label>
-              </div>
-
-              {/* Sliders */}
-              <div className="border-t border-zinc-800 pt-2 flex flex-col gap-2">
-                <div className="flex justify-between text-[10px]">
-                  <span className="text-zinc-300">Diffusion Passes</span>
-                  <span className="font-mono text-zinc-400">{diffuseIterations}</span>
-                </div>
-                <input type="range" min={1} max={8} value={diffuseIterations} onChange={(e) => setOption('diffuseIterations', Number(e.target.value))} className="accent-sky-500 h-1 bg-zinc-700 rounded-lg cursor-pointer" />
-
-                <div className="flex justify-between text-[10px] mt-1">
-                  <span className="text-zinc-300">Bilateral Symmetry</span>
-                  <span className="font-mono text-zinc-400">{(bilateralStrength * 100).toFixed(0)}%</span>
-                </div>
-                <input type="range" min={0} max={1} step={0.05} value={bilateralStrength} onChange={(e) => setOption('bilateralStrength', Number(e.target.value))} className="accent-sky-500 h-1 bg-zinc-700 rounded-lg cursor-pointer" />
-              </div>
-
-              {/* Viewport overlays */}
-              <div className="border-t border-zinc-800 pt-2 grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={toggleSkeleton}
-                  disabled={!fitResult}
-                  className={`min-h-[28px] py-1.5 px-2 rounded-lg border text-center text-[10px] transition-colors ${
-                    fitResult && showSkeleton ? 'border-sky-500/60 bg-sky-950/40 text-sky-300 font-medium' : 'border-zinc-800 bg-zinc-800/40 text-zinc-500'
-                  }`}
-                >
-                  🦴 Skeleton {fitResult && showSkeleton ? 'ON' : 'OFF'}
-                </button>
-                <button
-                  type="button"
-                  onClick={toggleWeightMap}
-                  disabled={!smoothWeights}
-                  className={`min-h-[28px] py-1.5 px-2 rounded-lg border text-center text-[10px] transition-colors ${
-                    smoothWeights && showWeightMap ? 'border-sky-500/60 bg-sky-950/40 text-sky-300 font-medium' : 'border-zinc-800 bg-zinc-800/40 text-zinc-500'
-                  }`}
-                >
-                  🎨 Weights {smoothWeights && showWeightMap ? 'ON' : 'OFF'}
-                </button>
-              </div>
-
-              {/* Test animation selector — always visible, active after rigging */}
-              <div
-                className={`border-t border-zinc-800 pt-2 flex flex-col gap-1.5 transition-opacity ${
-                  stage !== 'done' ? 'opacity-50' : ''
-                }`}
-                title={stage !== 'done' ? 'Rig character first' : undefined}
-              >
-                <span className="text-[10px] text-zinc-400 uppercase tracking-wider">Test Animation</span>
-                <div className="grid grid-cols-4 gap-1">
-                  {(['tpose', 'idle', 'walk', 'run'] as TestAnimationMode[]).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      disabled={stage !== 'done'}
-                      title={stage !== 'done' ? 'Rig character first' : undefined}
-                      onClick={() => setTestAnimation(mode)}
-                      className={`min-h-[26px] py-1 text-[10px] font-semibold rounded-lg border transition-all ${
-                        stage !== 'done'
-                          ? 'border-zinc-800 bg-zinc-900/40 text-zinc-600 cursor-not-allowed'
-                          : testAnimation === mode
-                          ? 'border-sky-400 bg-sky-950/50 text-sky-200 shadow-[0_0_6px_rgba(14,165,233,0.3)]'
-                          : 'border-zinc-800 bg-zinc-900/50 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700'
-                      }`}
-                    >
-                      {mode === 'tpose' ? 'T-Pose' : mode.charAt(0).toUpperCase() + mode.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {uiPhase === 'export' && <ExportPanel />}
 
         {/* ── Progress bar ─────────────────────────────────────────────────── */}
         {progress && (
@@ -705,39 +616,16 @@ export function RiggerSidebar() {
             </div>
           </div>
         )}
-
-        {/* ── Done: summary + re-download ──────────────────────────────────── */}
-        {stage === 'done' && (
-          <div className="bg-emerald-950/60 border border-emerald-800 text-emerald-200 p-3 rounded-xl flex flex-col gap-2">
-            <div className="font-bold text-xs text-emerald-300 flex items-center gap-1.5">
-              🎉 Rig Completed!
-              <span className="text-[10px] font-normal text-emerald-500 ml-auto">GLB downloaded</span>
-            </div>
-            {summaryText && (
-              <pre className="text-[10px] text-emerald-400/90 font-mono whitespace-pre-wrap leading-tight border-t border-emerald-900 pt-2 mt-1">
-                {summaryText}
-              </pre>
-            )}
-            <button
-              type="button"
-              onClick={handleReDownload}
-              disabled={!lastExportBuffer}
-              className="w-full min-h-[34px] py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold mt-1 flex items-center justify-center gap-1.5 transition-colors"
-            >
-              ⬇ Download Again
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ── Sticky action footer ───────────────────────────────────────────── */}
-      <div className="flex-shrink-0 p-4 pt-0 flex flex-col gap-2">
-        {stage !== 'done' && stage !== 'idle' && (
+      <div className="flex-shrink-0 p-4 pt-2 border-t border-zinc-800/70 flex flex-col gap-2">
+        {uiPhase === 'rig' && stage !== 'idle' && (
           <button
             type="button"
             disabled={!canRig || stage === 'rigging'}
             onClick={handleRig}
-            className={`w-full py-3 px-4 rounded-xl font-bold text-sm shadow-lg flex items-center justify-center gap-2 transition-all ${
+            className={`w-full min-h-[42px] py-2.5 px-4 rounded-xl font-bold text-sm shadow-lg flex items-center justify-center gap-2 transition-all ${
               stage === 'rigging'
                 ? 'bg-sky-600/80 text-white cursor-wait animate-pulse'
                 : canRig
@@ -745,7 +633,7 @@ export function RiggerSidebar() {
                 : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
             }`}
           >
-            <span>{stage === 'rigging' ? '⚙️' : '🚀'}</span>
+            <span>{stage === 'rigging' ? '⚙️' : '▶'}</span>
             <span>
               {stage === 'rigging'
                 ? 'Auto-Rigging…'
@@ -755,21 +643,37 @@ export function RiggerSidebar() {
                 ? 'Fix Landmark Warnings'
                 : !meshGeometry
                 ? 'Loading mesh…'
-                : optionalIds.length > 0 && placedOptionalCount < optionalIds.length
-                ? `Rig & Export (${coreCount} Core + ${placedOptionalCount}/${optionalIds.length} Opt)`
-                : 'Rig & Export Character'}
+                : 'Rig Character'}
             </span>
           </button>
         )}
 
-        {stage === 'done' && (
-          <button
-            type="button"
-            onClick={reset}
-            className="w-full min-h-[36px] py-2.5 px-4 rounded-xl text-xs text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors"
-          >
-            ↩ Start Over with New Model
-          </button>
+        {uiPhase === 'export' && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setUiPhase('preview')}
+                className="min-h-[34px] py-2 px-3 rounded-xl text-xs font-medium text-zinc-200 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors"
+              >
+                ← Preview
+              </button>
+              <button
+                type="button"
+                onClick={backToRig}
+                className="min-h-[34px] py-2 px-3 rounded-xl text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors"
+              >
+                ✎ Edit Markers
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={reset}
+              className="w-full min-h-[34px] py-2 px-4 rounded-xl text-xs text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors"
+            >
+              ↩ Start Over with New Model
+            </button>
+          </>
         )}
       </div>
     </div>

@@ -48,7 +48,12 @@ import { GLTFExporter } from 'three-stdlib';
 import type { FitResult }             from '@/lib/rigger/templateFitter';
 import type { DiffusionResult }       from '@/lib/rigger/heatDiffusion';
 import type { WeightTransferResult }  from '@/lib/rigger/weightTransfer';
-import { buildVrmHumanoidExtension, isVrmBoneName, type VrmBoneName } from '@/lib/rigger/vrmSkeleton';
+import {
+  buildVrmHumanoidExtension,
+  isVrmBoneName,
+  type RigBoneName,
+  type VrmBoneName,
+} from '@/lib/rigger/vrmSkeleton';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public types
@@ -120,6 +125,55 @@ export type WeightSource = WeightTransferResult | DiffusionResult;
  * @param weights    Skin weights from `transferWeights()` or `diffuseWeights()`.
  * @param name       Mesh name written into the SkinnedMesh. Default: 'Body'.
  */
+/**
+ * Creates a clean, detached rest-pose clone of `fitResult` using `worldPositions`
+ * so exporting GLB or FBX never mutates or reparents the live viewport skeleton.
+ */
+export function cloneRestFitResult(fitResult: FitResult): FitResult {
+  const boneMap = new Map<RigBoneName, THREE.Bone>();
+  const bones: THREE.Bone[] = [];
+
+  for (const orig of fitResult.built.bones) {
+    const bone = new THREE.Bone();
+    bone.name = orig.name;
+    boneMap.set(orig.name as RigBoneName, bone);
+    bones.push(bone);
+  }
+
+  for (const orig of fitResult.built.bones) {
+    const bone = boneMap.get(orig.name as RigBoneName)!;
+    const parent =
+      orig.parent && (orig.parent as THREE.Bone).isBone
+        ? boneMap.get(orig.parent.name as RigBoneName)
+        : undefined;
+    if (parent) {
+      parent.add(bone);
+    }
+
+    const wp = fitResult.worldPositions.get(orig.name as RigBoneName);
+    const parentWp = parent ? fitResult.worldPositions.get(parent.name as RigBoneName) : undefined;
+    if (wp && parentWp) {
+      bone.position.subVectors(wp, parentWp);
+    } else if (wp) {
+      bone.position.copy(wp);
+    } else {
+      bone.position.copy(orig.position);
+    }
+    bone.quaternion.identity();
+    bone.scale.set(1, 1, 1);
+  }
+
+  const root = boneMap.get('hips') ?? bones[0]!;
+  root.updateMatrixWorld(true);
+  const skeleton = new THREE.Skeleton(bones);
+  skeleton.calculateInverses();
+
+  return {
+    ...fitResult,
+    built: { root, bones, boneMap, skeleton },
+  };
+}
+
 export function createRiggedSkinnedMesh(
   geometry:  THREE.BufferGeometry,
   material:  THREE.Material | THREE.Material[],
@@ -388,17 +442,20 @@ export async function exportRiggedGlb(
   const vrmAuthor     = options.vrmAuthor            ?? 'CC-Kit Auto-Rigger';
   const vrmLicense    = options.vrmLicenseUrl        ?? 'https://vrm.dev/licenses/1.0/';
 
+  // ── Clone rest skeleton so live viewport skeletons are never reparented ──
+  const exportFit = cloneRestFitResult(fitResult);
+
   // ── Build SkinnedMesh ────────────────────────────────────────────────────
   const skinnedMesh = createRiggedSkinnedMesh(
-    geometry, material, fitResult, weights, characterName,
+    geometry, material, exportFit, weights, characterName,
   );
 
   // ── Collect bone names in skeleton.bones[] order ─────────────────────────
   // These are needed for VRM node-index lookup after GLTFExporter runs.
-  const boneNames = fitResult.built.bones.map((b) => b.name);
+  const boneNames = exportFit.built.bones.map((b) => b.name);
 
   // ── Assemble scene ───────────────────────────────────────────────────────
-  const exportRoot = assembleExportScene(skinnedMesh, fitResult, characterName);
+  const exportRoot = assembleExportScene(skinnedMesh, exportFit, characterName);
 
   // ── GLTFExporter ─────────────────────────────────────────────────────────
   const exporter = new GLTFExporter();

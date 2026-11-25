@@ -29,6 +29,7 @@ import type { TestAnimationMode } from '@/lib/rigger/testAnimations';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type RigStage = 'idle' | 'mesh-loaded' | 'landmarks-ready' | 'rigging' | 'done' | 'error';
+export type UiPhase = 'rig' | 'preview' | 'export';
 export type LandmarkMode = 'auto' | 'manual';
 
 /**
@@ -108,6 +109,8 @@ export interface RiggerState {
 
   // ── UI ──────────────────────────────────────────────────────────────────
   stage: RigStage;
+  uiPhase: UiPhase;
+  lockCamera: boolean;
   progress: { label: string; value: number } | null;
   error: string | null;
 
@@ -145,6 +148,9 @@ export interface RiggerState {
   setRawWeights: (r: WeightTransferResult) => void;
   setSmoothWeights: (r: DiffusionResult) => void;
   setStage: (s: RigStage) => void;
+  setUiPhase: (phase: UiPhase) => void;
+  setLockCamera: (locked: boolean) => void;
+  backToRig: () => void;
   setProgress: (p: { label: string; value: number } | null) => void;
   setError: (e: string | null) => void;
   toggleSkeleton: () => void;
@@ -192,6 +198,9 @@ type RiggerStateData = Omit<
   | 'setRawWeights'
   | 'setSmoothWeights'
   | 'setStage'
+  | 'setUiPhase'
+  | 'setLockCamera'
+  | 'backToRig'
   | 'setProgress'
   | 'setError'
   | 'toggleSkeleton'
@@ -224,6 +233,8 @@ const DEFAULT_STATE: RiggerStateData = {
   smoothWeights: null,
   // UI
   stage: 'idle',
+  uiPhase: 'rig',
+  lockCamera: false,
   progress: null,
   error: null,
   // Preview toggles
@@ -258,6 +269,8 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
         meshMaterial: null,
         meshBbox: null,
         stage: 'mesh-loaded',
+        uiPhase: 'rig',
+        lockCamera: false,
         landmarks: {},
         landmarksConfirmed: false,
         fitResult: null,
@@ -377,6 +390,28 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
 
   setStage: (s) => set({ stage: s }),
 
+  setUiPhase: (phase) => set((s) => ({
+    uiPhase: phase,
+    ...(phase !== 'rig' ? { activeLandmark: null, isDraggingLandmark: false } : {}),
+    ...(phase === 'preview' && !s.fitResult ? {} : {}),
+  })),
+
+  setLockCamera: (locked) => set({ lockCamera: locked }),
+
+  backToRig: () => set((s) => ({
+    uiPhase: 'rig',
+    stage: areAllLandmarksSet(s.landmarks) ? 'landmarks-ready' : s.meshUrl ? 'mesh-loaded' : 'idle',
+    testAnimation: 'tpose' as TestAnimationMode,
+    fitResult: null,
+    rawWeights: null,
+    smoothWeights: null,
+    showWeightMap: false,
+    progress: null,
+    error: null,
+    activeLandmark: null,
+    isDraggingLandmark: false,
+  })),
+
   setProgress: (p) => set({ progress: p }),
 
   setError: (e) => set((s) => {
@@ -384,7 +419,7 @@ export const useRiggerStore = create<RiggerState>()((set) => ({
       if (s.stage !== 'error') return { error: null };
       return {
         error: null,
-        stage: s.fitResult ? 'done' : s.meshUrl ? 'mesh-loaded' : 'idle',
+        stage: s.fitResult ? 'done' : s.meshUrl ? (areAllLandmarksSet(s.landmarks) ? 'landmarks-ready' : 'mesh-loaded') : 'idle',
       };
     }
     return { error: e, stage: 'error' };

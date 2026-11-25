@@ -312,8 +312,10 @@ function LandmarkHandle({
         draggingRef.current = false;
         setIsDraggingLandmark(false);
         onDragStateChange(null, false);
+        const st = useRiggerStore.getState();
+        const camAllowed = !(st.uiPhase === 'rig' && st.lockCamera);
         if (orbitControlsRef.current) {
-          orbitControlsRef.current.enabled = !hoveredRef.current;
+          orbitControlsRef.current.enabled = camAllowed && !hoveredRef.current;
         }
         document.body.style.cursor = hoveredRef.current ? 'grab' : '';
       };
@@ -347,7 +349,9 @@ function LandmarkHandle({
     hoveredRef.current = false;
     setHovered(false);
     if (!draggingRef.current) {
-      if (orbitControlsRef.current) orbitControlsRef.current.enabled = true;
+      const st = useRiggerStore.getState();
+      const camAllowed = !(st.uiPhase === 'rig' && st.lockCamera);
+      if (orbitControlsRef.current) orbitControlsRef.current.enabled = camAllowed;
       document.body.style.cursor = '';
     }
   }, [orbitControlsRef]);

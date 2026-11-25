@@ -9,9 +9,10 @@ import { useRiggerStore } from '@/lib/rigger/store';
 import { getLandmarkIdsForPreset, nextUnplacedLandmark, type LandmarkId, type VrmBoneName } from '@/lib/rigger/vrmSkeleton';
 import { SkeletonOverlay } from '@/components/rigger/SkeletonOverlay';
 import { LandmarkEditor, LANDMARK_META, type OrbitControlsLike } from '@/components/rigger/LandmarkEditor';
+import { RiggerStepBar } from '@/components/rigger/RiggerSidebar';
 import { buildWeightHeatmapColors } from '@/lib/rigger/weightTransfer';
 import { createRiggedSkinnedMesh } from '@/lib/rigger/exportRiggedGlb';
-import { driveTestAnimation, captureRestPose } from '@/lib/rigger/testAnimations';
+import { driveTestAnimation, captureRestPose, type TestAnimationMode } from '@/lib/rigger/testAnimations';
 import { bakeAndMergeSceneMeshes, transformMeshGeometry } from '@/lib/rigger/normalizeMesh';
 
 type CameraViewPreset = 'front' | 'side' | 'back' | 'fit';
@@ -31,6 +32,8 @@ function SceneContent({ cameraSnapRef, meshTransformRef, onDraggingChange }: Sce
   const meshFile        = useRiggerStore((s) => s.meshFile);
   const meshBbox        = useRiggerStore((s) => s.meshBbox);
   const stage           = useRiggerStore((s) => s.stage);
+  const uiPhase         = useRiggerStore((s) => s.uiPhase);
+  const lockCamera      = useRiggerStore((s) => s.lockCamera);
   const fitResult       = useRiggerStore((s) => s.fitResult);
   const showSkeleton    = useRiggerStore((s) => s.showSkeleton);
   const showWeightMap   = useRiggerStore((s) => s.showWeightMap);
@@ -267,7 +270,7 @@ function SceneContent({ cameraSnapRef, meshTransformRef, onDraggingChange }: Sce
     if (e.intersections?.some((hit) => Boolean(hit.object.userData?.landmarkHandleId))) {
       return;
     }
-    if (!activeLandmark) return;
+    if (uiPhase !== 'rig' || !activeLandmark) return;
     e.stopPropagation();
     pressOrigin.current = { x: e.clientX ?? 0, y: e.clientY ?? 0, id: activeLandmark };
     // Record where the press landed; the commit happens on pointer-up.
@@ -296,13 +299,13 @@ function SceneContent({ cameraSnapRef, meshTransformRef, onDraggingChange }: Sce
   /* A miss used to do literally nothing. Surface it so the user can tell a
      misclick from a broken tool. */
   const handleMissed = () => {
-    if (!activeLandmark) return;
+    if (uiPhase !== 'rig' || !activeLandmark) return;
     setLandmarkMissFlash(true);
     window.setTimeout(() => setLandmarkMissFlash(false), 900);
   };
 
-  // Show live preview during landmark placement (not after full rig)
-  const showLivePreview = stage !== 'idle' && stage !== 'done' && !fitResult;
+  // Show live preview during landmark placement only in Phase 1 (Rig)
+  const showLivePreview = uiPhase === 'rig' && stage !== 'idle' && stage !== 'done' && !fitResult;
 
   return (
     <>
@@ -319,7 +322,7 @@ function SceneContent({ cameraSnapRef, meshTransformRef, onDraggingChange }: Sce
           onPointerUp={handleMeshPointerUp}
           onPointerMissed={handleMissed}
           onPointerMove={(e: { point: THREE.Vector3 }) => {
-            if (!activeLandmark) return;
+            if (uiPhase !== 'rig' || !activeLandmark) return;
             setGhost(e.point.clone());
           }}
         />
@@ -333,16 +336,16 @@ function SceneContent({ cameraSnapRef, meshTransformRef, onDraggingChange }: Sce
         </>
       )}
 
-      {/* Ghost marker: shows where the click would land. Placement was blind
-          before this — the user aimed at an invisible target. */}
-      {activeLandmark && ghost && (
+      {/* Ghost marker: shows where the click would land during Phase 1 placement */}
+      {uiPhase === 'rig' && activeLandmark && ghost && (
         <mesh position={ghost}>
           <sphereGeometry args={[0.022, 12, 12]} />
           <meshBasicMaterial color="#38bdf8" transparent opacity={0.55} depthTest={false} />
         </mesh>
       )}
 
-      {stage !== 'idle' && (
+      {/* Draggable landmark handles & pills — ONLY shown in Phase 1 (Rig), hidden in Preview & Export */}
+      {uiPhase === 'rig' && stage !== 'idle' && (
         <LandmarkEditor
           targetMeshRef={primaryMeshRef}
           orbitControlsRef={orbitControlsRef}
@@ -351,7 +354,7 @@ function SceneContent({ cameraSnapRef, meshTransformRef, onDraggingChange }: Sce
         />
       )}
 
-      {/* Confirmed rig skeleton overlay (static joint spheres in T-pose, live SkeletonHelper when animating) */}
+      {/* Confirmed rig skeleton overlay (toggleable in Preview/Export; zero landmark clutter) */}
       {fitResult && (stage === 'done' && testAnimation !== 'tpose' ? (
         liveSkeletonHelper && showSkeleton ? (
           <primitive object={liveSkeletonHelper} />
@@ -360,14 +363,13 @@ function SceneContent({ cameraSnapRef, meshTransformRef, onDraggingChange }: Sce
         <SkeletonOverlay fitResult={fitResult} visible={showSkeleton} />
       ))}
 
-      {/* Orbit stays live during placement — the click/drag slop in
-          `handleMeshPointerUp` separates the two gestures. */}
+      {/* Orbit stays live during placement unless user explicitly locks camera in Phase 1 */}
       <OrbitControls
         ref={orbitControlsRef as React.RefObject<React.ComponentRef<typeof OrbitControls>>}
         makeDefault
         minDistance={0.2}
         maxDistance={20}
-        enabled={!isDraggingLandmark}
+        enabled={!isDraggingLandmark && !(uiPhase === 'rig' && lockCamera)}
       />
       <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
         <GizmoViewport axisColors={['#ef4444', '#22c55e', '#3b82f6']} labelColor="#ffffff" />
@@ -382,6 +384,18 @@ function SceneContent({ cameraSnapRef, meshTransformRef, onDraggingChange }: Sce
 
 export function RiggerCanvas() {
   const stage              = useRiggerStore((s) => s.stage);
+  const uiPhase            = useRiggerStore((s) => s.uiPhase);
+  const setUiPhase         = useRiggerStore((s) => s.setUiPhase);
+  const backToRig          = useRiggerStore((s) => s.backToRig);
+  const lockCamera         = useRiggerStore((s) => s.lockCamera);
+  const setLockCamera      = useRiggerStore((s) => s.setLockCamera);
+  const fitResult          = useRiggerStore((s) => s.fitResult);
+  const showSkeleton       = useRiggerStore((s) => s.showSkeleton);
+  const showWeightMap      = useRiggerStore((s) => s.showWeightMap);
+  const testAnimation      = useRiggerStore((s) => s.testAnimation);
+  const toggleSkeleton     = useRiggerStore((s) => s.toggleSkeleton);
+  const toggleWeightMap    = useRiggerStore((s) => s.toggleWeightMap);
+  const setTestAnimation   = useRiggerStore((s) => s.setTestAnimation);
   const activeLandmark     = useRiggerStore((s) => s.activeLandmark);
   const setActiveLandmark  = useRiggerStore((s) => s.setActiveLandmark);
   const landmarks          = useRiggerStore((s) => s.landmarks);
@@ -403,17 +417,21 @@ export function RiggerCanvas() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setActiveLandmark(null);
+        if (useRiggerStore.getState().activeLandmark) {
+          setActiveLandmark(null);
+        } else if (useRiggerStore.getState().uiPhase === 'export') {
+          setUiPhase('preview');
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setActiveLandmark]);
+  }, [setActiveLandmark, setUiPhase]);
 
   return (
     <div
       className="relative w-full h-full bg-zinc-950 select-none"
-      style={{ cursor: dragInfo ? 'grabbing' : activeLandmark ? 'crosshair' : 'default' }}
+      style={{ cursor: uiPhase === 'rig' && dragInfo ? 'grabbing' : uiPhase === 'rig' && activeLandmark ? 'crosshair' : 'default' }}
     >
       <Canvas camera={{ position: [0, 1.2, 2.5], fov: 40 }} gl={{ antialias: true, alpha: false }} className="w-full h-full">
         <SceneContent
@@ -423,9 +441,9 @@ export function RiggerCanvas() {
         />
       </Canvas>
 
-      {/* Camera quick-snap bar + Mesh orientation fixes */}
+      {/* Camera quick-snap bar + Phase 1 mesh rotation / cam lock controls */}
       {stage !== 'idle' && (
-        <div className="absolute top-3 left-3 z-10 flex flex-wrap items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/90 p-1 backdrop-blur-sm shadow-lg">
+        <div className="absolute top-3 left-3 z-10 flex flex-wrap items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/90 p-1 backdrop-blur-sm shadow-lg max-w-[calc(100vw-24px)]">
           {([
             ['front', 'Front'],
             ['side',  'Side'],
@@ -441,7 +459,7 @@ export function RiggerCanvas() {
               {label}
             </button>
           ))}
-          {stage !== 'done' && stage !== 'rigging' && (
+          {uiPhase === 'rig' && stage !== 'done' && stage !== 'rigging' && (
             <>
               <div className="h-4 w-px bg-zinc-700 mx-0.5" />
               <button
@@ -468,14 +486,117 @@ export function RiggerCanvas() {
               >
                 ↕ X90°
               </button>
+              <div className="h-4 w-px bg-zinc-700 mx-0.5" />
+              <button
+                type="button"
+                title={lockCamera ? 'Camera orbit locked for marker precision (click to unlock)' : 'Lock camera orbit while placing markers'}
+                onClick={() => setLockCamera(!lockCamera)}
+                className={`min-h-[26px] px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${
+                  lockCamera
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                }`}
+              >
+                {lockCamera ? '🔒 Cam Locked' : '🔓 Lock Cam'}
+              </button>
             </>
           )}
         </div>
       )}
 
-      {/* Live drag feedback banner */}
-      {dragInfo && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-10">
+      {/* Phase 2 Preview — top-right compact step indicator & Creator link */}
+      {uiPhase === 'preview' && (
+        <div className="hidden sm:flex absolute top-3 right-3 z-10 items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/90 px-3 py-1.5 backdrop-blur-sm shadow-lg">
+          <div className="w-44">
+            <RiggerStepBar step={2} />
+          </div>
+          <div className="h-6 w-px bg-zinc-800" />
+          <a
+            href="/"
+            className="min-h-[26px] inline-flex items-center text-[10px] text-zinc-400 hover:text-zinc-200 bg-zinc-950/60 border border-zinc-800 px-2 py-1 rounded-md no-underline transition-colors"
+          >
+            ← Creator
+          </a>
+        </div>
+      )}
+
+      {/* Phase 2 Preview — floating bottom control dock */}
+      {uiPhase === 'preview' && stage === 'done' && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 w-[calc(100%-24px)] max-w-3xl flex justify-center pointer-events-none">
+          <div className="pointer-events-auto bg-zinc-900/95 border border-zinc-700/80 backdrop-blur-md rounded-2xl shadow-2xl px-3 py-2 flex flex-wrap items-center justify-center gap-2">
+            {/* Test animation bar */}
+            <div className="flex items-center gap-1 bg-zinc-950/70 p-1 rounded-xl border border-zinc-800">
+              {(['tpose', 'idle', 'walk', 'run'] as TestAnimationMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setTestAnimation(mode)}
+                  className={`min-h-[28px] px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                    testAnimation === mode
+                      ? 'bg-sky-500 text-white shadow-[0_0_10px_rgba(14,165,233,0.45)]'
+                      : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80'
+                  }`}
+                >
+                  {mode === 'tpose' ? 'T-Pose' : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            <div className="hidden sm:block h-5 w-px bg-zinc-700" />
+
+            {/* Skeleton & Weights toggles */}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={toggleSkeleton}
+                disabled={!fitResult}
+                className={`min-h-[28px] px-2.5 py-1 rounded-lg border text-[10px] font-medium transition-colors ${
+                  showSkeleton
+                    ? 'border-sky-500/60 bg-sky-950/50 text-sky-300'
+                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                🦴 Skeleton
+              </button>
+              <button
+                type="button"
+                onClick={toggleWeightMap}
+                className={`min-h-[28px] px-2.5 py-1 rounded-lg border text-[10px] font-medium transition-colors ${
+                  showWeightMap
+                    ? 'border-sky-500/60 bg-sky-950/50 text-sky-300'
+                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                🎨 Weights
+              </button>
+            </div>
+
+            <div className="hidden sm:block h-5 w-px bg-zinc-700" />
+
+            {/* Phase flow actions */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={backToRig}
+                className="min-h-[30px] px-3 py-1.5 rounded-xl text-[11px] font-medium text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors"
+              >
+                ← Back to Markers
+              </button>
+              <button
+                type="button"
+                onClick={() => setUiPhase('export')}
+                className="min-h-[30px] px-3.5 py-1.5 rounded-xl text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)] transition-all"
+              >
+                ⬇ Export →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live drag feedback banner (Phase 1 only) */}
+      {uiPhase === 'rig' && dragInfo && (
+        <div className="absolute top-14 sm:top-4 left-1/2 -translate-x-1/2 pointer-events-none z-10">
           <div className="bg-zinc-900/95 border border-zinc-700 text-zinc-100 text-xs font-medium px-4 py-2 rounded-full backdrop-blur-sm shadow-xl flex items-center gap-2">
             <span
               className="w-2.5 h-2.5 rounded-full inline-block"
@@ -496,9 +617,9 @@ export function RiggerCanvas() {
         </div>
       )}
 
-      {/* Active landmark placement banner */}
-      {!dragInfo && activeLandmark && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-10">
+      {/* Active landmark placement banner (Phase 1 only) */}
+      {uiPhase === 'rig' && !dragInfo && activeLandmark && (
+        <div className="absolute top-14 sm:top-4 left-1/2 -translate-x-1/2 pointer-events-none z-10">
           <div className="bg-sky-900/95 border border-sky-400/60 text-sky-100 text-xs font-semibold px-5 py-2.5 rounded-full backdrop-blur-sm shadow-xl flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse inline-block" />
             {missFlash ? (
@@ -513,8 +634,8 @@ export function RiggerCanvas() {
         </div>
       )}
 
-      {/* Landmark placement progress badge */}
-      {stage !== 'idle' && stage !== 'done' && !activeLandmark && placedInPreset > 0 && placedInPreset < totalInPreset && (
+      {/* Landmark placement progress badge (Phase 1 only) */}
+      {uiPhase === 'rig' && stage !== 'idle' && stage !== 'done' && !activeLandmark && placedInPreset > 0 && placedInPreset < totalInPreset && (
         <div className="absolute top-4 right-4 pointer-events-none z-10">
           <div className="bg-zinc-900/90 border border-zinc-700 text-zinc-300 text-[11px] px-3 py-1.5 rounded-lg backdrop-blur-sm flex items-center gap-2">
             <span className="font-mono font-bold text-sky-400">{placedInPreset}/{totalInPreset}</span>
@@ -531,7 +652,7 @@ export function RiggerCanvas() {
             <h3 className="text-base font-semibold text-zinc-100">Drop a 3D Model to Begin</h3>
             <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
               Upload a humanoid GLB or OBJ mesh from the panel on the left.<br />
-              The auto-rigger will fit a full VRM 1.0 skeleton to your character.
+              Rig first, preview without marker clutter, then export GLB or FBX.
             </p>
           </div>
         </div>
