@@ -20,6 +20,8 @@ import { cloneRestFitResult } from '@/lib/rigger/exportRiggedGlb';
 import {
   captureRestPose,
   driveTestAnimation,
+  getGlbAnimationDuration,
+  preloadGlbAnimations,
   type TestAnimationMode,
 } from '@/lib/rigger/testAnimations';
 import {
@@ -260,8 +262,9 @@ function bakeTakes(
   const takes: BakedTake[] = [];
 
   for (const mode of modes) {
-    const spec = CLIP_SPECS[mode];
-    const numSteps = Math.max(12, Math.round(spec.durationSec * EXPORT_FPS));
+    const baseSpec = CLIP_SPECS[mode];
+    const durationSec = getGlbAnimationDuration(mode) ?? baseSpec.durationSec;
+    const numSteps = Math.max(12, Math.round(durationSec * EXPORT_FPS));
     const frameTimes: number[] = [];
 
     // Per bone arrays of sampled transforms
@@ -273,7 +276,7 @@ function bakeTakes(
     const posZ: number[][] = bones.map(() => []);
 
     for (let f = 0; f <= numSteps; f++) {
-      const t = (f / numSteps) * spec.durationSec;
+      const t = (f / numSteps) * durationSec;
       frameTimes.push(t);
       driveTestAnimation(boneMap as Map<VrmBoneName, THREE.Bone>, restQuats, mode, t);
 
@@ -346,8 +349,8 @@ function bakeTakes(
     driveTestAnimation(boneMap as Map<VrmBoneName, THREE.Bone>, restQuats, 'tpose', 0);
 
     takes.push({
-      name: spec.name,
-      durationSec: spec.durationSec,
+      name: baseSpec.name,
+      durationSec,
       channels,
     });
   }
@@ -1056,6 +1059,9 @@ export async function exportRiggedFbx(
   weights: WeightSource,
   options: RiggedFbxExportOptions = {},
 ): Promise<FbxExportResult> {
+  if (options.includeAnimation) {
+    await preloadGlbAnimations();
+  }
   const { text, filename, clipNames } = buildRiggedFbxString(
     geometry,
     material,

@@ -1,11 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useCharacter } from '@/lib/store';
 import type { SkeletonRegistry } from '@/lib/character/skeleton';
 import { buildIdleClip, stepMixer, toAdditiveClip } from '@/lib/character/animation';
+import {
+  buildXp32ClipFromGlb,
+  preloadGlbAnimations,
+  type GlbLocomotionId,
+} from '@/lib/animations/retargetGlbAnimation';
 import { BlinkController, applyBlinkWeights } from '@/lib/morphs/blinkController';
 import { applyFacialExpressionWeights } from '@/lib/morphs/facialExpressionMorphs';
 
@@ -71,9 +76,40 @@ export function AnimationDirector({
   const poseClipsRef = useRef<THREE.AnimationClip[]>([]);
   const idleActionRef = useRef<THREE.AnimationAction | null>(null);
   const idleClipRef = useRef<THREE.AnimationClip | null>(null);
+  const locomotionActionRef = useRef<THREE.AnimationAction | null>(null);
+  const locomotionClipRef = useRef<THREE.AnimationClip | null>(null);
   const lastPoseIdRef = useRef<string | null>(null);
   const playingRef = useRef(animationPlaying);
   playingRef.current = animationPlaying;
+  const animationIdRef = useRef(animationId);
+  animationIdRef.current = animationId;
+
+  const [glbReadyVersion, setGlbReadyVersion] = useState(0);
+  const [registryVersion, setRegistryVersion] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void preloadGlbAnimations().then(() => {
+      if (!cancelled) setGlbReadyVersion((v) => v + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const unsub = registry.subscribe(() => {
+      // Defer state bump out of SkinnedPart's render/useMemo registration pass.
+      queueMicrotask(() => {
+        if (active) setRegistryVersion((v) => v + 1);
+      });
+    });
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, [registry]);
 
   /* Swap in a new base-pose snapshot. A changed pose fades from the old one;
      a rebuild for the same pose (mesh/intensity change) swaps instantly. */
@@ -123,16 +159,46 @@ export function AnimationDirector({
     idleActionRef.current = idle;
     idleClipRef.current = idleClip;
 
-    /* Apply the current idle/rest choice before the next frame runs. */
-    idle.setEffectiveWeight(animationId === 'idle' ? 1 : 0);
+    /* Apply the current idle/locomotion/rest choice before the next frame runs. */
+    const curAnim = animationIdRef.current;
+    const isLocomotion = Boolean(locomotionActionRef.current) && (curAnim === 'idle-clip' || curAnim === 'walk' || curAnim === 'run');
+    if (isLocomotion) {
+      next.setEffectiveWeight(0);
+    }
+    idle.setEffectiveWeight(curAnim === 'idle' ? 1 : 0);
     // `animationId` is intentionally read for the new action only; the effect
-    // below keeps the live choice in sync without rebuilding clips.
+    // below keeps the live choice in sync without rebuilding pose clips.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mixer, poseClip, poseId, registry]);
 
   useEffect(() => {
+    locomotionActionRef.current?.stop();
+    locomotionActionRef.current = null;
+    if (locomotionClipRef.current) {
+      mixer.uncacheClip(locomotionClipRef.current);
+      locomotionClipRef.current = null;
+    }
+
+    if (animationId === 'idle-clip' || animationId === 'walk' || animationId === 'run') {
+      const glbId: GlbLocomotionId = animationId === 'idle-clip' ? 'idle' : animationId;
+      const clip = buildXp32ClipFromGlb(glbId, registry);
+      if (clip) {
+        poseActionRef.current?.setEffectiveWeight(0);
+        idleActionRef.current?.setEffectiveWeight(0);
+        const action = mixer.clipAction(clip);
+        action.setLoop(THREE.LoopRepeat, Infinity);
+        action.enabled = true;
+        action.setEffectiveWeight(1);
+        action.play();
+        locomotionActionRef.current = action;
+        locomotionClipRef.current = clip;
+        return;
+      }
+    }
+
+    poseActionRef.current?.setEffectiveWeight(1);
     idleActionRef.current?.setEffectiveWeight(animationId === 'idle' ? 1 : 0);
-  }, [animationId]);
+  }, [mixer, registry, animationId, glbReadyVersion, registryVersion]);
 
   useEffect(() => {
     if (blinkPulseNonce === lastPulseRef.current) return;

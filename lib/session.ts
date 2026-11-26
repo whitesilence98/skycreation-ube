@@ -92,7 +92,7 @@ export interface PersistedSession extends AnatomySnapshot {
   showMesh: boolean;
   garmentVisible: boolean;
   bodyPoseId: string;
-  animationId?: 'idle' | 'rest';
+  animationId?: 'idle' | 'idle-clip' | 'walk' | 'run' | 'rest';
   animationPlaying?: boolean;
   autoBlink?: boolean;
   animationSpeed?: number;
@@ -266,7 +266,14 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     showMesh: bool(o.showMesh, defaults.showMesh),
     garmentVisible: bool(o.garmentVisible, defaults.garmentVisible),
     bodyPoseId: typeof o.bodyPoseId === 'string' ? o.bodyPoseId : defaults.bodyPoseId,
-    animationId: o.animationId === 'rest' || o.animationId === 'idle' ? o.animationId : (defaults.animationId ?? 'idle'),
+    animationId:
+      o.animationId === 'rest' ||
+      o.animationId === 'idle' ||
+      o.animationId === 'idle-clip' ||
+      o.animationId === 'walk' ||
+      o.animationId === 'run'
+        ? o.animationId
+        : (defaults.animationId ?? 'idle'),
     animationPlaying: bool(o.animationPlaying, defaults.animationPlaying ?? true),
     autoBlink: bool(o.autoBlink, defaults.autoBlink ?? true),
     animationSpeed: bounded(o.animationSpeed, defaults.animationSpeed ?? 1, 0.2, 2),

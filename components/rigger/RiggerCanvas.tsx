@@ -12,7 +12,12 @@ import { LandmarkEditor, LANDMARK_META, type OrbitControlsLike } from '@/compone
 import { RiggerStepBar } from '@/components/rigger/RiggerSidebar';
 import { buildWeightHeatmapColors } from '@/lib/rigger/weightTransfer';
 import { createRiggedSkinnedMesh } from '@/lib/rigger/exportRiggedGlb';
-import { driveTestAnimation, captureRestPose, type TestAnimationMode } from '@/lib/rigger/testAnimations';
+import {
+  driveTestAnimation,
+  captureRestPose,
+  preloadGlbAnimations,
+  type TestAnimationMode,
+} from '@/lib/rigger/testAnimations';
 import { bakeAndMergeSceneMeshes, transformMeshGeometry } from '@/lib/rigger/normalizeMesh';
 
 type CameraViewPreset = 'front' | 'side' | 'back' | 'fit';
@@ -121,6 +126,10 @@ function SceneContent({ cameraSnapRef, meshTransformRef, onDraggingChange }: Sce
     const mat = primaryMeshRef.current.material ?? new THREE.MeshStandardMaterial({ color: 0xcccccc });
     return createRiggedSkinnedMesh(geo, mat, fitResult, weights);
   }, [fitResult, weights]);
+
+  useEffect(() => {
+    void preloadGlbAnimations();
+  }, []);
 
   // Capture rest pose quaternions once when skinnedMesh is built
   const restQuatsRef = useRef<Map<VrmBoneName, THREE.Quaternion>>(new Map());

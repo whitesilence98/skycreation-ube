@@ -262,8 +262,8 @@ export interface CharacterState extends AnatomySnapshot {
   /** Speed multiplier for pose transitions and physical motions [0.2..2.0]. */
   animationSpeed: number;
   setAnimationSpeed: (v: number) => void;
-  animationId: 'idle' | 'rest';
-  setAnimationId: (id: 'idle' | 'rest') => void;
+  animationId: 'idle' | 'idle-clip' | 'walk' | 'run' | 'rest';
+  setAnimationId: (id: 'idle' | 'idle-clip' | 'walk' | 'run' | 'rest') => void;
   animationPlaying: boolean;
   setAnimationPlaying: (v: boolean) => void;
   autoBlink: boolean;
@@ -969,7 +969,17 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   animationSpeed: 1.0,
   setAnimationSpeed: (animationSpeed) => { if (Number.isFinite(animationSpeed)) set({ animationSpeed: Math.min(2.0, Math.max(0.2, animationSpeed)) }); },
   animationId: 'idle',
-  setAnimationId: (animationId) => { if (animationId === 'idle' || animationId === 'rest') set({ animationId }); },
+  setAnimationId: (animationId) => {
+    if (
+      animationId === 'idle' ||
+      animationId === 'idle-clip' ||
+      animationId === 'walk' ||
+      animationId === 'run' ||
+      animationId === 'rest'
+    ) {
+      set({ animationId });
+    }
+  },
   animationPlaying: true,
   setAnimationPlaying: (animationPlaying) => set({ animationPlaying }),
   autoBlink: true,

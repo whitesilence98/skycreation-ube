@@ -156,9 +156,12 @@ export function PosePanel({ onClose }: PosePanelProps = {}) {
         <label className="flex items-center justify-between gap-2">
           ANIMATION
           <select aria-label="Animation" value={animationId}
-            onChange={(e) => setAnimationId(e.target.value as 'idle' | 'rest')}
+            onChange={(e) => setAnimationId(e.target.value as 'idle' | 'idle-clip' | 'walk' | 'run' | 'rest')}
             className="border border-[#d4b483]/40 bg-[#14100b] px-2 py-1 focus-visible:outline focus-visible:outline-[#eac87f]">
             <option value="idle">Breathing idle</option>
+            <option value="idle-clip">Idle (Blender VRM)</option>
+            <option value="walk">Walk (Blender VRM)</option>
+            <option value="run">Run (Blender VRM)</option>
             <option value="rest">Static pose</option>
           </select>
         </label>

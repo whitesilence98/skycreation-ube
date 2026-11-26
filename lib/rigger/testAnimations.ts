@@ -17,6 +17,13 @@
 
 import * as THREE from 'three';
 import { SECONDARY_BONE_DEFS, type RigBoneName } from '@/lib/rigger/vrmSkeleton';
+import {
+  applyGlbTestAnimation,
+  getGlbAnimationDuration,
+  preloadGlbAnimations,
+} from '@/lib/animations/retargetGlbAnimation';
+
+export { getGlbAnimationDuration, preloadGlbAnimations };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -191,6 +198,12 @@ export function driveTestAnimation<TName extends string = RigBoneName>(
   }
 
   const t = elapsedSeconds;
+
+  // Prefer Blender-authored VRM 1.0 GLB locomotion clips when loaded.
+  if (applyGlbTestAnimation(boneMap, restQuats, mode, t)) {
+    holdSecondaryBonesAtRest(boneMap, restQuats);
+    return;
+  }
 
   // ── Idle: relaxed pose-relative arms + gentle breathing ─────────────────
   if (mode === 'idle') {
