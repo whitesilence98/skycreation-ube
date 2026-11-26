@@ -143,7 +143,7 @@ function WuxiaColorSection({
               aria-label={swatch.name}
               aria-pressed={active}
               className={cn(
-                'h-6 w-full rounded-[1px] border transition-transform hover:scale-105 disabled:opacity-40',
+                'min-h-[24px] h-6 w-full rounded-[1px] border transition-transform hover:scale-105 disabled:opacity-40',
                 active ? 'border-[#f0dfbe] ring-1 ring-[#eac87f] scale-105' : 'border-white/15',
               )}
               style={{ backgroundColor: swatch.hex }}
@@ -176,6 +176,7 @@ interface OverlayControlsProps {
   swatchCols?: number;
   defaultColor: string;
   showCoverage?: boolean;
+  headerExtra?: React.ReactNode;
   onColorChange: (hex: string) => void;
   onOpacityChange: (value: number) => void;
   onBlendChange: (blend: OverlayBlend) => void;
@@ -193,6 +194,7 @@ function WuxiaOverlayLayerControls({
   swatchCols = 8,
   defaultColor,
   showCoverage = false,
+  headerExtra,
   onColorChange,
   onOpacityChange,
   onBlendChange,
@@ -212,11 +214,14 @@ function WuxiaOverlayLayerControls({
         <span className="truncate font-mono text-[10px] text-[#e8d4af]" title={layerLabel}>
           {layerLabel}
         </span>
-        {subtypeBadge && (
-          <span className="shrink-0 rounded-[2px] bg-[#dfba73]/15 px-1.5 py-0.5 font-mono text-[10px] text-[#dfba73]">
-            {subtypeBadge}
-          </span>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {headerExtra}
+          {subtypeBadge && (
+            <span className="rounded-[2px] bg-[#dfba73]/15 px-1.5 py-0.5 font-mono text-[10px] text-[#dfba73]">
+              {subtypeBadge}
+            </span>
+          )}
+        </div>
       </div>
 
       <WuxiaColorSection
@@ -317,12 +322,11 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
   const lashesOpacity = useCharacter((s) => s.lashesOpacity);
   const setLashesOpacity = useCharacter((s) => s.setLashesOpacity);
 
-  // ── 4. Multi-Layer Makeup & Tattoo Stack ───────────────────────────
+  // ── 4. Overlay Layer Stack State (single-select replacement per slot) ──
   const overlayLayers = useCharacter((s) => s.overlayLayers);
   const activeOverlay = useCharacter((s) => s.activeOverlay);
   const setActiveOverlay = useCharacter((s) => s.setActiveOverlay);
-  const toggleOverlay = useCharacter((s) => s.toggleOverlay);
-  const clearOverlays = useCharacter((s) => s.clearOverlays);
+  const setOverlayLayers = useCharacter((s) => s.setOverlayLayers);
   const setOverlayOpacity = useCharacter((s) => s.setOverlayOpacity);
   const setOverlayColor = useCharacter((s) => s.setOverlayColor);
   const setOverlayBlend = useCharacter((s) => s.setOverlayBlend);
@@ -367,7 +371,7 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
   }, [activeSection]);
 
-  // Lookup maps so hash IDs (e.g. `makeup-2232d0e2c7056918`) resolve reliably via detectSubtype()
+  // Lookup maps so hash IDs resolve reliably via detectSubtype()
   const makeupEntryById = useMemo(
     () => new Map(((catalogues.makeup ?? []) as CatalogueEntry[]).map((e) => [e.id, e])),
     [catalogues.makeup],
@@ -379,7 +383,13 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
 
   const getLayerSubtype = (layer: OverlayLayer): Exclude<MakeupCategory, 'ALL'> => {
     const entry = makeupEntryById.get(layer.id);
-    return entry ? detectSubtype(entry) : 'OVERLAYS';
+    if (entry) return detectSubtype(entry);
+    const low = layer.id.toLowerCase();
+    if (low.includes('lip')) return 'LIPS';
+    if (low.includes('blush')) return 'BLUSH';
+    if (low.includes('eyeliner') || low.includes('liner')) return 'EYELINER';
+    if (low.includes('eyeshadow') || low.includes('shadow')) return 'EYESHADOW';
+    return 'OVERLAYS';
   };
 
   const getLayerDisplayName = (layer: OverlayLayer): string => {
@@ -396,42 +406,38 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
     [activeSection],
   );
 
-  const lipLayers = useMemo(
-    () => overlayLayers.filter((l) => l.kind === 'makeup' && getLayerSubtype(l) === 'LIPS'),
+  const activeLipLayer = useMemo(
+    () => overlayLayers.find((l) => l.kind === 'makeup' && getLayerSubtype(l) === 'LIPS'),
     [overlayLayers, makeupEntryById],
   );
-  const blushLayers = useMemo(
-    () => overlayLayers.filter((l) => l.kind === 'makeup' && getLayerSubtype(l) === 'BLUSH'),
+  const activeBlushLayer = useMemo(
+    () => overlayLayers.find((l) => l.kind === 'makeup' && getLayerSubtype(l) === 'BLUSH'),
     [overlayLayers, makeupEntryById],
   );
-  const eyeMakeupLayers = useMemo(
-    () =>
-      overlayLayers.filter((l) => {
-        if (l.kind !== 'makeup') return false;
-        const sub = getLayerSubtype(l);
-        return sub === 'EYELINER' || sub === 'EYESHADOW';
-      }),
+  const activeEyelinerLayer = useMemo(
+    () => overlayLayers.find((l) => l.kind === 'makeup' && getLayerSubtype(l) === 'EYELINER'),
     [overlayLayers, makeupEntryById],
   );
-  const tattooLayers = useMemo(
-    () => overlayLayers.filter((l) => l.kind === 'tattoo'),
+  const activeEyeshadowLayer = useMemo(
+    () => overlayLayers.find((l) => l.kind === 'makeup' && getLayerSubtype(l) === 'EYESHADOW'),
+    [overlayLayers, makeupEntryById],
+  );
+  const activeEyeLayer = useMemo(() => {
+    if (eyeMakeupFilter === 'EYELINER') return activeEyelinerLayer;
+    if (eyeMakeupFilter === 'EYESHADOW') return activeEyeshadowLayer;
+    if (activeEyelinerLayer && `makeup:${activeEyelinerLayer.id}` === activeOverlay) {
+      return activeEyelinerLayer;
+    }
+    if (activeEyeshadowLayer && `makeup:${activeEyeshadowLayer.id}` === activeOverlay) {
+      return activeEyeshadowLayer;
+    }
+    return activeEyelinerLayer ?? activeEyeshadowLayer;
+  }, [eyeMakeupFilter, activeEyelinerLayer, activeEyeshadowLayer, activeOverlay]);
+
+  const activeTattooLayer = useMemo(
+    () => overlayLayers.find((l) => l.kind === 'tattoo'),
     [overlayLayers],
   );
-
-  const activeLipLayer =
-    lipLayers.find((l) => `makeup:${l.id}` === activeOverlay) ?? lipLayers[0];
-  const activeBlushLayer =
-    blushLayers.find((l) => `makeup:${l.id}` === activeOverlay) ?? blushLayers[0];
-  const activeEyeLayer =
-    eyeMakeupLayers.find((l) => `makeup:${l.id}` === activeOverlay) ?? eyeMakeupLayers[0];
-  const activeTattooLayer =
-    tattooLayers.find((l) => `tattoo:${l.id}` === activeOverlay) ?? tattooLayers[0];
-
-  const isOverlaySection =
-    currentSection?.id === 'lip_makeup' ||
-    currentSection?.id === 'eye_makeup' ||
-    currentSection?.id === 'blush' ||
-    currentSection?.id === 'accessory';
 
   // Items for current sub-category with search + subtype filtering
   const categoryItems = useMemo<MakeupItemEntry[]>(() => {
@@ -448,7 +454,7 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
       });
     };
 
-    if (id === 'skin_texture' || id === 'foundation') {
+    if (id === 'skin_texture') {
       const skins = assetOptions(manifest, 'skin');
       if (skins.length > 0) {
         return filterBySearch(
@@ -465,6 +471,10 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
       return filterBySearch(
         raw.filter((e) => !e.file.endsWith('_n.dds') && (e.mapRole ?? 'albedo') === 'albedo'),
       );
+    }
+
+    if (id === 'foundation') {
+      return [];
     }
 
     if (id === 'brows') {
@@ -548,51 +558,72 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
     const { id } = currentSection;
 
     if (item === null) {
-      if (id === 'skin_texture' || id === 'foundation') return !selection.skin;
+      if (id === 'skin_texture') return !selection.skin;
       if (id === 'brows') return !selection.brows;
       if (id === 'pupils') return !selection.eyes;
-      if (id === 'lip_makeup') return lipLayers.length === 0;
-      if (id === 'blush') return blushLayers.length === 0;
-      if (id === 'eye_makeup') return eyeMakeupLayers.length === 0;
-      if (id === 'accessory') return tattooLayers.length === 0;
+      if (id === 'lip_makeup') return !activeLipLayer;
+      if (id === 'blush') return !activeBlushLayer;
+      if (id === 'eye_makeup') {
+        if (eyeMakeupFilter === 'EYELINER') return !activeEyelinerLayer;
+        if (eyeMakeupFilter === 'EYESHADOW') return !activeEyeshadowLayer;
+        return !activeEyelinerLayer && !activeEyeshadowLayer;
+      }
+      if (id === 'accessory') return !activeTattooLayer;
       if (id === 'lashes') return !selection.lashes;
       return false;
     }
 
-    if (id === 'skin_texture' || id === 'foundation') return selection.skin === item.id;
+    if (id === 'skin_texture') return selection.skin === item.id;
     if (id === 'brows') return selection.brows === item.id;
     if (id === 'pupils') return selection.eyes === item.id;
-    if (id === 'lip_makeup') return lipLayers.some((l) => l.id === item.id);
-    if (id === 'blush') return blushLayers.some((l) => l.id === item.id);
-    if (id === 'eye_makeup') return eyeMakeupLayers.some((l) => l.id === item.id);
-    if (id === 'accessory') return tattooLayers.some((l) => l.id === item.id);
+    if (id === 'lip_makeup') return activeLipLayer?.id === item.id;
+    if (id === 'blush') return activeBlushLayer?.id === item.id;
+    if (id === 'eye_makeup') {
+      return activeEyelinerLayer?.id === item.id || activeEyeshadowLayer?.id === item.id;
+    }
+    if (id === 'accessory') return activeTattooLayer?.id === item.id;
     if (id === 'lashes') return selection.lashes === item.id;
     return false;
   };
 
-  const toggleOrActivateOverlay = (
-    kind: 'makeup' | 'tattoo',
-    item: MakeupItemEntry,
+  /**
+   * Restores the clean single-select replacement behavior per category/subtype:
+   * swapping a tile replaces that category's active style while preserving custom
+   * color, opacity, blend mode and coverage (instead of stacking or resetting).
+   */
+  const replaceCategoryOverlay = (
+    matchesSlot: (layer: OverlayLayer) => boolean,
+    nextItem: { kind: 'makeup' | 'tattoo'; id: string } | null,
+    prevLayer: OverlayLayer | undefined,
     defaults: { color: string; opacity: number },
-    toastLabel: string,
+    toastMsg: string,
   ) => {
-    const existing = overlayLayers.find((l) => l.kind === kind && l.id === item.id);
-    if (existing) {
-      toggleOverlay(existing);
-      if (`${kind}:${existing.id}` === activeOverlay) {
+    const remaining = overlayLayers.filter((l) => !matchesSlot(l));
+    if (!nextItem) {
+      setOverlayLayers(remaining);
+      if (prevLayer && activeOverlay === `${prevLayer.kind}:${prevLayer.id}`) {
         setActiveOverlay(null);
       }
-      showToast?.(`Removed ${toastLabel}`);
+      showToast?.(toastMsg);
       return;
     }
-    toggleOverlay({
-      kind,
-      id: item.id,
-      color: defaults.color,
-      opacity: defaults.opacity,
-    });
-    setActiveOverlay(`${kind}:${item.id}`);
-    showToast?.(toastLabel);
+
+    if (prevLayer && prevLayer.id === nextItem.id) {
+      setActiveOverlay(`${nextItem.kind}:${nextItem.id}`);
+      return;
+    }
+
+    const created: OverlayLayer = {
+      kind: nextItem.kind,
+      id: nextItem.id,
+      color: prevLayer?.color ?? defaults.color,
+      opacity: prevLayer?.opacity ?? defaults.opacity,
+      ...(prevLayer?.blend ? { blend: prevLayer.blend } : {}),
+      ...(prevLayer?.coverage !== undefined ? { coverage: prevLayer.coverage } : {}),
+    };
+    setOverlayLayers([...remaining, created]);
+    setActiveOverlay(`${created.kind}:${created.id}`);
+    showToast?.(toastMsg);
   };
 
   const handleSelectItem = (item: MakeupItemEntry | null) => {
@@ -600,7 +631,7 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
     const { id } = currentSection;
 
     if (item === null) {
-      if (id === 'skin_texture' || id === 'foundation') {
+      if (id === 'skin_texture') {
         setAssets({ skin: undefined, body: undefined });
         showToast?.('Cleared skin texture');
       } else if (id === 'brows') {
@@ -610,21 +641,48 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
         setAssets({ eyes: undefined });
         showToast?.('Cleared pupil texture');
       } else if (id === 'lip_makeup') {
-        lipLayers.forEach((l) => toggleOverlay(l));
-        if (activeLipLayer && `makeup:${activeLipLayer.id}` === activeOverlay) setActiveOverlay(null);
-        showToast?.('Cleared lip makeup');
+        replaceCategoryOverlay(
+          (l) => l.kind === 'makeup' && getLayerSubtype(l) === 'LIPS',
+          null,
+          activeLipLayer,
+          { color: '#961c28', opacity: 0.75 },
+          'Cleared lip makeup',
+        );
       } else if (id === 'blush') {
-        blushLayers.forEach((l) => toggleOverlay(l));
-        if (activeBlushLayer && `makeup:${activeBlushLayer.id}` === activeOverlay) setActiveOverlay(null);
-        showToast?.('Cleared blush');
+        replaceCategoryOverlay(
+          (l) => l.kind === 'makeup' && getLayerSubtype(l) === 'BLUSH',
+          null,
+          activeBlushLayer,
+          { color: '#db6e5e', opacity: 0.6 },
+          'Cleared blush',
+        );
       } else if (id === 'eye_makeup') {
-        eyeMakeupLayers.forEach((l) => toggleOverlay(l));
-        if (activeEyeLayer && `makeup:${activeEyeLayer.id}` === activeOverlay) setActiveOverlay(null);
-        showToast?.('Cleared eye makeup');
+        const matchesEyeFilter = (l: OverlayLayer) => {
+          if (l.kind !== 'makeup') return false;
+          const sub = getLayerSubtype(l);
+          if (eyeMakeupFilter === 'EYELINER') return sub === 'EYELINER';
+          if (eyeMakeupFilter === 'EYESHADOW') return sub === 'EYESHADOW';
+          return sub === 'EYELINER' || sub === 'EYESHADOW';
+        };
+        replaceCategoryOverlay(
+          matchesEyeFilter,
+          null,
+          activeEyeLayer,
+          { color: '#1c1c1f', opacity: 0.75 },
+          eyeMakeupFilter === 'EYELINER'
+            ? 'Cleared eyeliner'
+            : eyeMakeupFilter === 'EYESHADOW'
+              ? 'Cleared eyeshadow'
+              : 'Cleared eye makeup',
+        );
       } else if (id === 'accessory') {
-        tattooLayers.forEach((l) => toggleOverlay(l));
-        if (activeTattooLayer && `tattoo:${activeTattooLayer.id}` === activeOverlay) setActiveOverlay(null);
-        showToast?.('Cleared warpaint / accessory');
+        replaceCategoryOverlay(
+          (l) => l.kind === 'tattoo',
+          null,
+          activeTattooLayer,
+          { color: '#1a1412', opacity: 0.8 },
+          'Cleared warpaint / accessory',
+        );
       } else if (id === 'lashes') {
         setAssets({ lashes: undefined });
         showToast?.('Cleared eyelashes');
@@ -639,7 +697,7 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
           ? makeupLabel(item as CatalogueEntry)
           : item.label || item.file || item.id;
 
-    if (id === 'skin_texture' || id === 'foundation') {
+    if (id === 'skin_texture') {
       const bodyId = item.id.replace('skin-', 'body-');
       setAssets({ skin: item.id, body: bodyId });
       showToast?.(`Selected ${cleanName}`);
@@ -650,31 +708,37 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
       setAssets({ eyes: item.id });
       showToast?.(`Selected ${cleanName}`);
     } else if (id === 'lip_makeup') {
-      toggleOrActivateOverlay(
-        'makeup',
-        item,
+      replaceCategoryOverlay(
+        (l) => l.kind === 'makeup' && getLayerSubtype(l) === 'LIPS',
+        { kind: 'makeup', id: item.id },
+        activeLipLayer,
         { color: '#961c28', opacity: 0.75 },
         `Lip Makeup: ${cleanName}`,
       );
     } else if (id === 'blush') {
-      toggleOrActivateOverlay(
-        'makeup',
-        item,
+      replaceCategoryOverlay(
+        (l) => l.kind === 'makeup' && getLayerSubtype(l) === 'BLUSH',
+        { kind: 'makeup', id: item.id },
+        activeBlushLayer,
         { color: '#db6e5e', opacity: 0.6 },
         `Blush: ${cleanName}`,
       );
     } else if (id === 'eye_makeup') {
-      const isLiner = item.subtype === 'EYELINER';
-      toggleOrActivateOverlay(
-        'makeup',
-        item,
-        { color: isLiner ? '#0c0c0c' : '#541926', opacity: isLiner ? 0.85 : 0.7 },
-        `${isLiner ? 'Eyeliner' : 'Eyeshadow'}: ${cleanName}`,
+      const targetSub: 'EYELINER' | 'EYESHADOW' =
+        item.subtype === 'EYELINER' ? 'EYELINER' : 'EYESHADOW';
+      const prevSubLayer = targetSub === 'EYELINER' ? activeEyelinerLayer : activeEyeshadowLayer;
+      replaceCategoryOverlay(
+        (l) => l.kind === 'makeup' && getLayerSubtype(l) === targetSub,
+        { kind: 'makeup', id: item.id },
+        prevSubLayer,
+        { color: targetSub === 'EYELINER' ? '#0c0c0c' : '#541926', opacity: targetSub === 'EYELINER' ? 0.85 : 0.7 },
+        `${targetSub === 'EYELINER' ? 'Eyeliner' : 'Eyeshadow'}: ${cleanName}`,
       );
     } else if (id === 'accessory') {
-      toggleOrActivateOverlay(
-        'tattoo',
-        item,
+      replaceCategoryOverlay(
+        (l) => l.kind === 'tattoo',
+        { kind: 'tattoo', id: item.id },
+        activeTattooLayer,
         { color: '#1a1412', opacity: 0.8 },
         `Warpaint: ${cleanName}`,
       );
@@ -696,11 +760,15 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
     setSearchQuery('');
   };
 
+  const hasLddEyeMeshes = (catalogues.eyeMesh ?? []).some((m) => m.id.startsWith('eyeMesh-ldd-'));
+  const showItemGrid = currentSection !== null && currentSection.id !== 'foundation';
+  const showSearchInput = showItemGrid && currentSection.id !== 'skin_texture' && categoryItems.length > 8;
+
   return (
-    <div className="flex items-start gap-5 select-none text-white">
+    <div className="flex items-start gap-3 sm:gap-5 select-none text-white">
       <WuxiaSubCategoryRail activeTab="makeup" onSelectTab={() => setActiveSection(null)} />
 
-      <div className="flex flex-col w-[300px] md:w-[330px]">
+      <div className="flex flex-col w-[260px] sm:w-[300px] md:w-[330px]">
         {activeSection === null ? (
           /* ── VIEW 1: MAKEUP ROOT MENU ─────────────────────────────── */
           <div className="flex flex-col">
@@ -744,7 +812,7 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
               onBack={() => setActiveSection(null)}
             />
 
-            <div className="mt-2.5 flex items-center justify-between">
+            <div className="mt-2.5 flex items-center justify-between gap-2">
               <WuxiaRibbonPill
                 label={currentSection?.label ?? ''}
                 icon={
@@ -783,70 +851,41 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
                 >
                   {linkBrowToHair ? '✦ LINKED TO HAIR' : 'CUSTOM COLOR'}
                 </button>
+              ) : currentSection?.id === 'pupils' ? (
+                <button
+                  type="button"
+                  onClick={() => setEyeShellsEnabled(!eyeShellsEnabled)}
+                  className={cn(
+                    'min-h-[24px] rounded-xs border px-2 py-0.5 font-mono text-[10px] tracking-wider transition-colors',
+                    eyeShellsEnabled
+                      ? 'border-[#dfba73]/50 bg-[#dfba73]/15 text-[#f2dfbe]'
+                      : 'border-white/10 bg-black/40 text-[#8e8c95] hover:text-white',
+                  )}
+                  title="Toggle LDD Wetness & Eyelid Shadow overlay shells"
+                >
+                  SHELLS {eyeShellsEnabled ? 'ON' : 'OFF'}
+                </button>
               ) : null}
             </div>
 
-            {/* Sub-Filters */}
+            {/* Single compact Sub-Filter Strip */}
             {currentSection?.id === 'pupils' && (
-              <div className="mt-2 flex flex-col gap-1.5 border-b border-white/10 pb-2 font-mono text-[10px]">
-                <div className="flex flex-wrap items-center gap-1">
-                  {(['ALL', 'LDD PBR', 'ZHIZHEN', 'UBE'] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => setEyeFilter(tab)}
-                      className={cn(
-                        'min-h-[24px] px-2 py-0.5 rounded-[2px] transition-colors',
-                        eyeFilter === tab
-                          ? 'bg-[#dfba73]/25 text-[#f2dfbe] font-bold'
-                          : 'text-[#8e8c95] hover:text-white',
-                      )}
-                    >
-                      {tab}
-                    </button>
-                  ))}
+              <div className="mt-2 flex flex-wrap items-center gap-1 border-b border-white/10 pb-1.5 font-mono text-[10px]">
+                {(['ALL', 'LDD PBR', 'ZHIZHEN', 'UBE'] as const).map((tab) => (
                   <button
+                    key={tab}
                     type="button"
-                    onClick={() => setEyeShellsEnabled(!eyeShellsEnabled)}
+                    onClick={() => setEyeFilter(tab)}
                     className={cn(
-                      'ml-auto min-h-[24px] px-2 py-0.5 rounded-[2px] border transition-colors',
-                      eyeShellsEnabled
-                        ? 'border-[#dfba73]/50 bg-[#dfba73]/15 text-[#f2dfbe]'
-                        : 'border-white/10 text-[#8e8c95] hover:text-white',
+                      'min-h-[24px] px-2 py-0.5 rounded-[2px] transition-colors',
+                      eyeFilter === tab
+                        ? 'bg-[#dfba73]/25 text-[#f2dfbe] font-bold'
+                        : 'text-[#8e8c95] hover:text-white',
                     )}
-                    title="Toggle LDD Wetness & Eyelid Shadow overlay shells"
                   >
-                    SHELLS {eyeShellsEnabled ? 'ON' : 'OFF'}
+                    {tab}
                   </button>
-                </div>
-
-                {/* Eye Mesh Selector (Default + LDD Inner 1-4 + Glow) */}
-                {(catalogues.eyeMesh ?? []).some((m) => m.id.startsWith('eyeMesh-ldd-')) && (
-                  <div className="flex items-center gap-1.5 pt-0.5">
-                    <span className="shrink-0 text-[#9f9da6]">MESH</span>
-                    <select
-                      aria-label="Eye Mesh Model"
-                      value={selection.eyeMesh ?? ''}
-                      onChange={(e) => {
-                        const val = e.target.value || undefined;
-                        setAssets({ eyeMesh: val });
-                        showToast?.(val ? 'Updated eye mesh' : 'Reset to default UBE eye mesh');
-                      }}
-                      className="min-h-[24px] w-full rounded-[2px] border border-white/15 bg-black/50 px-2 py-0.5 text-[10px] text-[#e8d4af] outline-none focus:border-[#eac87f]"
-                    >
-                      <option value="" className="bg-[#12100d] text-[#e8d4af]">
-                        Default UBE (eyesfemale)
-                      </option>
-                      {(catalogues.eyeMesh ?? [])
-                        .filter((m) => m.id.startsWith('eyeMesh-ldd-'))
-                        .map((m) => (
-                          <option key={m.id} value={m.id} className="bg-[#12100d] text-[#e8d4af]">
-                            {m.label || m.file}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                )}
+                ))}
               </div>
             )}
 
@@ -870,8 +909,8 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
               </div>
             )}
 
-            {/* Compact Search Filter for Catalogue Grids */}
-            {currentSection?.id !== 'skin_texture' && currentSection?.id !== 'foundation' && (
+            {/* Compact Search Filter only on large asset grids */}
+            {(showSearchInput || searchQuery.length > 0) && (
               <div className="relative mt-2 flex items-center">
                 <input
                   type="text"
@@ -879,7 +918,7 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={`Search ${currentSection?.label.toLowerCase()}…`}
                   aria-label={`Search ${currentSection?.label}`}
-                  className="min-h-[28px] w-full rounded-[2px] border border-white/10 bg-black/40 px-2.5 pr-7 font-mono text-[10px] text-[#efece6] placeholder:text-[#8e8c95] focus:border-[#dfba73] focus:outline-none"
+                  className="min-h-[26px] w-full rounded-[2px] border border-white/10 bg-black/40 px-2.5 pr-7 font-mono text-[10px] text-[#efece6] placeholder:text-[#8e8c95] focus:border-[#dfba73] focus:outline-none"
                 />
                 {searchQuery && (
                   <button
@@ -894,149 +933,102 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
               </div>
             )}
 
-            {/* Applied Multi-Layer Makeup Stack Bar (supports Eyeliner + Eyeshadow + Blush + Lips + Warpaint up to 8 layers) */}
-            {isOverlaySection && overlayLayers.length > 0 && (
-              <div className="mt-2 flex flex-col gap-1 rounded-[2px] border border-[#d4b483]/20 bg-black/35 p-2">
-                <div className="flex items-center justify-between font-mono text-[10px]">
-                  <span className="text-[#c4b595] tracking-wider uppercase">
-                    APPLIED LAYERS ({overlayLayers.length}/8)
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      clearOverlays('makeup');
-                      clearOverlays('tattoo');
-                      setActiveOverlay(null);
-                      showToast?.('Cleared all makeup & warpaint layers');
-                    }}
-                    className="min-h-[24px] px-1.5 font-mono text-[10px] text-[#b9a88a] hover:text-[#f0dfbe]"
-                  >
-                    [CLEAR ALL]
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {overlayLayers.map((layer) => {
-                    const key = `${layer.kind}:${layer.id}`;
-                    const isFocused = activeOverlay === key;
-                    const label = getLayerDisplayName(layer);
-                    return (
-                      <div
-                        key={key}
-                        className={cn(
-                          'flex items-center gap-1 rounded-[2px] border px-1.5 py-0.5 font-mono text-[10px]',
-                          isFocused
-                            ? 'border-[#eac87f] bg-[#d4b483]/20 text-[#f2dfbe]'
-                            : 'border-white/10 bg-black/40 text-[#c4b595]',
-                        )}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setActiveOverlay(key)}
-                          className="flex items-center gap-1 max-w-[110px] truncate"
-                          title={`Edit ${label}`}
-                        >
-                          <span
-                            className="h-2.5 w-2.5 shrink-0 rounded-full border border-white/30"
-                            style={{ backgroundColor: layer.color }}
-                            aria-hidden
-                          />
-                          <span className="truncate">{label}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            toggleOverlay(layer);
-                            if (activeOverlay === key) setActiveOverlay(null);
-                          }}
-                          aria-label={`Remove ${label}`}
-                          className="ml-0.5 text-[#8e8c95] hover:text-white"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
+            {/* 4x4 ItemTile Grid (clean breathable height without overlay-chip clutter) */}
+            {showItemGrid && (
+              <div className="mt-2.5 grid grid-cols-4 gap-2 max-h-[195px] overflow-y-auto scrollbar-none pr-1">
+                <ItemTile
+                  id="none"
+                  title="None"
+                  isSelected={isItemActive(null)}
+                  onClick={() => handleSelectItem(null)}
+                  thumbnail={
+                    <div className="flex h-full w-full items-center justify-center text-[#9f9da6] group-hover:text-white transition-colors">
+                      <span className="text-xl font-light leading-none">⊘</span>
+                    </div>
+                  }
+                />
+
+                {categoryItems.map((item) => {
+                  const isSelected = isItemActive(item);
+                  const thumbKind =
+                    currentSection?.categoryKind ??
+                    (currentSection?.id === 'lashes' ? 'lashes' : 'makeup');
+                  const thumbSrc =
+                    (item as { thumbnailUrl?: string }).thumbnailUrl ??
+                    item.texture ??
+                    (item.file?.startsWith('/')
+                      ? item.file
+                      : convertUrl({ kind: thumbKind, id: item.id, mode: 'thumb' }));
+
+                  const displayTitle =
+                    currentSection?.id === 'accessory'
+                      ? tattooLabel(item as CatalogueEntry)
+                      : currentSection?.id === 'lip_makeup' ||
+                          currentSection?.id === 'blush' ||
+                          currentSection?.id === 'eye_makeup'
+                        ? makeupLabel(item as CatalogueEntry)
+                        : item.label || item.file?.replace(/\.dds$/i, '') || item.id;
+
+                  return (
+                    <ItemTile
+                      key={item.id}
+                      id={item.id}
+                      title={displayTitle}
+                      isSelected={isSelected}
+                      onClick={() => handleSelectItem(item)}
+                      thumbnail={
+                        <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[2px] bg-[#1a1b20]">
+                          {thumbSrc ? (
+                            <img
+                              src={thumbSrc}
+                              alt={displayTitle}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          ) : null}
+                          <span className="absolute bottom-0.5 inset-x-0.5 truncate text-center font-mono text-[10px] text-white/90 pointer-events-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+                            {displayTitle}
+                          </span>
+                        </div>
+                      }
+                    />
+                  );
+                })}
+
+                {categoryItems.length === 0 && (
+                  <div className="col-span-3 flex items-center justify-center rounded border border-dashed border-white/10 p-2 text-center font-mono text-[10px] text-[#8e8c95]">
+                    No items in {currentSection?.label}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* 4x4 ItemTile Grid */}
-            <div className="mt-2.5 grid grid-cols-4 gap-2 max-h-[195px] overflow-y-auto scrollbar-none pr-1">
-              <ItemTile
-                id="none"
-                title="None"
-                isSelected={isItemActive(null)}
-                onClick={() => handleSelectItem(null)}
-                thumbnail={
-                  <div className="flex h-full w-full items-center justify-center text-[#9f9da6] group-hover:text-white transition-colors">
-                    <span className="text-xl font-light leading-none">⊘</span>
-                  </div>
-                }
-              />
-
-              {categoryItems.map((item) => {
-                const isSelected = isItemActive(item);
-                const thumbKind =
-                  currentSection?.categoryKind ??
-                  (currentSection?.id === 'lashes' ? 'lashes' : 'makeup');
-                const thumbSrc =
-                  (item as { thumbnailUrl?: string }).thumbnailUrl ??
-                  item.texture ??
-                  (item.file?.startsWith('/')
-                    ? item.file
-                    : convertUrl({ kind: thumbKind, id: item.id, mode: 'thumb' }));
-
-                const displayTitle =
-                  currentSection?.id === 'accessory'
-                    ? tattooLabel(item as CatalogueEntry)
-                    : currentSection?.id === 'lip_makeup' ||
-                        currentSection?.id === 'blush' ||
-                        currentSection?.id === 'eye_makeup'
-                      ? makeupLabel(item as CatalogueEntry)
-                      : item.label || item.file?.replace(/\.dds$/i, '') || item.id;
-
-                return (
-                  <ItemTile
-                    key={item.id}
-                    id={item.id}
-                    title={displayTitle}
-                    isSelected={isSelected}
-                    onClick={() => handleSelectItem(item)}
-                    thumbnail={
-                      <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[2px] bg-[#1a1b20]">
-                        {thumbSrc ? (
-                          <img
-                            src={thumbSrc}
-                            alt={displayTitle}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.display = 'none';
-                            }}
-                          />
-                        ) : null}
-                        <span className="absolute bottom-0.5 inset-x-0.5 truncate text-center font-mono text-[10px] text-white/90 pointer-events-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
-                          {displayTitle}
-                        </span>
-                      </div>
-                    }
-                  />
-                );
-              })}
-
-              {categoryItems.length === 0 && (
-                <div className="col-span-3 flex items-center justify-center rounded border border-dashed border-white/10 p-2 text-center font-mono text-[10px] text-[#8e8c95]">
-                  No items in {currentSection?.label}
-                </div>
-              )}
-            </div>
-
             {/* ── DEDICATED CONTROLS & COLOR ENGINES PER SUB-CATEGORY ── */}
-            <div className="mt-3 flex flex-col gap-2.5 border-t border-white/10 pt-2.5 max-h-[calc(100vh-420px)] overflow-y-auto scrollbar-none pr-1">
-              {(currentSection?.id === 'skin_texture' || currentSection?.id === 'foundation') && (
+            <div
+              className={cn(
+                'mt-3 flex flex-col gap-2.5 overflow-y-auto scrollbar-none pr-1',
+                showItemGrid
+                  ? 'border-t border-white/10 pt-2.5 max-h-[calc(100vh-485px)]'
+                  : 'max-h-[calc(100vh-240px)]',
+              )}
+            >
+              {currentSection?.id === 'skin_texture' && (
+                <WuxiaColorSection
+                  label="Quick Skin Tone"
+                  color={skinColor || '#ffffff'}
+                  onChange={setSkinColor}
+                  swatches={SKIN_PALETTE_SWATCHES}
+                  cols={8}
+                />
+              )}
+
+              {currentSection?.id === 'foundation' && (
                 <div className="flex flex-col gap-2.5">
                   <WuxiaColorSection
-                    label="Skin Tone & PBR Shading"
+                    label="Foundation Tone & Tint"
                     color={skinColor || '#ffffff'}
                     onChange={setSkinColor}
                     swatches={SKIN_PALETTE_SWATCHES}
@@ -1115,6 +1107,33 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
                       </div>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {currentSection?.id === 'pupils' && hasLddEyeMeshes && (
+                <div className="flex items-center gap-2 font-mono text-[10px]">
+                  <span className="shrink-0 text-[#9f9da6]">EYE MESH</span>
+                  <select
+                    aria-label="Eye Mesh Model"
+                    value={selection.eyeMesh ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value || undefined;
+                      setAssets({ eyeMesh: val });
+                      showToast?.(val ? 'Updated eye mesh' : 'Reset to default UBE eye mesh');
+                    }}
+                    className="min-h-[26px] w-full rounded-[2px] border border-white/15 bg-black/50 px-2 py-0.5 text-[10px] text-[#e8d4af] outline-none focus:border-[#eac87f]"
+                  >
+                    <option value="" className="bg-[#12100d] text-[#e8d4af]">
+                      Default UBE (eyesfemale)
+                    </option>
+                    {(catalogues.eyeMesh ?? [])
+                      .filter((m) => m.id.startsWith('eyeMesh-ldd-'))
+                      .map((m) => (
+                        <option key={m.id} value={m.id} className="bg-[#12100d] text-[#e8d4af]">
+                          {m.label || m.file}
+                        </option>
+                      ))}
+                  </select>
                 </div>
               )}
 
@@ -1207,6 +1226,33 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
                   opacityLabel="OPACITY"
                   swatches={activeEyeSwatches}
                   defaultColor="#1c1c1f"
+                  headerExtra={
+                    activeEyelinerLayer && activeEyeshadowLayer ? (
+                      <div className="flex items-center gap-0.5 rounded-[2px] border border-white/10 bg-black/50 p-0.5 font-mono text-[10px]">
+                        {[
+                          { label: 'LINER', layer: activeEyelinerLayer },
+                          { label: 'SHADOW', layer: activeEyeshadowLayer },
+                        ].map((opt) => {
+                          const editing = activeEyeLayer?.id === opt.layer.id;
+                          return (
+                            <button
+                              key={opt.label}
+                              type="button"
+                              onClick={() => setActiveOverlay(`makeup:${opt.layer.id}`)}
+                              className={cn(
+                                'min-h-[24px] px-1.5 rounded-[1px] transition-colors',
+                                editing
+                                  ? 'bg-[#dfba73]/30 text-[#f2dfbe] font-semibold'
+                                  : 'text-[#8e8c95] hover:text-white',
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : undefined
+                  }
                   onColorChange={(hex) => activeEyeLayer && setOverlayColor('makeup', activeEyeLayer.id, hex)}
                   onOpacityChange={(v) => activeEyeLayer && setOverlayOpacity('makeup', activeEyeLayer.id, v)}
                   onBlendChange={(b) => activeEyeLayer && setOverlayBlend('makeup', activeEyeLayer.id, b)}
