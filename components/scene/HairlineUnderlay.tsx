@@ -51,15 +51,12 @@ export function HairlineUnderlay({
     material.color.set(hair?.tone ?? '#1a1412');
     const alpha = hair?.alpha !== undefined ? Math.max(0.0, Math.min(1.0, hair.alpha)) : 1.0;
     const state = hairMaterialState(alpha, hair);
-    // Keep the scalp filler opaque and depth-writing whenever alpha >= 0.5 so
-    // soft blended hair cards never expose the skull or ears behind the hairline.
-    const forceOpaqueScalp = alpha >= 0.5;
-    material.opacity = forceOpaqueScalp ? 1.0 : state.opacity;
-    material.transparent = forceOpaqueScalp ? false : state.transparent;
-    material.depthWrite = forceOpaqueScalp ? true : state.depthWrite;
+    material.opacity = state.opacity;
+    material.transparent = state.transparent;
+    material.depthWrite = state.depthWrite;
     /* The scalp is a filler: even opaque it keeps a near-zero cutout, because
        dropping its faint texels would open bald patches. */
-    material.alphaTest = material.transparent ? state.alphaTest : (hair?.scalpCutoff ?? DEFAULT_HAIR.scalpCutoff);
+    material.alphaTest = state.transparent ? state.alphaTest : (hair?.scalpCutoff ?? DEFAULT_HAIR.scalpCutoff);
     material.roughness = hair?.scalpRoughness ?? DEFAULT_HAIR.scalpRoughness;
     material.metalness = hair?.scalpMetalness ?? DEFAULT_HAIR.scalpMetalness;
     material.polygonOffsetFactor = hair?.scalpPolyFactor ?? DEFAULT_HAIR.scalpPolyFactor;

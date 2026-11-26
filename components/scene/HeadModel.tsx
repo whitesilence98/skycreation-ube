@@ -197,55 +197,23 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     companionEyeUrl && companionEyeUrl !== eyeMeshUrl ? companionEyeUrl : undefined,
     'companion eye socket ref',
   )?.geometry ?? null;
-  const eyeShellsEnabled = useCharacter((s) => s.eyeShellsEnabled);
-  const selectedEyeId = useCharacter((s) => s.assetSelection.eyes);
-  const selectedEyeMeshId = useCharacter((s) => s.assetSelection.eyeMesh);
-  const isLddEyeActive =
-    Boolean(selectedEyeId?.startsWith('eyes-ldd-')) ||
-    Boolean(selectedEyeMeshId?.startsWith('eyeMesh-ldd-')) ||
-    Boolean(eyeMeshUrl?.includes('/ldd_'));
-  const lddWetnessGeo = useMeshGeometry(
-    isLddEyeActive && eyeShellsEnabled ? '/assets/preset-pack/meshes/ldd_wetness.json' : undefined,
-    'eye wetness shell',
-  )?.geometry ?? null;
-  const lddShadowGeo = useMeshGeometry(
-    isLddEyeActive && eyeShellsEnabled ? '/assets/preset-pack/meshes/ldd_shadow.json' : undefined,
-    'eye shadow shell',
-  )?.geometry ?? null;
 
-  // Automatically align un-sculpted eye meshes (e.g. LDD Inner 1..4 / Glow) and
-  // LDD Wetness/Shadow shells to the active profile's sculpted eye socket center.
-  const { eyeAlignOffset, shellAlignOffset } = useMemo(() => {
-    const BASE_UBE_EYE_CENTER = new THREE.Vector3(0, 0.0332, 0.06415);
-    const socketGeo = companionEyeGeo ?? eyeGeo;
-    if (!socketGeo) {
-      return {
-        eyeAlignOffset: [0, 0, 0] as [number, number, number],
-        shellAlignOffset: [0, 0, 0] as [number, number, number],
-      };
+  // Automatically align un-sculpted eye meshes to the active profile's sculpted eye socket center.
+  const eyeAlignOffset = useMemo(() => {
+    if (!companionEyeGeo || !eyeGeo) {
+      return [0, 0, 0] as [number, number, number];
     }
-    if (!socketGeo.boundingBox) socketGeo.computeBoundingBox();
+    if (!companionEyeGeo.boundingBox) companionEyeGeo.computeBoundingBox();
+    if (!eyeGeo.boundingBox) eyeGeo.computeBoundingBox();
     const socketCenter = new THREE.Vector3();
-    socketGeo.boundingBox?.getCenter(socketCenter);
-
-    let eyeOffset: [number, number, number] = [0, 0, 0];
-    if (companionEyeGeo && eyeGeo) {
-      if (!eyeGeo.boundingBox) eyeGeo.computeBoundingBox();
-      const activeCenter = new THREE.Vector3();
-      eyeGeo.boundingBox?.getCenter(activeCenter);
-      eyeOffset = [
-        socketCenter.x - activeCenter.x,
-        socketCenter.y - activeCenter.y,
-        socketCenter.z - activeCenter.z,
-      ];
-    }
-
-    const shellOffset: [number, number, number] = [
-      socketCenter.x - BASE_UBE_EYE_CENTER.x,
-      socketCenter.y - BASE_UBE_EYE_CENTER.y,
-      socketCenter.z - BASE_UBE_EYE_CENTER.z,
-    ];
-    return { eyeAlignOffset: eyeOffset, shellAlignOffset: shellOffset };
+    const activeCenter = new THREE.Vector3();
+    companionEyeGeo.boundingBox?.getCenter(socketCenter);
+    eyeGeo.boundingBox?.getCenter(activeCenter);
+    return [
+      socketCenter.x - activeCenter.x,
+      socketCenter.y - activeCenter.y,
+      socketCenter.z - activeCenter.z,
+    ] as [number, number, number];
   }, [companionEyeGeo, eyeGeo]);
 
   const lashesGeo = useMeshGeometry(lashesMeshUrl, 'lashes')?.geometry ?? null;
@@ -1499,60 +1467,12 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     if (eyeEmissiveState === 'loaded') {
       eyeMaterial.emissive.set('#ffffff');
       eyeMaterial.emissiveIntensity = 1.35;
-    } else if (selectedEyeMeshId?.includes('glow')) {
-      eyeMaterial.emissive.set(manifest?.eye?.iris ?? '#88ccff');
-      eyeMaterial.emissiveIntensity = 0.55;
     } else {
       eyeMaterial.emissive.set('#000000');
       eyeMaterial.emissiveIntensity = 0;
     }
     eyeMaterial.needsUpdate = true;
-  }, [eyeMaterial, eyeRoughState, eyeEmissiveState, selectedEyeMeshId, manifest?.eye?.iris]);
-
-  const wetnessMaterial = useMemo(
-    () =>
-      new THREE.MeshPhysicalMaterial({
-        color: '#ffffff',
-        transparent: true,
-        opacity: 0.72,
-        roughness: 0.02,
-        metalness: 0.0,
-        clearcoat: 1.0,
-        clearcoatRoughness: 0.01,
-        depthWrite: false,
-      }),
-    [],
-  );
-  const shadowMaterial = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: '#ffffff',
-        transparent: true,
-        opacity: 0.85,
-        roughness: 0.9,
-        metalness: 0.0,
-        depthWrite: false,
-      }),
-    [],
-  );
-  const wetnessTexState = useMaterialTexture(
-    wetnessMaterial,
-    'map',
-    isLddEyeActive && eyeShellsEnabled ? '/assets/preset-pack/textures/eyes/ldd/wetness_d.webp' : undefined,
-    { colorSpace: THREE.SRGBColorSpace, wrap: true },
-  );
-  useMaterialTexture(
-    wetnessMaterial,
-    'normalMap',
-    isLddEyeActive && eyeShellsEnabled ? '/assets/preset-pack/textures/eyes/ldd/wetness_n.png' : undefined,
-    {},
-  );
-  const shadowTexState = useMaterialTexture(
-    shadowMaterial,
-    'map',
-    isLddEyeActive && eyeShellsEnabled ? '/assets/preset-pack/textures/eyes/ldd/shadow_d.webp' : undefined,
-    { colorSpace: THREE.SRGBColorSpace, wrap: true },
-  );
+  }, [eyeMaterial, eyeRoughState, eyeEmissiveState]);
 
   const lashesTexSrc =
     parts?.lashes?.texture ??
@@ -1979,24 +1899,6 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
             position={eyeAlignOffset}
             material={eyeTexState === 'loaded' ? eyeMaterial : eyeFallbackMaterial}
             renderOrder={2}
-          />
-        )}
-        {!importedHead && isLddEyeActive && eyeShellsEnabled && lddWetnessGeo && wetnessTexState === 'loaded' && (
-          <mesh
-            name="EyeWetness"
-            geometry={lddWetnessGeo}
-            position={shellAlignOffset}
-            material={wetnessMaterial}
-            renderOrder={2.5}
-          />
-        )}
-        {!importedHead && isLddEyeActive && eyeShellsEnabled && lddShadowGeo && shadowTexState === 'loaded' && (
-          <mesh
-            name="EyeShadow"
-            geometry={lddShadowGeo}
-            position={shellAlignOffset}
-            material={shadowMaterial}
-            renderOrder={2.6}
           />
         )}
         {!importedHead && lashesGeo && (

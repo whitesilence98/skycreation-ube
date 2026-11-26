@@ -451,7 +451,7 @@ export function SkinnedPart({
         material.needsUpdate = true;
       }
     });
-  }, [slots, standardMaterials, hair]);
+  }, [slots, standardMaterials, hair?.tone, hair?.gloss, hair?.alpha]);
 
   /** Slots whose atlas has actually loaded or failed this mount. */
   const [loaded, setLoaded] = useState<ReadonlySet<number>>(() => new Set());

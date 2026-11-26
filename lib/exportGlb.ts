@@ -970,6 +970,10 @@ export function buildPackedMetalRoughnessTexture(
   // If neither texture is provided, return null to use glTF scalar factors
   if (!roughnessMap && !metalnessMap) return null;
 
+  const directRef = roughnessMap || metalnessMap;
+  if (directRef && packedTextureCache.has(directRef)) {
+    return packedTextureCache.get(directRef)!;
+  }
   const cacheKey = `orm_${textureIdentityKey(roughnessMap)}_${textureIdentityKey(metalnessMap)}_${defaultRoughness.toFixed(3)}_${defaultMetalness.toFixed(3)}`;
   if (packedTextureCache.has(cacheKey)) {
     return packedTextureCache.get(cacheKey)!;
@@ -1051,6 +1055,9 @@ export function buildPackedMetalRoughnessTexture(
     if (cacheKey) {
       packedTextureCache.set(cacheKey, packed);
     }
+    if (directRef) {
+      packedTextureCache.set(directRef, packed);
+    }
     packedTextureCache.set(packed, packed);
     return packed;
   } catch (err) {
@@ -1107,8 +1114,7 @@ export function createHeadSkinnedMesh(
   const origMat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial | undefined;
   const isSkin = name === 'Face' || name === 'Head' || name === 'Mouth';
   const isEyes = name === 'Eyes';
-  const isHairMesh = name === 'Hair' || name === 'HairlineUnderlay';
-  const isAlpha = isHairMesh || name === 'Lashes' || name === 'Brows';
+  const isAlpha = name === 'Lashes' || name === 'Brows';
   const defaultR = isEyes ? 0.04 : (isSkin ? 0.55 : (origMat?.roughness ?? 0.6));
 
   const mat = new THREE.MeshStandardMaterial({
@@ -1126,9 +1132,7 @@ export function createHeadSkinnedMesh(
     // them completely invisible / ghost transparent in Blender EEVEE.
     transparent: false,
     opacity: origMat?.opacity ?? 1.0,
-    alphaTest: isHairMesh
-      ? (origMat?.alphaTest ?? (name === 'HairlineUnderlay' ? 0.02 : 0.35))
-      : (isAlpha ? (name === 'Brows' ? 0.18 : 0.25) : 0),
+    alphaTest: isAlpha ? (name === 'Brows' ? 0.18 : 0.25) : 0,
     side: isAlpha ? THREE.DoubleSide : (origMat?.side ?? THREE.FrontSide),
     visible: origMat?.visible !== false,
   });
@@ -1159,18 +1163,9 @@ function isVisibleInBranch(obj: THREE.Object3D, stopBeforeAncestor: THREE.Object
 }
 
 function isHairExportCandidate(mesh: THREE.Mesh): boolean {
-  if (mesh.userData?.isHelper || mesh.userData?.isDepthPrepass) return false;
   const name = mesh.name || '';
   if (name === 'Body' || name === 'Face' || name === 'Hands' || name === 'Feet') return false;
-  if (
-    name === 'Clothing' ||
-    name === 'Eyes' ||
-    name === 'EyeWetness' ||
-    name === 'EyeShadow' ||
-    name === 'Mouth' ||
-    name === 'Lashes' ||
-    name === 'Brows'
-  ) {
+  if (name === 'Clothing' || name === 'Eyes' || name === 'Mouth' || name === 'Lashes' || name === 'Brows') {
     return false;
   }
   if (name === 'HairlineUnderlay' || name === 'Hair') return true;
@@ -1541,28 +1536,15 @@ export async function exportCharacterScene(
       if (headRoot.visible) hide(headRoot);
       headRoot.traverse((child) => {
         if (!(child as any).isMesh || child === headRoot) return;
-        if (child.userData?.isHelper || child.userData?.isDepthPrepass) return;
         if (!isVisibleInBranch(child, headRoot)) return;
 
         const mesh = child as THREE.Mesh;
         const firstMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
         const matName = firstMat?.name || '';
-        const rawName = mesh.name || matName;
-        const isKnownFacialPart =
-          rawName === 'FemaleHead_hph' ||
-          rawName === 'Head' ||
-          rawName === 'Face' ||
-          rawName === 'Eyes' ||
-          rawName === 'EyeWetness' ||
-          rawName === 'EyeShadow' ||
-          rawName === 'Mouth' ||
-          rawName === 'Lashes' ||
-          rawName === 'Brows';
         const alphaMasked = Boolean((firstMat as any)?.transparent || (firstMat as any)?.alphaTest > 0);
-        const hairClass =
-          !isKnownFacialPart &&
-          (classifyExportMaterial(mesh.name || matName, { alphaMasked }).isHair ||
-            (matName ? classifyExportMaterial(matName, { alphaMasked }).isHair : false));
+        const hairClass = classifyExportMaterial(mesh.name || matName, { alphaMasked }).isHair
+          || classifyExportMaterial(matName, { alphaMasked }).isHair;
+        const rawName = mesh.name || matName;
         if (!rawName && !hairClass) {
           return;
         }
@@ -1571,7 +1553,7 @@ export async function exportCharacterScene(
             ? 'Face'
             : rawName === 'HairlineUnderlay'
             ? 'HairlineUnderlay'
-            : hairClass
+            : hairClass && rawName !== 'Lashes' && rawName !== 'Brows'
             ? 'Hair'
             : rawName || 'Hair';
         const tempMesh = createHeadSkinnedMesh(
@@ -1614,10 +1596,8 @@ export async function exportCharacterScene(
     // Replaces physical materials (carrying clearcoat & sheen) and materials with
     // roughnessMap (which triggers three-stdlib's bug baking metallic=1.0 into the blue channel)
     // with clean MeshStandardMaterials having metallic: 0.0, natural roughness, and proper maps.
-    const liveHair = useCharacter.getState().hair;
     character.traverse((child) => {
       if ((child as any).isMesh) {
-        if (child.userData?.isHelper || child.userData?.isDepthPrepass) return;
         const mesh = child as THREE.Mesh;
         if (!mesh.material) return;
 
@@ -1632,21 +1612,17 @@ export async function exportCharacterScene(
           const { lower, isLashesOrBrows, isSkin, isEyes, isHair, isGarment } = classifyExportMaterial(matName, {
             alphaMasked: Boolean(std.transparent || std.alphaTest > 0),
           });
-          const isScalpCap =
-            mesh.name === 'HairlineUnderlay' ||
-            lower.includes('hairlineunderlay') ||
-            lower.includes('scalp');
           const fabric = isGarment ? detectFabricProfile(matName) : null;
           const defaultR = isEyes
             ? 0.04
             : isSkin
             ? 0.55
-            : isHair || isScalpCap
-            ? (Number.isFinite(std.roughness) ? std.roughness : 0.62)
+            : isHair
+            ? 0.62
             : isLashesOrBrows
             ? 0.72
             : fabric?.roughness ?? std.roughness ?? 0.55;
-          const defaultM = isSkin || isHair || isScalpCap || isEyes || isLashesOrBrows
+          const defaultM = isSkin || isHair || isEyes || isLashesOrBrows
             ? 0.0
             : fabric?.metalness ?? std.metalness ?? 0.0;
 
@@ -1701,16 +1677,6 @@ export async function exportCharacterScene(
             normalScale.set(Math.min(0.35, Math.abs(normalScale.x)), Math.min(0.35, Math.abs(normalScale.y)));
           }
 
-          const exportedAlphaTest = isScalpCap
-            ? (liveHair?.scalpCutoff ?? (std.alphaTest > 0 ? std.alphaTest : 0.02))
-            : isHair
-            ? (liveHair?.matCutoff ?? (std.alphaTest > 0 ? std.alphaTest : 0.35))
-            : lower.includes('brow')
-            ? 0.18
-            : isLashesOrBrows
-            ? 0.25
-            : 0;
-
           return new THREE.MeshStandardMaterial({
             name: matName || mesh.name,
             color: exportColor,
@@ -1722,8 +1688,8 @@ export async function exportCharacterScene(
             roughnessMap: packedMetalRough ?? null,
             metalnessMap: packedMetalRough ?? null,
             transparent: false,
-            opacity: needsAlphaMask ? 1.0 : (std.opacity ?? 1.0),
-            alphaTest: exportedAlphaTest,
+            opacity: std.opacity ?? 1.0,
+            alphaTest: isHair ? 0.35 : (lower.includes('brow') ? 0.18 : (isLashesOrBrows ? 0.25 : 0)),
             side: needsAlphaMask ? THREE.DoubleSide : std.side,
             visible: std.visible, // CRITICAL: preserve hidden status to prevent white untextured embedded body meshes
           });
@@ -1759,7 +1725,6 @@ export async function exportCharacterScene(
     const hairParts: THREE.SkinnedMesh[] = [];
     character.traverse((child) => {
       if (!(child as any).isSkinnedMesh) return;
-      if (child.userData?.isHelper || child.userData?.isDepthPrepass) return;
       if (!isVisibleInBranch(child, character)) return;
       const sm = child as THREE.SkinnedMesh;
       if (options?.mergeSkinAtlas && SKIN_BODY_PART_ORDER[sm.name] !== undefined) {
