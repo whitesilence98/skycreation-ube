@@ -12,15 +12,40 @@
  * of 404-ing one broken image at a time.
  */
 
-import type { CatalogueEntry, CatalogueIndex, ConvertMode } from '@/lib/mo2/types';
+import type { CatalogueEntry, CatalogueIndex, CatalogueStaticUrls, ConvertMode } from '@/lib/mo2/types';
 
 const listCache = new Map<string, Promise<CatalogueEntry[]>>();
+const staticUrlMap = new Map<string, CatalogueStaticUrls>();
 let indexCache: Promise<CatalogueIndex> | null = null;
+
+function staticKey(kind: string, id: string): string {
+  return `${kind}\0${id}`;
+}
+
+export function registerStaticCatalogueUrls(kind: string, entries: readonly CatalogueEntry[]): void {
+  for (const e of entries) {
+    const legacy = e as CatalogueEntry & {
+      texture?: string;
+      thumbnailUrl?: string;
+      normalTexture?: string;
+    };
+    const merged: CatalogueStaticUrls = {
+      ...(legacy.texture ? { atlas: legacy.texture } : {}),
+      ...(legacy.thumbnailUrl ? { thumb: legacy.thumbnailUrl, disc: legacy.thumbnailUrl } : {}),
+      ...(legacy.normalTexture ? { normal: legacy.normalTexture } : {}),
+      ...(e.urls ?? {}),
+    };
+    if (merged.atlas || merged.thumb || merged.disc || merged.normal || merged.alpha) {
+      staticUrlMap.set(staticKey(kind, e.id), merged);
+    }
+  }
+}
 
 /** Drop every cached list when the active source changes: ids and counts from
  *  the previous source must never resolve against the new one. */
 export function resetAssetCatalogues(): void {
   listCache.clear();
+  staticUrlMap.clear();
   indexCache = null;
 }
 
@@ -49,7 +74,11 @@ export function fetchCatalogue(kind: string): Promise<CatalogueEntry[]> {
     .catch(() => null)
     .then((v) => v?.entries ?? [])
     .then((entries) => {
-      if (!entries.length) listCache.delete(kind);
+      if (!entries.length) {
+        listCache.delete(kind);
+      } else {
+        registerStaticCatalogueUrls(kind, entries);
+      }
       return entries;
     });
 
@@ -64,10 +93,29 @@ export interface ConvertUrlOptions {
   role?: string | null;
 }
 
+function pickStaticUrl(urls: CatalogueStaticUrls | undefined, mode: ConvertMode): string | undefined {
+  if (!urls) return undefined;
+  if (mode === 'disc') return urls.disc;
+  if (mode === 'thumb') return urls.thumb;
+  if (mode === 'atlas' || mode === 'albedo') return urls.atlas;
+  if (mode === 'normal') return urls.normal;
+  if (mode === 'alpha') return urls.alpha;
+  return undefined;
+}
+
 export function convertUrl({ kind, id, mode, role }: ConvertUrlOptions): string {
+  const staticHit = pickStaticUrl(staticUrlMap.get(staticKey(kind, id)), mode);
+  if (staticHit) return staticHit;
   const q = new URLSearchParams({ kind, id, mode });
   if (role) q.set('role', role);
   return `/api/mo2/convert?${q.toString()}`;
+}
+
+export async function resolveConvertUrl(opts: ConvertUrlOptions): Promise<string> {
+  const immediate = pickStaticUrl(staticUrlMap.get(staticKey(opts.kind, opts.id)), opts.mode);
+  if (immediate) return immediate;
+  await fetchCatalogue(opts.kind);
+  return convertUrl(opts);
 }
 
 /** Stable key for the entry a pick resolves to, so a `<img>` only reloads when

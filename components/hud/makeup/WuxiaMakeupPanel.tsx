@@ -20,7 +20,6 @@ import { cn } from '@/lib/cn';
 
 export type MakeupSectionId =
   | 'skin_texture'
-  | 'foundation'
   | 'brows'
   | 'pupils'
   | 'lip_makeup'
@@ -37,8 +36,7 @@ interface SectionConfig {
 }
 
 const MAKEUP_SECTIONS: readonly SectionConfig[] = [
-  { id: 'skin_texture', label: 'Skin Texture', badge: 'DIFFUSE / PBR', categoryKind: 'skin' },
-  { id: 'foundation', label: 'Foundation & Tone', badge: 'COLOR TINT', categoryKind: 'skin' },
+  { id: 'skin_texture', label: 'Skin & Foundation', badge: 'DIFFUSE / TONE / PBR', categoryKind: 'skin' },
   { id: 'brows', label: 'Eyebrows', badge: 'STYLES / GLOSS', categoryKind: 'brows' },
   { id: 'pupils', label: 'Pupils', badge: 'EYE IRIS', categoryKind: 'eyes' },
   { id: 'lip_makeup', label: 'Lip Makeup', badge: 'TINT & GLOSS', categoryKind: 'makeup' },
@@ -128,7 +126,7 @@ function WuxiaColorSection({
       </div>
 
       <div
-        className="grid gap-1"
+        className="grid gap-1.5 p-1"
         style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
       >
         {swatches.map((swatch) => {
@@ -143,8 +141,10 @@ function WuxiaColorSection({
               aria-label={swatch.name}
               aria-pressed={active}
               className={cn(
-                'min-h-[24px] h-6 w-full rounded-[1px] border transition-transform hover:scale-105 disabled:opacity-40',
-                active ? 'border-[#f0dfbe] ring-1 ring-[#eac87f] scale-105' : 'border-white/15',
+                'min-h-[24px] h-6 w-full rounded-[2px] transition-all disabled:opacity-40',
+                active
+                  ? 'border-2 border-[#f0dfbe] ring-1 ring-[#eac87f]/80 shadow-[0_0_8px_rgba(234,200,127,0.45)]'
+                  : 'border border-white/15 hover:border-white/45',
               )}
               style={{ backgroundColor: swatch.hex }}
             />
@@ -471,10 +471,6 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
       );
     }
 
-    if (id === 'foundation') {
-      return [];
-    }
-
     if (id === 'brows') {
       const raw = (catalogues.brows ?? []) as CatalogueEntry[];
       return filterBySearch(raw.filter((e) => !e.file.endsWith('_n.dds')));
@@ -487,6 +483,7 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
           const low = e.file.toLowerCase();
           if (
             e.mapRole === 'normal' ||
+            e.mapRole === 'specular' ||
             low.endsWith('_n.dds') ||
             low.endsWith('_rmaos.dds') ||
             low.endsWith('_g.dds') ||
@@ -757,7 +754,7 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
   };
 
   const eyeMeshes = catalogues.eyeMesh ?? [];
-  const showItemGrid = currentSection !== null && currentSection.id !== 'foundation';
+  const showItemGrid = currentSection !== null;
   const showSearchInput = showItemGrid && currentSection.id !== 'skin_texture' && categoryItems.length > 8;
 
   return (
@@ -818,7 +815,7 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
                 }
               />
 
-              {currentSection?.id === 'skin_texture' || currentSection?.id === 'foundation' ? (
+              {currentSection?.id === 'skin_texture' ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -998,16 +995,6 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
               )}
             >
               {currentSection?.id === 'skin_texture' && (
-                <WuxiaColorSection
-                  label="Quick Skin Tone"
-                  color={skinColor || '#ffffff'}
-                  onChange={setSkinColor}
-                  swatches={SKIN_PALETTE_SWATCHES}
-                  cols={8}
-                />
-              )}
-
-              {currentSection?.id === 'foundation' && (
                 <div className="flex flex-col gap-2.5">
                   <WuxiaColorSection
                     label="Foundation Tone & Tint"

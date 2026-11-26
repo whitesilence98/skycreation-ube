@@ -32,6 +32,14 @@ export function isMeshKind(kind: string): kind is MeshKind {
   return (MESH_KINDS as readonly string[]).includes(kind);
 }
 
+export interface CatalogueStaticUrls {
+  atlas?: string;
+  thumb?: string;
+  disc?: string;
+  normal?: string;
+  alpha?: string;
+}
+
 /** One recorded file. `rel` is relative to the active source root (includes the mod folder in MO2 mode). */
 export interface CatalogueEntry {
   id: string;
@@ -45,6 +53,10 @@ export interface CatalogueEntry {
   /** Distinguishes an albedo from its `_n` / `_sk` companions. */
   mapRole?: 'albedo' | 'normal' | 'specular' | 'mesh' | 'morph' | 'collision';
   size?: [number, number];
+  /** Pre-baked static `/assets/...` URLs populated by `sync_static_textures.py`. */
+  urls?: CatalogueStaticUrls;
+  /** Pre-measured eye iris bounds when `kind === 'eyes'`. */
+  atlas?: { cx: number; cy: number; r: number; measured: boolean };
   note?: string;
   /**
    * Geometry kinds only. Absent means decodable — every mesh the indexer

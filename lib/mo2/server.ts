@@ -305,7 +305,10 @@ async function mapAuthoredTextures(file: string, skinOnly = false, untextured = 
          flat grey. Valid refs (e.g. an outfit's embedded body skin) survive. */
       if (!entry || entry.decodable === false || entry.untextured === true || entry.unavailable || entry.available === false || !(await resolveArchivePath(entry))) continue;
       const mode = slot === 'normal' ? 'normal' : 'atlas';
-      material[field] = `/api/mo2/convert?${new URLSearchParams({ kind: entry.kind, id: entry.id, mode, role: slot })}`;
+      const prebakedStatic = (entry as CatalogueEntry).urls?.[mode];
+      material[field] =
+        prebakedStatic ??
+        `/api/mo2/convert?${new URLSearchParams({ kind: entry.kind, id: entry.id, mode, role: slot })}`;
     }
   }
   await fs.writeFile(file, JSON.stringify(mesh));

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useCharacter } from '@/lib/store';
-import { fetchCatalogue } from '@/lib/mo2/client';
+import { fetchCatalogue, registerStaticCatalogueUrls } from '@/lib/mo2/client';
 import type { AssetKind } from '@/lib/manifestSelect';
 
 /** Restored presets resolve archive ids even if their picker has never been opened. */
@@ -13,7 +13,10 @@ export function useAssetCatalogues() {
   useEffect(() => {
     let cancelled = false;
     for (const kind of new Set<AssetKind>(['hairMesh', 'hair', ...Object.keys(selection) as AssetKind[]])) {
-      if (catalogues[kind]) continue;
+      if (catalogues[kind]) {
+        registerStaticCatalogueUrls?.(kind, catalogues[kind]!);
+        continue;
+      }
       void fetchCatalogue(kind).then((entries) => {
         if (!cancelled) register(kind, entries);
       });

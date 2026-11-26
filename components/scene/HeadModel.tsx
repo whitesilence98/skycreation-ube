@@ -20,7 +20,7 @@ import {
   type FaceTextureResult,
   type Mo2Manifest,
 } from '@/lib/head/faceTexture';
-import { convertUrl } from '@/lib/mo2/client';
+import { resolveConvertUrl } from '@/lib/mo2/client';
 import { loadMask, compositeHeadAtlas, type OverlayInput } from '@/lib/head/overlayLayers';
 import { SLIDER_DEFS, REGIONS_BY_ID, type RegionId } from '@/lib/regions';
 import { anatomySliderBank } from '@/lib/anatomy/bind';
@@ -88,6 +88,15 @@ import {
   updateSkinDetail,
   updateSkinGloss,
 } from '@/components/scene/SkinShader';
+
+const EYE_CUBEMAP_URLS: [string, string, string, string, string, string] = [
+  '/assets/eyes/cubemap/px.webp',
+  '/assets/eyes/cubemap/nx.webp',
+  '/assets/eyes/cubemap/py.webp',
+  '/assets/eyes/cubemap/ny.webp',
+  '/assets/eyes/cubemap/pz.webp',
+  '/assets/eyes/cubemap/nz.webp',
+];
 
 export interface SceneHandles {
   rig: Rig;
@@ -1087,7 +1096,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     const cache = maskCacheRef.current;
     Promise.all(
       overlayLayers.map(async (layer) => {
-        const src = convertUrl({ kind: layer.kind, id: layer.id, mode: 'alpha' });
+        const src = await resolveConvertUrl({ kind: layer.kind, id: layer.id, mode: 'alpha' });
         let mask = cache.get(src);
         if (!mask) {
           mask = loadMask(src);
@@ -1409,10 +1418,12 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     () =>
       new THREE.MeshPhysicalMaterial({
         color: '#ffffff',
-        roughness: 0.04,
+        roughness: 0.14,
         metalness: 0.0,
-        clearcoat: 1.0,
-        clearcoatRoughness: 0.02,
+        specularIntensity: 0.45,
+        clearcoat: 0.25,
+        clearcoatRoughness: 0.12,
+        envMapIntensity: 0.75,
         ior: 1.376,
         /* Koralina's atlases leave transparent-white texels around the sclera
            (COR's are alpha-255 everywhere, so this is a no-op for them).
@@ -1421,6 +1432,37 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
       }),
     [],
   );
+
+  // Apply standalone static eye cubemap onto eyeMaterial.envMap (overrides scene.environment for eyes only).
+  useEffect(() => {
+    let cancelled = false;
+    const loader = new THREE.CubeTextureLoader();
+    const cubeTex = loader.load(
+      EYE_CUBEMAP_URLS,
+      (tex) => {
+        if (cancelled) {
+          tex.dispose();
+          return;
+        }
+        tex.colorSpace = THREE.SRGBColorSpace;
+        eyeMaterial.envMap = tex;
+        eyeMaterial.needsUpdate = true;
+        onDirty();
+      },
+      undefined,
+      (err) => {
+        console.warn('[HeadModel] Could not load static eye cubemap:', err);
+      },
+    );
+    return () => {
+      cancelled = true;
+      if (eyeMaterial.envMap === cubeTex) {
+        eyeMaterial.envMap = null;
+        eyeMaterial.needsUpdate = true;
+      }
+      cubeTex.dispose();
+    };
+  }, [eyeMaterial, onDirty]);
 
   const eyeFallbackMaterial = useMemo(
     () =>
@@ -1463,7 +1505,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   });
 
   useEffect(() => {
-    eyeMaterial.roughness = eyeRoughState === 'loaded' ? 1.0 : 0.04;
+    eyeMaterial.roughness = eyeRoughState === 'loaded' ? 1.0 : 0.14;
     if (eyeEmissiveState === 'loaded') {
       eyeMaterial.emissive.set('#ffffff');
       eyeMaterial.emissiveIntensity = 1.35;

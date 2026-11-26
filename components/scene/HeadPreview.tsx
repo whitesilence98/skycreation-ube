@@ -15,7 +15,7 @@ import {
 import { resolveManifest } from '@/lib/manifestSelect';
 import { useAssetCatalogues } from '@/lib/mo2/useAssetCatalogues';
 import { useCharacter, type OverlayLayer } from '@/lib/store';
-import { convertUrl } from '@/lib/mo2/client';
+import { resolveConvertUrl } from '@/lib/mo2/client';
 import { loadMask, type OverlayInput } from '@/lib/head/overlayLayers';
 
 /**
@@ -38,7 +38,7 @@ function useOverlayImages(overlayLayers: OverlayLayer[]): OverlayInput[] {
     Promise.all(
       overlayLayers.map(async (layer) => ({
         layer,
-        mask: await loadMask(convertUrl({ kind: layer.kind, id: layer.id, mode: 'alpha' })),
+        mask: await loadMask(await resolveConvertUrl({ kind: layer.kind, id: layer.id, mode: 'alpha' })),
       })),
     ).then((v) => {
       if (!cancelled) setOverlayImages(v);

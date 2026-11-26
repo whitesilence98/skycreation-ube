@@ -203,7 +203,11 @@ export function resolveManifest(
     }
     const base = defaultRowFor(kind, list as PartOption[]) as PartOption | undefined;
     const url = (mode: Parameters<typeof convertUrl>[0]['mode'], entryId = entry.id) => convertUrl({ kind, id: entryId, mode });
-    const normal = entry.normalId ? url('normal', entry.normalId) : undefined;
+    const staticUrls = entry.urls;
+    const normalEntry = entry.normalId
+      ? catalogues[kind]?.find((e) => e.id === entry.normalId && e.mapRole === 'normal')
+      : undefined;
+    const normal = normalEntry?.urls?.normal ?? staticUrls?.normal ?? (entry.normalId ? url('normal', entry.normalId) : undefined);
     const prebaked = entry as CatalogueEntry & {
       meshUrl?: string;
       texture?: string;
@@ -220,7 +224,7 @@ export function resolveManifest(
       ...(mesh ? {
         meshUrl: prebaked.meshUrl ?? url('mesh'), isRealMesh: true, version: 'FRTRI003 / OBJ', nodes: [], shapes: {},
       } : {
-        texture: prebaked.texture ?? url('atlas'),
+        texture: prebaked.texture ?? staticUrls?.atlas ?? url('atlas'),
         normalTexture: prebaked.normalTexture ?? normal,
         roughnessTexture: prebaked.roughnessTexture,
         ...(kind === 'skin' ? {
@@ -231,7 +235,7 @@ export function resolveManifest(
           iris: prebaked.iris ?? manifest.eye?.iris ?? '#80705b',
           mean: prebaked.mean ?? manifest.eye?.mean ?? '#80705b',
           atlas: prebaked.atlas ?? { ...(manifest.eye?.atlas ?? { cx: 0.497, cy: 0.754, r: 0.126 }), measured: false },
-          discTexture: prebaked.thumbnailUrl ?? prebaked.texture ?? url('disc'),
+          discTexture: prebaked.thumbnailUrl ?? prebaked.texture ?? staticUrls?.disc ?? url('disc'),
           emissiveTexture: prebaked.emissiveTexture,
         } : {}),
         ...(kind === 'hair' ? { groups: undefined, capWindow: undefined, usable: true } : {}),
@@ -335,8 +339,8 @@ export function resolveManifest(
         ?? (name === 'hair'
           ? usableMesh?.meshUrl
           : (weightVariants?.w0 ?? (name === 'clothing' && usableMesh?.meshUrl ? usableMesh.meshUrl.replace(/_1\.nif/i, '_0.nif') : usableMesh?.meshUrl) ?? (name === 'clothing' && fallback?.meshUrl ? fallback.meshUrl.replace(/_1\.nif/i, '_0.nif') : fallback?.meshUrl) ?? (name === 'body' ? body?.meshUrl : undefined))),
-      texture: pair ? convertUrl({ kind: textureKind, id: pair.id, mode: 'atlas' }) : resolvedTexture,
-      normalTexture: pair ? (pair.normalId ? convertUrl({ kind: textureKind, id: pair.normalId, mode: 'normal' }) : (textureKind === 'body' ? (pairedBody?.normalTexture ?? defaultBodyNormal) : undefined)) : resolvedNormal,
+      texture: pair ? (pair.urls?.atlas ?? convertUrl({ kind: textureKind, id: pair.id, mode: 'atlas' })) : resolvedTexture,
+      normalTexture: pair ? (pair.normalId ? (pair.urls?.normal ?? convertUrl({ kind: textureKind, id: pair.normalId, mode: 'normal' })) : (textureKind === 'body' ? (pairedBody?.normalTexture ?? defaultBodyNormal) : undefined)) : resolvedNormal,
       roughnessTexture: resolvedRoughness,
       ...(weightVariants ? { weightVariants } : { weightVariants: undefined }),
       ...(mesh?.untextured === true
