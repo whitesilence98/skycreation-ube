@@ -11,6 +11,7 @@ import { restoreSession, useCharacter } from '@/lib/store';
 import { preloadDynamicMeshes } from '@/lib/head/dynamicSculpt';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { WebGLErrorBoundary } from '@/components/scene/WebGLErrorBoundary';
+import { AppRouter } from '@/components/AppRouter';
 
 /** A cold load reads a 2.2 MB head mesh plus a 4 k atlas; on a slow disk that
  *  can miss this. Past it the veil lifts regardless, so a dead URL degrades to
@@ -20,6 +21,16 @@ const REVEAL_FAILSAFE_MS = 20_000;
 const CharacterScene = dynamic(
   () => import('@/components/scene/CharacterScene').then((m) => m.CharacterScene),
   { ssr: false, loading: () => <SceneLoader visible /> },
+);
+
+const BuilderScene = dynamic(
+  () => import('@/components/builder/BuilderScene').then((m) => m.BuilderScene),
+  { ssr: false, loading: () => <SceneLoader visible /> },
+);
+
+const BuilderHud = dynamic(
+  () => import('@/components/builder/BuilderHud').then((m) => m.BuilderHud),
+  { ssr: false },
 );
 
 /** The viewport's own ground: a warm core falling off to near-black. Shared by
@@ -282,29 +293,35 @@ export function CharacterCreation() {
 
   const previewMode = useCharacter(s => s.previewMode);
   const outfitMode = useCharacter(s => s.primaryTab === 'EQUIPMENT');
+  const appMode = useCharacter(s => s.appMode);
   const loaded = sceneReady && (assetsReady || revealFailsafe);
 
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-[#1a1b1f]">
+      <AppRouter />
       {/* Nothing is mounted before the manifest settles and names its source:
           an early mount would issue legacy asset requests that pack mode must
           never make. */}
       {sceneReady ? (
         <div className="absolute inset-0">
           <WebGLErrorBoundary>
-            <CharacterScene
-              manifest={resolved}
-              onAssetsReady={handleAssetsReady}
-              onIssue={handleSceneIssue}
-            />
+            {appMode === 'builder' ? (
+              <BuilderScene manifest={resolved} />
+            ) : (
+              <CharacterScene
+                manifest={resolved}
+                onAssetsReady={handleAssetsReady}
+                onIssue={handleSceneIssue}
+              />
+            )}
           </WebGLErrorBoundary>
         </div>
       ) : (
         <ViewportBackdrop />
       )}
-      {unavailable ? <UnavailableNotice manifest={manifest} /> : <SceneLoader visible={!loaded} />}
-      {sceneReady && sceneIssue && loaded ? <SceneIssue issue={sceneIssue} /> : null}
-      {sceneReady ? <Hud manifest={resolved} /> : null}
+      {unavailable ? <UnavailableNotice manifest={manifest} /> : appMode === 'studio' ? <SceneLoader visible={!loaded} /> : null}
+      {sceneReady && sceneIssue && loaded && appMode === 'studio' ? <SceneIssue issue={sceneIssue} /> : null}
+      {sceneReady ? (appMode === 'builder' ? <BuilderHud manifest={resolved} /> : <Hud manifest={resolved} />) : null}
     </main>
   );
 }

@@ -79,6 +79,8 @@ export function CameraPanel({ onClose }: CameraPanelProps = {}) {
   const setCameraFov = useCharacter((s) => s.setCameraFov);
   const cameraFraming = useCharacter((s) => s.cameraFraming);
   const setCameraFraming = useCharacter((s) => s.setCameraFraming);
+  const cameraLockMode = useCharacter((s) => s.cameraLockMode);
+  const setCameraLockMode = useCharacter((s) => s.setCameraLockMode);
   const triggerCameraPose = useCharacter((s) => s.triggerCameraPose);
   const resetCameraView = useCharacter((s) => s.resetCameraView);
   const cameraRotateSpeed = useCharacter((s) => s.cameraRotateSpeed);
@@ -134,15 +136,32 @@ export function CameraPanel({ onClose }: CameraPanelProps = {}) {
       badge="CINEMATIC"
       onClose={onClose ?? (() => useCharacter.getState().setWorkspace('edit'))}
       headerTrailing={
-        <button
-          type="button"
-          onClick={resetCameraView}
-          title="Reset to default front face view"
-          className="flex items-center gap-[3px] text-[9.5px] font-mono tracking-[0.08em] text-[#a49a88]/75 transition-colors hover:text-[#f0e3c6]"
-        >
-          <IconRevert className="h-[7px] w-[7px]" />
-          <span>RESET</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCameraLockMode(cameraLockMode === 'locked' ? 'free' : 'locked')}
+            aria-pressed={cameraLockMode === 'locked'}
+            title="Toggle automatic tab framing & orbit bounds"
+            className={cn(
+              'flex h-[24px] min-h-[24px] items-center gap-1 border px-2 text-[10px] font-mono tracking-[0.06em] transition-colors',
+              cameraLockMode === 'locked'
+                ? 'border-[#d8be8c] bg-[#d4b483]/20 text-[#f5ecd8]'
+                : 'border-[#8c8477]/35 bg-black/30 text-[#a49a88] hover:text-[#f0e3c6]',
+            )}
+          >
+            <span aria-hidden>{cameraLockMode === 'locked' ? '🔒' : '🔓'}</span>
+            <span>{cameraLockMode === 'locked' ? 'LOCKED' : 'FREE'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={resetCameraView}
+            title="Reset to default front face view"
+            className="flex h-[24px] min-h-[24px] items-center gap-[3px] text-[10px] font-mono tracking-[0.08em] text-[#a49a88]/75 transition-colors hover:text-[#f0e3c6]"
+          >
+            <IconRevert className="h-[9px] w-[9px]" />
+            <span>RESET</span>
+          </button>
+        </div>
       }
       footerLeading={<span>+ 4K CINEMATIC PIVOT</span>}
       footerTrailing={<span>FOV {Math.round(cameraFov)}°</span>}
@@ -489,14 +508,14 @@ export function CameraPanel({ onClose }: CameraPanelProps = {}) {
                   aria-pressed={active}
                   title={`${preset.label}: ${preset.description}`}
                   className={cn(
-                    'flex h-[28px] flex-col items-center justify-center border text-center transition-all focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]/80',
+                    'flex min-h-[34px] flex-col items-center justify-center border px-1 py-1 text-center transition-all focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]/80',
                     active
                       ? 'border-[#d8be8c] bg-[#d4b483]/18 text-[#f2e7cf] shadow-[0_0_8px_rgba(216,190,140,0.25)]'
                       : 'border-[#8c8477]/22 bg-black/25 text-[#9e9584]/75 hover:border-[#d4b483]/40 hover:text-[#d8cebc]',
                   )}
                 >
                   <span className="text-[10px] leading-tight font-medium tracking-[0.04em]">{preset.label}</span>
-                  <span className="text-[8px] leading-tight tracking-[0.06em] text-[#a49a88]/60">{preset.sub}</span>
+                  <span className="text-[10px] leading-tight tracking-[0.04em] text-[#a49a88]/70">{preset.sub}</span>
                 </button>
               );
             })}

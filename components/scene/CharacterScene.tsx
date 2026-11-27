@@ -31,8 +31,8 @@ import {
   cameraSpherical,
   FRAMING_SPECS,
   goldenRatioOffset,
+  resolveTabCameraSpec,
   CAMERA_FOV_DEFAULT,
-  type CameraFraming,
 } from '@/lib/camera';
 import { rigDirections } from '@/lib/lighting';
 import { useViewState } from '@/lib/viewState';
@@ -62,21 +62,45 @@ const TONE_MAPPING_MODE: Record<ToneMappingId, ToneMappingMode> = {
   cineon: ToneMappingMode.CINEON,
 };
 
-function ViewControls() {
+const FLOOR_Y = -1.476;
+
+function ViewControls({ packMode }: { packMode: boolean }) {
   const rotateSpeed = useCharacter((s) => s.cameraRotateSpeed);
+  const cameraLockMode = useCharacter((s) => s.cameraLockMode);
+  const cameraFraming = useCharacter((s) => s.cameraFraming);
+  const primaryTab = useCharacter((s) => s.primaryTab);
+  const featuresSection = useCharacter((s) => s.featuresSection);
+  const makeupSection = useCharacter((s) => s.makeupSection);
+  const physiqueSection = useCharacter((s) => s.physiqueSection);
+  const equipSlot = useCharacter((s) => s.equipSlot);
+
+  const locked = cameraLockMode === 'locked' && cameraFraming === 'auto';
+  const spec = locked
+    ? resolveTabCameraSpec({
+        primaryTab,
+        featuresSection,
+        makeupSection,
+        physiqueSection,
+        equipSlot,
+        packMode,
+      })
+    : null;
+
   return (
     <OrbitControls
       makeDefault
       enablePan={false}
       enableDamping
-      dampingFactor={0.06}
+      dampingFactor={0.07}
       mouseButtons={ORBIT_MOUSE_BUTTONS}
       rotateSpeed={rotateSpeed}
       zoomSpeed={0.55}
-      minDistance={0.30}
-      maxDistance={6.0}
-      minPolarAngle={Math.PI * 0.10}
-      maxPolarAngle={Math.PI * 0.90}
+      minDistance={spec ? spec.minDistance : 0.30}
+      maxDistance={spec ? spec.maxDistance : 6.0}
+      minPolarAngle={spec ? THREE.MathUtils.degToRad(spec.minPolarDeg) : Math.PI * 0.10}
+      maxPolarAngle={spec ? THREE.MathUtils.degToRad(spec.maxPolarDeg) : Math.PI * 0.90}
+      minAzimuthAngle={spec && spec.minAzimuthDeg !== null ? THREE.MathUtils.degToRad(spec.minAzimuthDeg) : -Infinity}
+      maxAzimuthAngle={spec && spec.maxAzimuthDeg !== null ? THREE.MathUtils.degToRad(spec.maxAzimuthDeg) : Infinity}
       target={[0, CAM.y, 0]}
     />
   );
@@ -89,9 +113,15 @@ function ViewControls() {
  * - 85mm portrait telephoto compression (22° FOV).
  * - 330px HUD drawer compensation via camera.setViewOffset.
  */
-function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
+function CameraRig({ bodyFraming, packMode }: { bodyFraming: boolean; packMode: boolean }) {
   const { camera, controls, gl, scene, size } = useThree();
   const hair = useCharacter((s) => s.primaryTab === 'HAIR');
+  const primaryTab = useCharacter((s) => s.primaryTab);
+  const featuresSection = useCharacter((s) => s.featuresSection);
+  const makeupSection = useCharacter((s) => s.makeupSection);
+  const physiqueSection = useCharacter((s) => s.physiqueSection);
+  const equipSlot = useCharacter((s) => s.equipSlot);
+  const cameraLockMode = useCharacter((s) => s.cameraLockMode);
   const cameraFov = useCharacter((s) => s.cameraFov);
   const characterHeight = useCharacter((s) => s.characterHeight);
   const cameraFraming = useCharacter((s) => s.cameraFraming);
@@ -127,12 +157,24 @@ function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
   }, [camera, size.width, size.height]);
 
   // Dynamic bone anchor resolution
-  const getAnchorWorldY = useCallback((): { headY: number; eyesY: number; bodyMidY: number } => {
+  const getAnchorWorldY = useCallback((): {
+    headY: number;
+    eyesY: number;
+    lipsY: number;
+    jawY: number;
+    bodyMidY: number;
+    handsY: number;
+    feetY: number;
+  } => {
     const headBone = scene.getObjectByName('NPC Head [Head]');
     const pelvisBone = scene.getObjectByName('NPC Pelvis [Pelv]');
+    const handBone = scene.getObjectByName('NPC L Hand [LHnd]');
     let headY: number = CAM.y;
     let eyesY: number = CAM.y + 0.025;
     let bodyMidY: number = -0.65;
+    let pelvisY: number = -0.75;
+    let handsY: number = -0.7;
+    const feetY: number = FLOOR_Y + 0.18;
 
     if (headBone) {
       const headPos = new THREE.Vector3();
@@ -144,21 +186,66 @@ function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
     if (pelvisBone) {
       const pelvisPos = new THREE.Vector3();
       pelvisBone.getWorldPosition(pelvisPos);
-      bodyMidY = (headY + pelvisPos.y) / 2;
+      pelvisY = pelvisPos.y;
+      bodyMidY = (headY + pelvisY) / 2;
+      handsY = pelvisY + 0.04;
     } else {
       bodyMidY = headY - 0.65;
     }
 
-    return { headY, eyesY, bodyMidY };
+    if (handBone) {
+      const handPos = new THREE.Vector3();
+      handBone.getWorldPosition(handPos);
+      handsY = handPos.y;
+    }
+
+    return {
+      headY,
+      eyesY,
+      lipsY: headY - 0.042,
+      jawY: headY - 0.03,
+      bodyMidY,
+      handsY,
+      feetY,
+    };
   }, [scene]);
 
   useEffect(() => {
     const anchors = getAnchorWorldY();
     let baseStandoff: number = FRAMING_SPECS.face.standoff;
     let baseTargetY: number = anchors.eyesY - goldenRatioOffset(baseStandoff, cameraFov);
+    let defaultYawRad = 0;
+    let defaultPitchRad = 0;
 
     if (cameraFraming === 'auto') {
-      if (bodyFraming) {
+      if (cameraLockMode === 'locked') {
+        const spec = resolveTabCameraSpec({
+          primaryTab,
+          featuresSection,
+          makeupSection,
+          physiqueSection,
+          equipSlot,
+          packMode,
+        });
+        baseStandoff = spec.standoff * (spec.scaleByHeight ? characterHeight / 1.554 : 1);
+        defaultYawRad = THREE.MathUtils.degToRad(spec.yawDeg);
+        defaultPitchRad = THREE.MathUtils.degToRad(spec.pitchDeg);
+        if (spec.anchor === 'eyes') {
+          baseTargetY = anchors.eyesY - goldenRatioOffset(baseStandoff, cameraFov);
+        } else if (spec.anchor === 'lips') {
+          baseTargetY = anchors.lipsY;
+        } else if (spec.anchor === 'jaw') {
+          baseTargetY = anchors.jawY;
+        } else if (spec.anchor === 'head') {
+          baseTargetY = anchors.headY;
+        } else if (spec.anchor === 'hands') {
+          baseTargetY = anchors.handsY;
+        } else if (spec.anchor === 'feet') {
+          baseTargetY = anchors.feetY;
+        } else {
+          baseTargetY = anchors.bodyMidY;
+        }
+      } else if (bodyFraming) {
         baseStandoff = FRAMING_SPECS.body.standoff * (characterHeight / 1.554);
         baseTargetY = anchors.bodyMidY;
       } else if (hair) {
@@ -198,27 +285,49 @@ function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
       // Changing only yaw or pitch must not reset the other angle or wheel zoom.
       const dist = req.distance ?? (req.reset ? baseStandoff : current.distance);
       const tY = req.targetY ?? (req.reset ? baseTargetY : orbit?.target.y ?? baseTargetY);
-      const yaw = req.yaw ?? (current.yawDeg * Math.PI) / 180;
-      const pitch = req.pitch ?? (current.pitchDeg * Math.PI) / 180;
+      const yaw = req.yaw ?? (req.reset ? defaultYawRad : (current.yawDeg * Math.PI) / 180);
+      const pitch = req.pitch ?? (req.reset ? defaultPitchRad : (current.pitchDeg * Math.PI) / 180);
 
       const r = dist;
       const cosPitch = Math.cos(pitch);
       const sinPitch = Math.sin(pitch);
       const x = r * cosPitch * Math.sin(yaw);
-      const y = tY - r * sinPitch;
+      const y = Math.max(FLOOR_Y + 0.14, tY - r * sinPitch);
       const z = r * cosPitch * Math.cos(yaw);
 
       goal.current.set(x, y, z);
       target.current.set(0, tY, 0);
       moving.current = true;
     } else {
-      goal.current.set(0, baseTargetY, baseStandoff);
+      const cosPitch = Math.cos(defaultPitchRad);
+      const sinPitch = Math.sin(defaultPitchRad);
+      const x = baseStandoff * cosPitch * Math.sin(defaultYawRad);
+      const y = Math.max(FLOOR_Y + 0.14, baseTargetY - baseStandoff * sinPitch);
+      const z = baseStandoff * cosPitch * Math.cos(defaultYawRad);
+      goal.current.set(x, y, z);
       target.current.set(0, baseTargetY, 0);
       moving.current = true;
     }
 
     moving.current = true;
-  }, [hair, bodyFraming, characterHeight, cameraFraming, cameraPoseRequest, controls, camera, cameraFov, getAnchorWorldY]);
+  }, [
+    hair,
+    bodyFraming,
+    packMode,
+    primaryTab,
+    featuresSection,
+    makeupSection,
+    physiqueSection,
+    equipSlot,
+    cameraLockMode,
+    characterHeight,
+    cameraFraming,
+    cameraPoseRequest,
+    controls,
+    camera,
+    cameraFov,
+    getAnchorWorldY,
+  ]);
 
   useEffect(() => {
     const orbit = controls as OrbitControlsImpl | null;
@@ -252,6 +361,9 @@ function CameraRig({ bodyFraming }: { bodyFraming: boolean }) {
   }, [camera, controls, gl]);
   // Before drei's -1 update: camera and target move together, never fight damping.
   useFrame((_, dt) => {
+    if (camera.position.y < FLOOR_Y + 0.14) {
+      camera.position.y = FLOOR_Y + 0.14;
+    }
     if (!moving.current) return;
     const orbit = controls as OrbitControlsImpl | null;
     const alpha = 1 - Math.exp(-10 * Math.min(dt, 0.1));
@@ -382,11 +494,12 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
   const customBackgroundUrl = useCharacter((s) => s.customBackgroundUrl);
 
   const isBody = bodyFraming;
+  const packMode = manifest?.sourceLayout === 'pack';
 
   return (
     <>
       <BackgroundStage mode={backgroundMode} customUrl={customBackgroundUrl} />
-      <CameraRig bodyFraming={bodyFraming} />
+      <CameraRig bodyFraming={bodyFraming} packMode={packMode} />
       <PipelineRig dof={dof} />
       <StatsProbe />
 
@@ -459,7 +572,7 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
       <GlbExportBridge />
       <PresetCaptureBridge />
 
-      <ViewControls />
+      <ViewControls packMode={packMode} />
 
       {/* Tone mapping happens exactly once, in the composer: three gates
           `renderer.toneMapping` on `currentRenderTarget === null`

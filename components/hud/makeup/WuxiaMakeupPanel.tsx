@@ -276,10 +276,17 @@ function WuxiaOverlayLayerControls({
 }
 
 export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null }) {
-  const [activeSection, setActiveSection] = useState<MakeupSectionId | null>(null);
+  const activeSection = useCharacter((s) => s.makeupSection) as MakeupSectionId | null;
+  const setActiveSection = useCharacter((s) => s.setMakeupSection);
   const [eyeFilter, setEyeFilter] = useState<'ALL' | 'ZHIZHEN' | 'UBE'>('ALL');
   const [eyeMakeupFilter, setEyeMakeupFilter] = useState<'ALL' | 'EYELINER' | 'EYESHADOW'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    return () => {
+      useCharacter.getState().setMakeupSection(null);
+    };
+  }, []);
 
   const catalogues = useCharacter((s) => s.assetCatalogues);
   const selection = useCharacter((s) => s.assetSelection);

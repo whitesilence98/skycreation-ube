@@ -144,6 +144,7 @@ export interface PersistedSession extends AnatomySnapshot {
   activeCategory: ActiveCategory;
   overlayLayers: OverlayLayer[];
   cameraFov?: number;
+  cameraLockMode?: 'locked' | 'free';
 }
 
 /* ── the vocabularies a hand-edited payload can violate ─────────────────── */
@@ -335,6 +336,7 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     activeCategory: coerceCategory(o.activeCategory),
     overlayLayers: sanitizeOverlayLayers(o.overlayLayers) ?? defaults.overlayLayers,
     cameraFov: clamp(finite(o.cameraFov, defaults.cameraFov ?? 27), 15, 60),
+    cameraLockMode: o.cameraLockMode === 'free' ? 'free' : 'locked',
   };
 }
 
@@ -415,6 +417,7 @@ export function pickSession(s: PersistedSession): PersistedSession {
     activeCategory: s.activeCategory,
     overlayLayers: s.overlayLayers.map((l) => ({ ...l })),
     cameraFov: s.cameraFov ?? 27,
+    cameraLockMode: s.cameraLockMode ?? 'locked',
   };
 }
 

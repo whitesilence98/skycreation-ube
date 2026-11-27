@@ -187,14 +187,25 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
   const workspace = useCharacter((s) => s.workspace);
   const setWorkspace = useCharacter((s) => s.setWorkspace);
   const setCameraFraming = useCharacter((s) => s.setCameraFraming);
+  const cameraLockMode = useCharacter((s) => s.cameraLockMode);
+  const activeSection = useCharacter((s) => s.physiqueSection) as PhysiqueSectionId | null;
+  const setPhysiqueSection = useCharacter((s) => s.setPhysiqueSection);
   const isDirty = usePhysiqueDirty();
   const isBatchBuilding = useBodySlideStore((s) => s.isBatchBuilding);
 
-  const [activeSection, setActiveSection] = useState<PhysiqueSectionId | null>(null);
+  useEffect(() => {
+    return () => {
+      useCharacter.getState().setPhysiqueSection(null);
+    };
+  }, []);
 
   const handleSelectSection = (sectionId: PhysiqueSectionId) => {
-    setActiveSection(sectionId);
-    // Connect section transitions to camera framing
+    setPhysiqueSection(sectionId);
+    if (cameraLockMode === 'locked') {
+      setCameraFraming('auto');
+      return;
+    }
+    // Free-cam framing fallback
     if (['boobs_breasts', 'nipples', 'upper_torso'].includes(sectionId)) {
       setCameraFraming('bust');
     } else if (['lower_torso', 'hips_glutes', 'back_shoulders', 'necoco_specials', 'hands_arms'].includes(sectionId)) {
@@ -205,8 +216,8 @@ export function BodyPanel({ manifest = null }: BodyPanelProps) {
   };
 
   const handleBack = () => {
-    setActiveSection(null);
-    setCameraFraming('mid');
+    setPhysiqueSection(null);
+    setCameraFraming(cameraLockMode === 'locked' ? 'auto' : 'mid');
   };
 
   // Global Escape key listener to return to View 1

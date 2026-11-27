@@ -38,6 +38,7 @@ export function FaceGizmo({ rig }: FaceGizmoProps) {
      while browsing or tweaking CharGen .tri sliders. */
   const showGizmo = useCharacter(
     (s) =>
+      s.appMode === 'studio' &&
       s.primaryTab === 'FACE SHAPE' &&
       s.featuresSection !== null &&
       (s.featuresMode === 'handle' || s.featuresSection === 'forehead' || s.featuresSection === 'ears'),

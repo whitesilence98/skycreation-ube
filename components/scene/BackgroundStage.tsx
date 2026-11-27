@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useRef } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
@@ -423,19 +423,50 @@ function AuroraSky() {
 /* ──────────────────────────────────────────────────────────────────────────
    5. CUSTOM 3D GLB MODEL SCENE
    ────────────────────────────────────────────────────────────────────────── */
+class GlbStageErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    return this.state.hasError ? null : this.props.children;
+  }
+}
+
 function CustomGlbScene({ url }: { url: string }) {
   const gltf = useGLTF(url);
 
   const scene = useMemo(() => {
     const clone = gltf.scene.clone(true);
-    // Auto-compute bounding box to align floor
-    const box = new THREE.Box3().setFromObject(clone);
-    const minY = box.min.y;
-    clone.position.y += FLOOR_Y - minY;
+    clone.updateMatrixWorld(true);
+
+    // Check for an explicit spawn marker from Blender (`CharacterSpawn` / `PlayerSpawn`)
+    const spawnNode =
+      clone.getObjectByName('CharacterSpawn') ??
+      clone.getObjectByName('PlayerSpawn') ??
+      clone.getObjectByName('SpawnPoint');
+
+    if (spawnNode) {
+      const sp = new THREE.Vector3();
+      spawnNode.getWorldPosition(sp);
+      clone.position.set(-sp.x, FLOOR_Y - sp.y, -sp.z);
+    } else {
+      const box = new THREE.Box3().setFromObject(clone);
+      if (Number.isFinite(box.min.y)) {
+        clone.position.y += FLOOR_Y - box.min.y;
+      }
+    }
 
     clone.traverse((node) => {
       if ((node as THREE.Mesh).isMesh) {
         node.receiveShadow = true;
+        node.castShadow = true;
       }
     });
     return clone;
@@ -491,12 +522,30 @@ function StudioPool() {
       }
     `,
   }), []);
-  useEffect(() => () => material.dispose(), [material]);
+  const shadowGeo = useMemo(() => new THREE.CircleGeometry(3.2, 48), []);
+  const shadowMat = useMemo(
+    () => new THREE.ShadowMaterial({ transparent: true, opacity: 0.34, color: new THREE.Color('#0a0b10') }),
+    [],
+  );
+  useEffect(() => () => {
+    material.dispose();
+    shadowGeo.dispose();
+    shadowMat.dispose();
+  }, [material, shadowGeo, shadowMat]);
   return (
-    <mesh renderOrder={-1000} frustumCulled={false}>
-      <planeGeometry args={[2, 2]} />
-      <primitive object={material} attach="material" />
-    </mesh>
+    <group name="StudioPoolStage">
+      <mesh renderOrder={-1000} frustumCulled={false}>
+        <planeGeometry args={[2, 2]} />
+        <primitive object={material} attach="material" />
+      </mesh>
+      <mesh
+        geometry={shadowGeo}
+        material={shadowMat}
+        position={[0, FLOOR_Y, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+      />
+    </group>
   );
 }
 
@@ -529,9 +578,11 @@ export function BackgroundStage({ mode, customUrl }: BackgroundStageProps) {
       {mode === 'ancient-ruins' && <AncientRuins />}
       {mode === 'aurora-sky' && <AuroraSky />}
       {mode === 'custom-3d' && customUrl && (
-        <Suspense fallback={null}>
-          <CustomGlbScene url={customUrl} />
-        </Suspense>
+        <GlbStageErrorBoundary>
+          <Suspense fallback={null}>
+            <CustomGlbScene url={customUrl} />
+          </Suspense>
+        </GlbStageErrorBoundary>
       )}
     </group>
   );

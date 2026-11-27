@@ -44,7 +44,7 @@ import { DEFAULT_HAIR, coerceHair, applyHairStyle as hairStyle, type HairSetting
 export type StudioPage = 'default' | 'smart';import type { CatalogueEntry } from '@/lib/mo2/types';
 import { type EnvMode } from '@/lib/envModes';
 import { type BackgroundMode } from '@/lib/backgrounds';
-import { type CameraFraming, type CameraPoseRequest, CAMERA_FOV_DEFAULT, CAMERA_FOV_MIN, CAMERA_FOV_MAX, CAMERA_ROTATE_SPEED_DEFAULT, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPEED_MAX } from '@/lib/camera';
+import { type CameraFraming, type CameraLockMode, type CameraPoseRequest, CAMERA_FOV_DEFAULT, CAMERA_FOV_MIN, CAMERA_FOV_MAX, CAMERA_ROTATE_SPEED_DEFAULT, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPEED_MAX } from '@/lib/camera';
 import { LIGHTING_DEFAULTS, coerceLighting, bounded, wrapDegrees, type LightingSettings } from '@/lib/lighting';
 import { useBodySlideStore, LEGACY_SILHOUETTE_MAPPING } from '@/lib/bodyslide/store';
 
@@ -247,9 +247,14 @@ export interface CharacterState extends AnatomySnapshot {
   activeRegion: RegionId;
   featuresSection: FaceSectionId | null;
   featuresMode: 'sculpt' | 'handle';
+  physiqueSection: string | null;
+  makeupSection: string | null;
   faceMorphs: Record<string, number>;
   primaryTab: string;
   subTab: string;
+  /** Top-level workspace mode: character studio vs interactive room builder. */
+  appMode: 'studio' | 'builder';
+  setAppMode: (mode: 'studio' | 'builder') => void;
   transformMode: TransformMode;
   bisymmetry: boolean;
   asymmetry: boolean;
@@ -481,6 +486,8 @@ export interface CharacterState extends AnatomySnapshot {
   characterHeight: number;
   /** Active camera framing: auto, or locked to face / bust / body. */
   cameraFraming: CameraFraming;
+  /** Whether camera automatically frames & clamps bounds per tab/sub-section. */
+  cameraLockMode: CameraLockMode;
   /** Nonce request for programmatic camera angle / framing transitions. */
   cameraPoseRequest: CameraPoseRequest | null;
   /** When true, slot naming restrictions are ignored so any clothing or accessory can be equipped into any slot. */
@@ -494,6 +501,8 @@ export interface CharacterState extends AnatomySnapshot {
   setActiveRegion: (id: RegionId) => void;
   setFeaturesSection: (section: FaceSectionId | null) => void;
   setFeaturesMode: (mode: 'sculpt' | 'handle') => void;
+  setPhysiqueSection: (section: string | null) => void;
+  setMakeupSection: (section: string | null) => void;
   setFaceMorph: (name: string, value: number) => void;
   randomizeFaceSculpt: () => void;
   setPrimaryTab: (t: string) => void;
@@ -549,6 +558,8 @@ export interface CharacterState extends AnatomySnapshot {
   snapshotPreset: () => PresetFile;
   setCameraFov: (fov: number) => void;
   setCameraFraming: (framing: CameraFraming) => void;
+  setCameraLockMode: (mode: CameraLockMode) => void;
+  toggleCameraLockMode: () => void;
   triggerCameraPose: (pose: Omit<CameraPoseRequest, 'nonce'>) => void;
   resetCameraView: () => void;
   toast: string | null;
@@ -1004,9 +1015,18 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   activeRegion: 'nose',
   featuresSection: null,
   featuresMode: 'sculpt',
+  physiqueSection: null,
+  makeupSection: null,
   faceMorphs: {},
   primaryTab: 'FACE',
   subTab: 'SKIN',
+  appMode: 'studio',
+  setAppMode: (appMode) =>
+    set((s) => ({
+      appMode,
+      ...(appMode === 'builder' ? { showMesh: false, previewMode: false } : { animationId: 'idle' }),
+      ...(appMode === 'studio' && s.cameraLockMode === 'locked' ? { cameraFraming: 'auto' as const } : {}),
+    })),
   bodyTab: 'gear',
   setBodyTab: (bodyTab) => set({ bodyTab }),
   transformMode: 'translate',
@@ -1216,6 +1236,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   characterHeight: 1.554,
   cameraFov: CAMERA_FOV_DEFAULT,
   cameraFraming: 'auto',
+  cameraLockMode: 'locked',
   cameraPoseRequest: null,
   unrestrictedSlots: false,
   setUnrestrictedSlots: (unrestrictedSlots) => set({ unrestrictedSlots }),
@@ -1282,6 +1303,8 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
     };
   }),
   setFeaturesMode: (featuresMode) => set({ featuresMode }),
+  setPhysiqueSection: (physiqueSection) => set({ physiqueSection }),
+  setMakeupSection: (makeupSection) => set({ makeupSection }),
   setFaceMorph: (name, value) =>
     set((s) => {
       if (!Number.isFinite(value)) return {};
@@ -1334,7 +1357,12 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
       return faceHistory(s, { faceMorphs: nextMorphs });
     });
   },
-  setPrimaryTab: (primaryTab) => set({ primaryTab }),
+  setPrimaryTab: (primaryTab) =>
+    set((s) => ({
+      primaryTab,
+      ...(s.cameraLockMode === 'locked' ? { cameraFraming: 'auto' as const } : {}),
+      ...(primaryTab !== 'FACE SHAPE' && s.showMesh ? { showMesh: false } : {}),
+    })),
   setSubTab: (subTab) => set({ subTab }),
   setTransformMode: (transformMode) => set({ transformMode }),
   setBisymmetry: (bisymmetry) =>
@@ -1389,6 +1417,19 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   setPreviewMode: (preview) => set({ previewMode: preview }),
   setCameraFov: (cameraFov) => set({ cameraFov: Math.min(CAMERA_FOV_MAX, Math.max(CAMERA_FOV_MIN, cameraFov)) }),
   setCameraFraming: (cameraFraming) => set({ cameraFraming }),
+  setCameraLockMode: (cameraLockMode) =>
+    set({
+      cameraLockMode,
+      ...(cameraLockMode === 'locked' ? { cameraFraming: 'auto' as const } : {}),
+    }),
+  toggleCameraLockMode: () =>
+    set((s) => {
+      const next = s.cameraLockMode === 'locked' ? 'free' : 'locked';
+      return {
+        cameraLockMode: next,
+        ...(next === 'locked' ? { cameraFraming: 'auto' as const } : {}),
+      };
+    }),
   triggerCameraPose: (pose) =>
     set((s) => ({
       cameraPoseRequest: {
