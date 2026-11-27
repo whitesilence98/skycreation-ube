@@ -171,6 +171,7 @@ export const CONTOURS: ContourDef[] = [
       [0.0548, 0.0128],
     ],
   },
+  { region: 'eyes', points: ellipse(-0.033, -0.006, 0.018, 0.011, 48), closed: true },
   { region: 'nose', points: ellipse(0, -0.0405, 0.0182, 0.0312, 64), closed: true },
   { region: 'cheeks', points: ellipse(-0.0472, -0.0405, 0.0248, 0.0242, 48), closed: true },
   { region: 'lips', points: ellipse(0, -0.0902, 0.0295, 0.0138, 56), closed: true },
@@ -189,6 +190,7 @@ export const CONTOURS: ContourDef[] = [
       [0.0582, -0.0925],
     ],
   },
+  { region: 'ears', points: ellipse(-0.075, -0.025, 0.014, 0.026, 40), closed: true },
 ];
 
 /**

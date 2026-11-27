@@ -75,6 +75,8 @@ export interface PresetFile extends Partial<AnatomySnapshot> {
   overlays?: OverlayLayer[];
   /** Active BodySlide morph sliders. */
   bodySlide?: Record<string, number>;
+  /** Active FaceGen CharGen .tri morph sliders (-100 .. 100). */
+  faceMorphs?: Record<string, number>;
 }
 
 /**
@@ -224,6 +226,8 @@ export interface PresetPayload extends Partial<AnatomySnapshot> {
   overlays?: OverlayLayer[];
   /** Active BodySlide morph sliders. */
   bodySlide?: Record<string, number>;
+  /** Active FaceGen CharGen .tri morph sliders (-100 .. 100). */
+  faceMorphs?: Record<string, number>;
 }
 
 /**
@@ -268,6 +272,14 @@ export const REGION_MORPHS: Record<RegionId, Partial<Record<SliderId, string[]>>
       'EFM_Brow_Thickness',
     ],
   },
+  eyes: {
+    length: ['Eyes_Length', 'BS_Eyes_Size'],
+    width: ['Eyes_Width', 'BO_Eyes_Width'],
+    depth: ['Eyes_Depth', 'AA_Eyes_Depth'],
+    height: ['Eyes_Height', 'BA_Eyes_Height'],
+    angle: ['Eyes_Angle', 'BC_Eyes_Angle'],
+    protrusion: ['Eyes_Protrusion'],
+  },
   nose: {
     length: ['BF_Nose_TipHeight', 'Nose_NostrisHeight'],
     width: ['BS_Nose_WingWidth', 'Nose_NoseWingWidth', 'Nose_NoseBridgeWide'],
@@ -307,6 +319,14 @@ export const REGION_MORPHS: Record<RegionId, Partial<Record<SliderId, string[]>>
     height: ['EF_FACE_Jaw-Chin_Height', 'EFM_Chin_Shape'],
     angle: ['FACE_JawShapeAngular', 'EFM_Jaw_Shape'],
     protrusion: ['FACE_ChinSquare', 'FACE_ChinCleft'],
+  },
+  ears: {
+    length: ['Ears_Length'],
+    width: ['Ears_Width'],
+    depth: ['Ears_Depth'],
+    height: ['Ears_Height'],
+    angle: ['Ears_Angle'],
+    protrusion: ['Ears_Protrusion'],
   },
 };
 
@@ -384,6 +404,7 @@ export function buildPresetFile(args: {
   lashesOpacity?: number;
   overlays?: OverlayLayer[];
   bodySlide?: Record<string, number>;
+  faceMorphs?: Record<string, number>;
 } & Partial<AnatomySnapshot>): PresetFile {
   return {
     format: PRESET_FORMAT,
@@ -409,6 +430,7 @@ export function buildPresetFile(args: {
     lashesOpacity: args.lashesOpacity,
     overlays: args.overlays,
     bodySlide: args.bodySlide,
+    faceMorphs: args.faceMorphs && Object.keys(args.faceMorphs).length ? { ...args.faceMorphs } : undefined,
     anatomyMode: args.anatomyMode === 'advanced' ? 'advanced' : 'legacy',
     anatomy: coerceAnatomy(args.anatomy),
     anatomyAsymmetry: coerceAsymmetry(args.anatomyAsymmetry),
@@ -513,6 +535,19 @@ function identityPose(): GizmoPose {
   return { offset: [0, 0, 0], rotation: [0, 0, 0], scale: [0, 0, 0] };
 }
 
+export function coerceFaceMorphs(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof key !== 'string' || !key) continue;
+    if (typeof val === 'number' && Number.isFinite(val)) {
+      const clamped = Math.max(-100, Math.min(100, Math.round(val)));
+      if (clamped !== 0) out[key] = clamped;
+    }
+  }
+  return out;
+}
+
 export function coerceSliderValues(raw: unknown, fallback: SliderValues): SliderValues {
   const out: SliderValues = { ...fallback };
   if (!raw || typeof raw !== 'object') return out;
@@ -606,6 +641,7 @@ export function parsePreset(text: string, fileName?: string): PresetPayload {
         obj.bodySlide && typeof obj.bodySlide === 'object' && !Array.isArray(obj.bodySlide)
           ? (obj.bodySlide as Record<string, number>)
           : mapLegacySilhouetteToBodySlide(coerceAnatomy(obj.anatomy)),
+      faceMorphs: obj.faceMorphs ? coerceFaceMorphs(obj.faceMorphs) : undefined,
     };
   }
 

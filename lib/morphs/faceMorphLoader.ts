@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { parseTri, type TriData } from './triParser';
+import { FACE_SLIDERS_BY_NAME } from './faceMorphStore';
 
 export interface FaceTriBundle {
   head: TriData | null;
@@ -65,6 +66,50 @@ export async function loadFaceTriBundle(): Promise<FaceTriBundle> {
 }
 
 /**
+ * Computes morphed vertex positions into `out` (or a new Float32Array) from
+ * `basePositions` and bidirectional FaceGen CharGen `.tri` sliders.
+ * Returns `false` if vertex counts do not match `triData` cleanly.
+ */
+export function computeMorphedPositions(
+  basePositions: Float32Array,
+  faceSliders: Record<string, number>,
+  triData: TriData,
+  out?: Float32Array,
+): Float32Array | null {
+  const vertCount = Math.floor(basePositions.length / 3);
+  if (vertCount !== triData.header.numVerts) return null;
+
+  const coordCount = vertCount * 3;
+  const target = out && out.length >= coordCount ? out : new Float32Array(coordCount);
+  target.set(basePositions.subarray(0, coordCount));
+
+  for (const [name, val] of Object.entries(faceSliders)) {
+    if (!val || Number.isNaN(val)) continue;
+
+    const def = FACE_SLIDERS_BY_NAME[name];
+    let morph = triData.morphs.get(name);
+    let factor = val / 100.0;
+
+    if (val < 0 && def?.negName) {
+      const opp = triData.morphs.get(def.negName);
+      if (opp) {
+        morph = opp;
+        factor = Math.abs(val) / 100.0;
+      }
+    }
+
+    if (!morph) continue;
+    const deltas = morph.deltas;
+
+    for (let i = 0; i < coordCount; i++) {
+      target[i] += deltas[i] * factor;
+    }
+  }
+
+  return target;
+}
+
+/**
  * Applies face morph deltas to a Three.js BufferGeometry in-place.
  * Executes in < 0.2ms for real-time 60 FPS slider manipulation.
  *
@@ -78,35 +123,17 @@ export function applyPartFaceMorphs(
   basePositions: Float32Array,
   faceSliders: Record<string, number>,
   triData: TriData,
-): void {
+): boolean {
   const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
-  if (!posAttr) return;
+  if (!posAttr || posAttr.count !== triData.header.numVerts) return false;
 
   const current = posAttr.array as Float32Array;
-  const vertCount = Math.min(posAttr.count, triData.header.numVerts);
-  const coordCount = vertCount * 3;
-
-  // 1. Reset to base geometry positions
-  current.set(basePositions.subarray(0, coordCount));
-
-  // 2. Accumulate active morph deltas
-  for (const [name, val] of Object.entries(faceSliders)) {
-    if (val === 0 || Number.isNaN(val)) continue;
-
-    const morph = triData.morphs.get(name);
-    if (!morph) continue;
-
-    // Normalised influence factor (slider value / 100)
-    const factor = val / 100.0;
-    const deltas = morph.deltas;
-
-    for (let i = 0; i < coordCount; i++) {
-      current[i] += deltas[i] * factor;
-    }
-  }
+  const computed = computeMorphedPositions(basePositions, faceSliders, triData, current);
+  if (!computed) return false;
 
   posAttr.needsUpdate = true;
   geometry.computeVertexNormals();
+  return true;
 }
 
 /**

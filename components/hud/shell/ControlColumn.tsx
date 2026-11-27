@@ -57,8 +57,7 @@ export function ControlColumn({ section }: { section: FaceSectionId }) {
       </div>
 
       <fieldset disabled={compare} className="min-w-0 border-0 p-0 m-0">
-        {item.region ? (
-          <>
+        <>
             {/* Direct 3D Handles Widget */}
             <RightPanel />
 
@@ -109,16 +108,6 @@ export function ControlColumn({ section }: { section: FaceSectionId }) {
               </div>
             )}
           </>
-        ) : (
-          <div className="p-3 rounded border border-white/5 bg-[#1f2026]/60 text-center mb-3">
-            <p className="text-[11px] text-[#a8a5b0] mb-1">
-              Detailed {item.label.toLowerCase()} deformation has not been connected.
-            </p>
-            <p className="text-[10px] text-[#75737d]">
-              Appearance assets are available under Styling.
-            </p>
-          </div>
-        )}
 
         {/* Stored / Not connected Morphs */}
         {experimental.length > 0 && (

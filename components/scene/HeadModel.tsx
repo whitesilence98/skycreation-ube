@@ -52,6 +52,7 @@ import { useFaceMorphStore } from '@/lib/morphs/faceMorphStore';
 import {
   loadFaceTriBundle,
   applyPartFaceMorphs,
+  computeMorphedPositions,
   type FaceTriBundle,
 } from '@/lib/morphs/faceMorphLoader';
 import {
@@ -245,10 +246,14 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
 
   /* ── FaceGen / UBE CharGen .tri Face Morphs ──────────────────────────
      Reactively applies 3D vertex morph offsets from CharGen .tri files
-     to head, brows, and mouth geometries. */
+     to head, brows, eyes, lashes, and mouth geometries without colliding
+     with applyNeckDelta / pose follow. */
   const faceSliders = useFaceMorphStore((s) => s.faceSliders);
   const [faceTriBundle, setFaceTriBundle] = useState<FaceTriBundle | null>(null);
+  const morphedHeadBaseRef = useRef<Float32Array | null>(null);
   const browsBasePositionsRef = useRef<Float32Array | null>(null);
+  const eyeBasePositionsRef = useRef<Float32Array | null>(null);
+  const lashesBasePositionsRef = useRef<Float32Array | null>(null);
   const mouthBasePositionsRef = useRef<Float32Array | null>(null);
 
   useEffect(() => {
@@ -265,7 +270,12 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     };
   }, []);
 
-  // Snapshot brows and mouth base positions
+  // Reset cached morphed head buffer when base head geometry swaps
+  useEffect(() => {
+    morphedHeadBaseRef.current = null;
+  }, [headBuild]);
+
+  // Snapshot brows, eyes, lashes, and mouth base positions
   useEffect(() => {
     if (!browsGeo) {
       browsBasePositionsRef.current = null;
@@ -276,6 +286,24 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
   }, [browsGeo]);
 
   useEffect(() => {
+    if (!eyeGeo) {
+      eyeBasePositionsRef.current = null;
+      return;
+    }
+    const pos = eyeGeo.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (pos) eyeBasePositionsRef.current = new Float32Array(pos.array);
+  }, [eyeGeo]);
+
+  useEffect(() => {
+    if (!lashesGeo) {
+      lashesBasePositionsRef.current = null;
+      return;
+    }
+    const pos = lashesGeo.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (pos) lashesBasePositionsRef.current = new Float32Array(pos.array);
+  }, [lashesGeo]);
+
+  useEffect(() => {
     if (!mouthGeo) {
       mouthBasePositionsRef.current = null;
       return;
@@ -284,17 +312,23 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     if (pos) mouthBasePositionsRef.current = new Float32Array(pos.array);
   }, [mouthGeo]);
 
-  // Apply face morphs whenever faceSliders or faceTriBundle changes
+  // Compute morphed head base buffer and deform companion facial geometries
   useEffect(() => {
     if (!faceTriBundle) return;
 
-    if (headBuild.geometry && headBuild.basePositions && faceTriBundle.head) {
-      applyPartFaceMorphs(
-        headBuild.geometry,
+    const hasActiveMorphs = Object.values(faceSliders).some(
+      (v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) > 0.001,
+    );
+
+    if (headBuild.basePositions && faceTriBundle.head && !importedHead && hasActiveMorphs) {
+      morphedHeadBaseRef.current = computeMorphedPositions(
         headBuild.basePositions,
         faceSliders,
         faceTriBundle.head,
+        morphedHeadBaseRef.current ?? undefined,
       );
+    } else {
+      morphedHeadBaseRef.current = null;
     }
 
     if (browsGeo && browsBasePositionsRef.current && faceTriBundle.brows) {
@@ -303,6 +337,24 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         browsBasePositionsRef.current,
         faceSliders,
         faceTriBundle.brows,
+      );
+    }
+
+    if (eyeGeo && eyeBasePositionsRef.current && faceTriBundle.eyes) {
+      applyPartFaceMorphs(
+        eyeGeo,
+        eyeBasePositionsRef.current,
+        faceSliders,
+        faceTriBundle.eyes,
+      );
+    }
+
+    if (lashesGeo && lashesBasePositionsRef.current && faceTriBundle.lashes) {
+      applyPartFaceMorphs(
+        lashesGeo,
+        lashesBasePositionsRef.current,
+        faceSliders,
+        faceTriBundle.lashes,
       );
     }
 
@@ -316,7 +368,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     }
 
     onDirty();
-  }, [faceTriBundle, faceSliders, headBuild, browsGeo, mouthGeo, onDirty]);
+  }, [faceTriBundle, faceSliders, headBuild, importedHead, browsGeo, eyeGeo, lashesGeo, mouthGeo, onDirty]);
 
   /* ── body weight ──────────────────────────────────────────────────
      A `_0`/`_1` pair is two meshes over one atlas, exactly as in Skyrim. When
@@ -778,7 +830,10 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     rig.root.traverse((obj) => {
       if (
         obj instanceof THREE.Mesh &&
-        (obj.geometry === headBuild.geometry || obj.geometry === lashesGeo || obj.geometry === mouthGeo)
+        (obj.geometry === headBuild.geometry ||
+          obj.geometry === eyeGeo ||
+          obj.geometry === lashesGeo ||
+          obj.geometry === mouthGeo)
       ) {
         obj.updateMorphTargets();
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
@@ -912,12 +967,14 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
 
   const applyFollow = useCallback(
     (relTransform: THREE.Matrix4 | null, followHead: THREE.Matrix4 | null) => {
+      const basePos = (!importedHead && morphedHeadBaseRef.current) || headBuild.basePositions;
+      const hasTriMorph = Boolean(!importedHead && morphedHeadBaseRef.current);
       applyNeckDelta(
         headBuild.geometry,
-        headBuild.basePositions,
+        basePos,
         weight,
         relTransform,
-        headBuild.baseNormals,
+        hasTriMorph ? undefined : headBuild.baseNormals,
         !importedHead,
         headBuild.baseWeight ?? 1.0,
         bodyMesh && followHead && skeletonRegistry.byName.size > 0
@@ -929,10 +986,19 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
             }
           : null,
       );
+      if (hasTriMorph) {
+        headBuild.geometry.computeVertexNormals();
+      }
       onDirty();
     },
     [headBuild, weight, bodyMesh, skeletonRegistry, onDirty, importedHead],
   );
+
+  // Re-compose head geometry cleanly whenever .tri morphs update
+  useEffect(() => {
+    const { relTransform, followHead } = syncFollow();
+    applyFollow(relTransform, followHead);
+  }, [faceTriBundle, faceSliders, syncFollow, applyFollow]);
 
   /* Last head+spine world matrices the follow was computed from. Paused and
      rest frames leave them identical, so the seam/facial-follow work is skipped

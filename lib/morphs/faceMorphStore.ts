@@ -8,60 +8,79 @@
 import { create } from 'zustand';
 
 export type FaceMorphCategory =
-  | 'Head'
-  | 'Face'
+  | 'Brows'
   | 'Eyes'
-  | 'Brow'
-  | 'Mouth'
   | 'Nose'
-  | 'Extra/Pers';
+  | 'Lips'
+  | 'Cheeks'
+  | 'Jaw';
+
+export type FaceMorphSectionId =
+  | 'eyebrows'
+  | 'eyes'
+  | 'nose'
+  | 'lips'
+  | 'cheeks'
+  | 'jaw';
 
 export interface FaceSliderDef {
+  /** Primary morph name stored in faceSliders / faceMorphs (and applied for positive values). */
   name: string;
+  /** Optional authored opposite .tri morph name applied when value < 0 (e.g. BrowUp vs BrowDown). */
+  negName?: string;
   label: string;
   category: FaceMorphCategory;
+  section: FaceMorphSectionId;
   min: number;
   max: number;
   step: number;
   defaultValue: number;
 }
 
-/** Core morph sliders corresponding to CharGen .tri blend targets */
+/**
+ * Bidirectional FaceGen CharGen .tri morph sliders covering all 17 opposing
+ * pairs (34 targets) in FemaleHeadCharGen.tri / Brows / Eyes / Lashes plus
+ * VampireMorph in MouthHumanF_tangentChargen.tri.
+ */
 export const FACE_SLIDERS: FaceSliderDef[] = [
-  // ── Brow ─────────────────────────────────────────────────────────────
-  { name: 'BrowIn', label: 'Brow Depth (In)', category: 'Brow', min: -100, max: 100, step: 1, defaultValue: 0 },
-  { name: 'BrowUp', label: 'Brow Height (Up/Down)', category: 'Brow', min: -100, max: 100, step: 1, defaultValue: 0 },
-  { name: 'BrowForward', label: 'Brow Forward', category: 'Brow', min: -100, max: 100, step: 1, defaultValue: 0 },
+  // ── Brows ────────────────────────────────────────────────────────────
+  { name: 'BrowUp', negName: 'BrowDown', label: 'Brow Height', category: 'Brows', section: 'eyebrows', min: -100, max: 100, step: 1, defaultValue: 0 },
+  { name: 'BrowForward', negName: 'BrowBack', label: 'Brow Depth', category: 'Brows', section: 'eyebrows', min: -100, max: 100, step: 1, defaultValue: 0 },
+  { name: 'BrowIn', negName: 'BrowOut', label: 'Brow Spacing', category: 'Brows', section: 'eyebrows', min: -100, max: 100, step: 1, defaultValue: 0 },
 
   // ── Eyes ─────────────────────────────────────────────────────────────
-  { name: 'EyesBack', label: 'Eyes Depth (Back/Fwd)', category: 'Eyes', min: -100, max: 100, step: 1, defaultValue: 0 },
-  { name: 'EyesMoveDown', label: 'Eyes Position (Up/Down)', category: 'Eyes', min: -100, max: 100, step: 1, defaultValue: 0 },
-  { name: 'Tear_duct_fix', label: 'Tear Duct Alignment', category: 'Eyes', min: 0, max: 100, step: 1, defaultValue: 0 },
+  { name: 'EyesMoveUp', negName: 'EyesMoveDown', label: 'Eye Vertical Position', category: 'Eyes', section: 'eyes', min: -100, max: 100, step: 1, defaultValue: 0 },
+  { name: 'EyesMoveOut', negName: 'EyesMoveIn', label: 'Eye Spacing', category: 'Eyes', section: 'eyes', min: -100, max: 100, step: 1, defaultValue: 0 },
+  { name: 'EyesForward', negName: 'EyesBack', label: 'Eye Depth', category: 'Eyes', section: 'eyes', min: -100, max: 100, step: 1, defaultValue: 0 },
 
   // ── Nose ─────────────────────────────────────────────────────────────
-  { name: 'NoseShort', label: 'Nose Length (Short/Long)', category: 'Nose', min: -100, max: 100, step: 1, defaultValue: 0 },
+  { name: 'NoseUp', negName: 'NoseDown', label: 'Nose Bridge / Tip Height', category: 'Nose', section: 'nose', min: -100, max: 100, step: 1, defaultValue: 0 },
+  { name: 'NoseLong', negName: 'NoseShort', label: 'Nose Length', category: 'Nose', section: 'nose', min: -100, max: 100, step: 1, defaultValue: 0 },
 
-  // ── Mouth ────────────────────────────────────────────────────────────
-  { name: 'LipMoveOut', label: 'Lips Depth (Out/In)', category: 'Mouth', min: -100, max: 100, step: 1, defaultValue: 0 },
-  { name: 'LipMoveUp', label: 'Lips Height (Up/Down)', category: 'Mouth', min: -100, max: 100, step: 1, defaultValue: 0 },
-  { name: 'LipMoveDown', label: 'Lower Lip Position', category: 'Mouth', min: -100, max: 100, step: 1, defaultValue: 0 },
-  { name: 'Underbite', label: 'Jaw Underbite / Overbite', category: 'Mouth', min: -100, max: 100, step: 1, defaultValue: 0 },
+  // ── Lips & Mouth ─────────────────────────────────────────────────────
+  { name: 'LipMoveOut', negName: 'LipMoveIn', label: 'Lip Protrusion', category: 'Lips', section: 'lips', min: -100, max: 100, step: 1, defaultValue: 0 },
+  { name: 'LipMoveUp', negName: 'LipMoveDown', label: 'Lip Vertical Position', category: 'Lips', section: 'lips', min: -100, max: 100, step: 1, defaultValue: 0 },
+  { name: 'Overbite', negName: 'Underbite', label: 'Bite Balance (Over / Under)', category: 'Lips', section: 'lips', min: -100, max: 100, step: 1, defaultValue: 0 },
 
-  // ── Face & Cheeks ────────────────────────────────────────────────────
-  { name: 'ChinThin', label: 'Chin Width (Thin/Wide)', category: 'Face', min: -100, max: 100, step: 1, defaultValue: 0 },
-  { name: 'ChinMoveUp', label: 'Chin Height (Up/Down)', category: 'Face', min: -100, max: 100, step: 1, defaultValue: 0 },
-  { name: 'JawWide', label: 'Jaw Width', category: 'Face', min: -100, max: 100, step: 1, defaultValue: 0 },
-  { name: 'CheeksIn', label: 'Cheek Fullness (In/Out)', category: 'Face', min: -100, max: 100, step: 1, defaultValue: 0 },
-  { name: 'CheeksUp', label: 'Cheekbone Height (Up)', category: 'Face', min: -100, max: 100, step: 1, defaultValue: 0 },
-  { name: 'CheeksDown', label: 'Cheek Position (Down)', category: 'Face', min: -100, max: 100, step: 1, defaultValue: 0 },
+  // ── Cheeks ───────────────────────────────────────────────────────────
+  { name: 'CheeksUp', negName: 'CheeksDown', label: 'Cheekbone Height', category: 'Cheeks', section: 'cheeks', min: -100, max: 100, step: 1, defaultValue: 0 },
+  { name: 'CheeksOut', negName: 'CheeksIn', label: 'Cheek Fullness (Full / Hollow)', category: 'Cheeks', section: 'cheeks', min: -100, max: 100, step: 1, defaultValue: 0 },
+  { name: 'VampireMorph', label: 'Gaunt Cheek Contour', category: 'Cheeks', section: 'cheeks', min: 0, max: 100, step: 1, defaultValue: 0 },
 
-  // ── Head ─────────────────────────────────────────────────────────────
-  { name: 'NeckSize__HEAD', label: 'Neck Circumference', category: 'Head', min: -100, max: 100, step: 1, defaultValue: 0 },
-  { name: 'UpperChestHeight_n|p__HEAD', label: 'Collarbone / Chest Height', category: 'Head', min: -100, max: 100, step: 1, defaultValue: 0 },
-
-  // ── Extra/Pers ───────────────────────────────────────────────────────
-  { name: 'VampireMorph', label: 'Vampire Cheek & Lip Hollow', category: 'Extra/Pers', min: 0, max: 100, step: 1, defaultValue: 0 },
+  // ── Jaw & Chin ───────────────────────────────────────────────────────
+  { name: 'JawWide', negName: 'JawNarrow', label: 'Jaw Width', category: 'Jaw', section: 'jaw', min: -100, max: 100, step: 1, defaultValue: 0 },
+  { name: 'JawUp', negName: 'JawDown', label: 'Jaw Height', category: 'Jaw', section: 'jaw', min: -100, max: 100, step: 1, defaultValue: 0 },
+  { name: 'ChinMoveUp', negName: 'ChinMoveDown', label: 'Chin Height', category: 'Jaw', section: 'jaw', min: -100, max: 100, step: 1, defaultValue: 0 },
+  { name: 'ChinWide', negName: 'ChinThin', label: 'Chin Width', category: 'Jaw', section: 'jaw', min: -100, max: 100, step: 1, defaultValue: 0 },
 ];
+
+export const FACE_SLIDERS_BY_NAME: Record<string, FaceSliderDef> = Object.fromEntries(
+  FACE_SLIDERS.map((s) => [s.name, s]),
+);
+
+export function getFaceSlidersForSection(section: string): FaceSliderDef[] {
+  return FACE_SLIDERS.filter((s) => s.section === section);
+}
 
 export interface FaceMorphState {
   /** Active slider values: sliderName -> number (-100..100 or 0..100) */
@@ -71,6 +90,7 @@ export interface FaceMorphState {
 
   setFaceSlider: (name: string, value: number) => void;
   setFaceSliders: (sliders: Record<string, number>) => void;
+  setFaceSlidersExact: (sliders: Record<string, number>) => void;
   resetFaceSlider: (name: string) => void;
   resetFaceSliders: () => void;
   setActiveCategory: (category: FaceMorphCategory) => void;
@@ -79,7 +99,7 @@ export interface FaceMorphState {
 
 export const useFaceMorphStore = create<FaceMorphState>((set) => ({
   faceSliders: {},
-  activeCategory: 'Face',
+  activeCategory: 'Brows',
   searchQuery: '',
 
   setFaceSlider: (name, value) => {
@@ -98,6 +118,10 @@ export const useFaceMorphStore = create<FaceMorphState>((set) => ({
         ...newSliders,
       },
     }));
+  },
+
+  setFaceSlidersExact: (sliders) => {
+    set({ faceSliders: { ...sliders } });
   },
 
   resetFaceSlider: (name) => {

@@ -114,7 +114,7 @@ export function BracketSlider({
             }
           }}
           className={cn(
-            'relative h-[14px] flex-1 flex items-center',
+            'relative h-[24px] min-h-[24px] flex-1 flex items-center',
             disabled ? 'cursor-not-allowed' : 'cursor-pointer',
             'focus-visible:outline-2 focus-visible:outline-[#eac87f] focus-visible:outline-offset-2',
           )}

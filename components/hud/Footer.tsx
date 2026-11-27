@@ -773,8 +773,8 @@ function FeaturesFooter({ onToggleImport }: { onToggleImport?: () => void }) {
   }, [onToggleImport, preview, setPreviewMode]);
 
   const randomize = () => {
-    state().resetFaceRegion();
-    state().showToast('Reset current region');
+    state().randomizeFaceSculpt();
+    state().showToast('Randomized facial sculpt');
   };
 
   return (

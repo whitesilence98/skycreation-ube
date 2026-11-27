@@ -37,6 +37,13 @@ export const REGION_BONES: RegionBoneDef[] = [
     strength: 0.9,
   },
   {
+    region: 'eyes',
+    pivot: [0.032, 0.015, 0.074],
+    influence: [0.033, 0.015, 0.078],
+    radii: [0.020, 0.014, 0.022],
+    strength: 0.85,
+  },
+  {
     region: 'nose',
     pivot: [0, 0.020, 0.088],
     influence: [0, -0.0024, 0.0936],
@@ -64,12 +71,20 @@ export const REGION_BONES: RegionBoneDef[] = [
     radii: [0.048, 0.035, 0.048],
     strength: 0.9,
   },
+  {
+    region: 'ears',
+    pivot: [0.074, -0.004, 0.010],
+    influence: [0.076, -0.004, 0.008],
+    radii: [0.020, 0.028, 0.028],
+    strength: 0.95,
+  },
 ];
 
 const mirror = (p: [number, number, number]): [number, number, number] => [-p[0], p[1], p[2]];
 
 /** Regions whose deformation is a left/right pair. */
-const isPairedRegion = (id: RegionId) => id === 'eyebrows' || id === 'cheeks';
+export const isPairedRegion = (id: RegionId) =>
+  id === 'eyebrows' || id === 'eyes' || id === 'cheeks' || id === 'ears';
 
 /** The bone key for one side of a paired region.
  *
@@ -135,10 +150,12 @@ export function applyFacialWeights(geometry: THREE.BufferGeometry, boneList: THR
     center: THREE.Vector3;
     inv: THREE.Vector3;
     strength: number;
+    lateral: boolean;
   }> = [];
 
   for (const rb of REGION_BONES) {
     const def = REGIONS_BY_ID[rb.region];
+    const lateral = rb.region === 'ears';
     if (isPairedRegion(rb.region)) {
       /* The brow influence sits at x = 0, so choosing the bone from the sign
          of the centre put both mirrored fields on the same bone. */
@@ -151,6 +168,7 @@ export function applyFacialWeights(geometry: THREE.BufferGeometry, boneList: THR
           center: new THREE.Vector3(c[0], c[1], c[2]),
           inv: new THREE.Vector3(1 / rb.radii[0], 1 / rb.radii[1], 1 / rb.radii[2]),
           strength: rb.strength,
+          lateral,
         });
       }
     } else {
@@ -159,6 +177,7 @@ export function applyFacialWeights(geometry: THREE.BufferGeometry, boneList: THR
         center: new THREE.Vector3(rb.influence[0], rb.influence[1], rb.influence[2]),
         inv: new THREE.Vector3(1 / rb.radii[0], 1 / rb.radii[1], 1 / rb.radii[2]),
         strength: rb.strength,
+        lateral,
       });
     }
   }
@@ -176,7 +195,7 @@ export function applyFacialWeights(geometry: THREE.BufferGeometry, boneList: THR
       const dz = (z - fd.center.z) * fd.inv.z;
       const d2 = dx * dx + dy * dy + dz * dz;
       // Smooth falloff at the back of the head; pin the lower neck seam.
-      const depth = smoothstep(-0.004, 0.011, z);
+      const depth = fd.lateral ? smoothstep(-0.045, -0.015, z) : smoothstep(-0.004, 0.011, z);
       const neckPin = y < -0.075 ? (z < 0.025 ? 0.0 : smoothstep(-0.082, -0.075, y)) : 1.0;
       const w = Math.exp(-2.1 * d2) * fd.strength * (0.18 + 0.82 * depth) * neckPin;
       if (w > 0.004) acc.push({ i: fd.boneIndex, w });
@@ -259,10 +278,12 @@ export function createRig(geometry: THREE.BufferGeometry): Rig {
   const regionBoneKeys: Record<RegionId, string[]> = {
     forehead: ['Forehead'],
     eyebrows: ['Brow_L', 'Brow_R'],
+    eyes: ['Eye_L', 'Eye_R'],
     nose: ['Nose'],
     cheeks: ['Cheek_L', 'Cheek_R'],
     lips: ['Lips'],
     jaw: ['Jaw'],
+    ears: ['Ear_L', 'Ear_R'],
   };
 
   applyFacialWeights(geometry, boneList);
@@ -408,7 +429,16 @@ export function poseRegionBone(
   const bone = rig.bones[key];
   if (!bone) return;
   const side: 1 | -1 = key.endsWith('_R') ? -1 : 1;
-  poseBone(bone, def, values, pose, side, regionPivot(region));
+  const xMirror = isPairedRegion(region) ? side : 1;
+  const mirroredPose: GizmoPose =
+    xMirror === -1
+      ? {
+          offset: [pose.offset[0] * -1, pose.offset[1], pose.offset[2]],
+          rotation: [pose.rotation[0], pose.rotation[1] * -1, pose.rotation[2] * -1],
+          scale: pose.scale,
+        }
+      : pose;
+  poseBone(bone, def, values, mirroredPose, side, regionPivot(region));
 }
 
 /**
@@ -503,15 +533,26 @@ export function skinPoint(
   rig: Rig,
   vertexIndex: number,
   out: THREE.Vector3,
+  baseOverride?: Float32Array,
+  normals?: Float32Array,
+  normalOffset = 0,
 ): THREE.Vector3 {
   const { skinIndex, skinWeight, basePosition, boneInverses } = rig.bindData;
   const bones = rig.skeleton.bones;
+  const i3 = vertexIndex * 3;
+  const src = baseOverride && baseOverride.length >= i3 + 3 ? baseOverride : basePosition;
 
-  out.set(
-    basePosition[vertexIndex * 3],
-    basePosition[vertexIndex * 3 + 1],
-    basePosition[vertexIndex * 3 + 2],
-  );
+  let bx = src[i3];
+  let by = src[i3 + 1];
+  let bz = src[i3 + 2];
+
+  if (normals && normalOffset !== 0 && normals.length >= i3 + 3) {
+    bx += normals[i3] * normalOffset;
+    by += normals[i3 + 1] * normalOffset;
+    bz += normals[i3 + 2] * normalOffset;
+  }
+
+  out.set(bx, by, bz);
 
   let sx = 0;
   let sy = 0;

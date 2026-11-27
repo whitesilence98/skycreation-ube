@@ -1,10 +1,12 @@
 export type RegionId =
   | 'forehead'
   | 'eyebrows'
+  | 'eyes'
   | 'nose'
   | 'cheeks'
   | 'lips'
-  | 'jaw';
+  | 'jaw'
+  | 'ears';
 
 export type TransformMode = 'translate' | 'rotate' | 'scale';
 
@@ -77,7 +79,7 @@ export interface RegionDef {
   /** Direction the region protrudes, used for gizmo orientation + "depth". */
   normal: [number, number, number];
   /** Face-contour SVG diagram id. */
-  diagram: 'forehead' | 'eyebrows' | 'nose' | 'cheeks' | 'lips' | 'jaw';
+  diagram: 'forehead' | 'eyebrows' | 'eyes' | 'nose' | 'cheeks' | 'lips' | 'jaw' | 'ears';
   /** Bounding box of the region on the front face, in normalized face coords. */
   contour: [number, number, number, number];
   defaults: SliderValues;
@@ -215,6 +217,18 @@ export const REGIONS: RegionDef[] = [
     defaults: { length: 0, width: 6, depth: 3, height: 0.38, angle: 0.62, protrusion: 0.18 },
   },
   {
+    id: 'eyes',
+    label: 'EYES',
+    short: 'EYES',
+    bone: 'Eye_L',
+    center: [0.032, 0.015, 0.078],
+    radius: 0.03,
+    normal: [0.15, 0, 1],
+    diagram: 'eyes',
+    contour: [0.24, 0.33, 0.76, 0.45],
+    defaults: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
+  },
+  {
     id: 'nose',
     label: 'NOSE [ACTIVE]',
     short: 'NOSE',
@@ -266,6 +280,18 @@ export const REGIONS: RegionDef[] = [
     diagram: 'jaw',
     contour: [0.22, 0.64, 0.78, 0.9],
     defaults: { length: -2, width: 11, depth: 3, height: 0.46, angle: 0.22, protrusion: 0.2 },
+  },
+  {
+    id: 'ears',
+    label: 'EARS',
+    short: 'EARS',
+    bone: 'Ear_L',
+    center: [0.074, -0.004, 0.010],
+    radius: 0.036,
+    normal: [1, 0, 0.15],
+    diagram: 'ears',
+    contour: [0.08, 0.40, 0.22, 0.60],
+    defaults: { length: 0, width: 0, depth: 0, height: 0, angle: 0, protrusion: 0 },
   },
 ];
 

@@ -4,13 +4,13 @@ import type { RegionId } from '@/lib/regions';
 
 export const FACE_SECTIONS = [
   { id: 'forehead', label: 'Face Shape', region: 'forehead', groups: ['face'] },
-  { id: 'eyes', label: 'Eyes', region: null, groups: ['eyes'] },
-  { id: 'nose', label: 'Nose', region: 'nose', groups: ['nose'] },
-  { id: 'lips', label: 'Lips', region: 'lips', groups: ['mouth'] },
-  { id: 'ears', label: 'Ears', region: null, groups: ['ears'] },
   { id: 'eyebrows', label: 'Brows', region: 'eyebrows', groups: ['brows'] },
+  { id: 'eyes', label: 'Eyes', region: 'eyes', groups: ['eyes'] },
+  { id: 'nose', label: 'Nose', region: 'nose', groups: ['nose'] },
   { id: 'cheeks', label: 'Cheeks', region: 'cheeks', groups: ['face'] },
+  { id: 'lips', label: 'Lips', region: 'lips', groups: ['mouth'] },
   { id: 'jaw', label: 'Jaw & chin', region: 'jaw', groups: ['face'] },
+  { id: 'ears', label: 'Ears', region: 'ears', groups: ['ears'] },
 ] as const;
 export type FaceSectionId = (typeof FACE_SECTIONS)[number]['id'];
 export const EDITOR_CATEGORIES = ['preset', 'face', 'hair', 'body', 'outfit', 'styling'] as const;

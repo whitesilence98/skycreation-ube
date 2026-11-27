@@ -6,7 +6,7 @@ import { TransformControls } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useCharacter } from '@/lib/store';
 import { useGizmoTip } from '@/lib/gizmoTip';
-import { regionPivot, type Rig } from '@/lib/head/rig';
+import { regionPivot, isPairedRegion, type Rig } from '@/lib/head/rig';
 import { REGIONS_BY_ID, SLIDER_DEFS } from '@/lib/regions';
 import { anatomySliderBank } from '@/lib/anatomy/bind';
 
@@ -33,10 +33,15 @@ export function FaceGizmo({ rig }: FaceGizmoProps) {
   const mode = useCharacter((s) => s.transformMode);
   const setPose = useCharacter((s) => s.setPose);
   const pose = useCharacter((s) => s.poses[s.activeRegion]);
-  /* The gizmo edits the sculpt, so it only exists under FACE SHAPE. Leaving it
-     live on the asset tabs meant the arms and the red anchor stayed grabbable
-     over a face the user was only picking textures for. */
-  const showGizmo = useCharacter((s) => s.primaryTab === 'FACE SHAPE');
+  /* Show the 3D gizmo only when drilled into a Feature sub-section in 3D Handle mode
+     (or regions without .tri targets like forehead/ears), so it never obscures the face
+     while browsing or tweaking CharGen .tri sliders. */
+  const showGizmo = useCharacter(
+    (s) =>
+      s.primaryTab === 'FACE SHAPE' &&
+      s.featuresSection !== null &&
+      (s.featuresMode === 'handle' || s.featuresSection === 'forehead' || s.featuresSection === 'ears'),
+  );
   const setTipScreen = useGizmoTip((s) => s.setTip);
 
   const proxy = useMemo(() => new THREE.Object3D(), []);
@@ -56,11 +61,7 @@ export function FaceGizmo({ rig }: FaceGizmoProps) {
     ? anatomySliderBank(activeRegion, anatomy, baseSliders) : baseSliders,
   [activeRegion, anatomyMode, anatomy, baseSliders]);
 
-  const anchor = useMemo(() => {
-    const p = new THREE.Vector3(...def.center);
-    if (activeRegion === 'cheeks') p.x = 0;
-    return p;
-  }, [def, activeRegion]);
+  const anchor = useMemo(() => new THREE.Vector3(...def.center), [def]);
 
   // Slider contribution in bone-local space (must mirror poseBone()).
   const sliderDelta = useMemo(() => {
@@ -101,13 +102,20 @@ export function FaceGizmo({ rig }: FaceGizmoProps) {
     const dx = proxy.position.x - anchor.x;
     const dy = proxy.position.y - anchor.y;
     const dz = proxy.position.z - anchor.z;
+    const paired = isPairedRegion(activeRegion);
+    const e = new THREE.Euler().setFromQuaternion(proxy.quaternion);
     const keys = rig.regionBoneKeys[activeRegion];
     for (const key of keys) {
       const b = rig.bones[key];
       if (!b) continue;
       const side = key.endsWith('_R') ? -1 : 1;
-      b.position.set(pivot[0] * side + dx, pivot[1] + dy, pivot[2] + dz);
-      b.quaternion.copy(proxy.quaternion);
+      const xMirror = paired ? side : 1;
+      b.position.set(pivot[0] * side + dx * xMirror, pivot[1] + dy, pivot[2] + dz);
+      if (xMirror === -1) {
+        b.rotation.set(e.x, e.y * -1, e.z * -1);
+      } else {
+        b.quaternion.copy(proxy.quaternion);
+      }
       b.scale.copy(proxy.scale);
     }
     rig.root.updateMatrixWorld(true);
@@ -174,17 +182,19 @@ export function FaceGizmo({ rig }: FaceGizmoProps) {
         <TransformControls
           object={proxy}
           mode={mode}
-          size={0.52}
+          size={0.78}
           space="local"
           showX
           showY
           showZ
           onMouseDown={() => {
             dragging.current = true;
+            useCharacter.getState().beginFaceEdit();
           }}
           onMouseUp={() => {
             dragging.current = false;
             onObjectChange();
+            useCharacter.getState().endFaceEdit();
           }}
           onObjectChange={onObjectChange}
         />
@@ -192,7 +202,7 @@ export function FaceGizmo({ rig }: FaceGizmoProps) {
 
       {/* anchor dot at the bone origin */}
       <mesh position={tip} renderOrder={7}>
-        <sphereGeometry args={[0.0028, 12, 12]} />
+        <sphereGeometry args={[0.0040, 14, 14]} />
         <meshBasicMaterial color="#ff4d3d" toneMapped={false} depthTest={false} transparent />
       </mesh>
 

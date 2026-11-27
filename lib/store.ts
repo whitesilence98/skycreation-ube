@@ -21,10 +21,13 @@ import {
 import {
   OVERLAY_BLENDS,
   buildPresetFile,
+  coerceFaceMorphs,
   resolvePresetId,
   type PresetFile,
   type PresetPayload,
 } from '@/lib/presetIO';
+import { getFaceSlidersForSection, useFaceMorphStore } from '@/lib/morphs/faceMorphStore';
+import { FACE_SECTIONS, type FaceSectionId } from '@/lib/faceControls';
 import {
   SESSION_KEY,
   SESSION_VERSION,
@@ -186,6 +189,7 @@ export type BodyTab = 'gear' | 'physique';
 export interface FaceSnapshot extends AnatomySnapshot {
   sliders: Record<RegionId, SliderValues>;
   poses: Record<RegionId, GizmoPose>;
+  faceMorphs: Record<string, number>;
   anatomyMode: AnatomyMode;
 }
 
@@ -241,6 +245,9 @@ export interface CharacterState extends AnatomySnapshot {
   name: string;
   stats: { faces: number; verts: number; tris: number };
   activeRegion: RegionId;
+  featuresSection: FaceSectionId | null;
+  featuresMode: 'sculpt' | 'handle';
+  faceMorphs: Record<string, number>;
   primaryTab: string;
   subTab: string;
   transformMode: TransformMode;
@@ -485,6 +492,10 @@ export interface CharacterState extends AnatomySnapshot {
   setShowGroundMeshes: (val: boolean) => void;
 
   setActiveRegion: (id: RegionId) => void;
+  setFeaturesSection: (section: FaceSectionId | null) => void;
+  setFeaturesMode: (mode: 'sculpt' | 'handle') => void;
+  setFaceMorph: (name: string, value: number) => void;
+  randomizeFaceSculpt: () => void;
   setPrimaryTab: (t: string) => void;
   setSubTab: (t: string) => void;
   setTransformMode: (m: TransformMode) => void;
@@ -620,8 +631,21 @@ function faceSnapshot(s: CharacterState): FaceSnapshot {
     ...anatomySnapshot(s),
     sliders: cloneSliderBank(s.sliders),
     poses: clonePoseBank(s.poses),
+    faceMorphs: { ...s.faceMorphs },
     anatomyMode: s.anatomyMode,
   };
+}
+
+function faceMorphsDiffers(a: Record<string, number>, b: Record<string, number>): boolean {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  for (const k of keysA) {
+    if (!sameNumber(a[k] ?? 0, b[k] ?? 0)) return true;
+  }
+  for (const k of keysB) {
+    if (!sameNumber(a[k] ?? 0, b[k] ?? 0)) return true;
+  }
+  return false;
 }
 
 /* Structural compares against the fixed banks — no clones, no `JSON.stringify`.
@@ -667,7 +691,8 @@ function faceSnapshotDiffers(s: CharacterState, previous: FaceSnapshot): boolean
   return s.anatomyMode !== previous.anatomyMode
     || anatomyDiffers(s, previous)
     || sliderBankDiffers(s.sliders, previous.sliders)
-    || poseBankDiffers(s.poses, previous.poses);
+    || poseBankDiffers(s.poses, previous.poses)
+    || faceMorphsDiffers(s.faceMorphs, previous.faceMorphs);
 }
 
 /** Whether applying `patch` would move any face field. Only the banks the
@@ -675,6 +700,7 @@ function faceSnapshotDiffers(s: CharacterState, previous: FaceSnapshot): boolean
  *  alone serializes — the other regions' banks or the anatomy dictionaries. */
 function facePatchDiffers(s: CharacterState, patch: Partial<CharacterState>): boolean {
   if (patch.anatomyMode !== undefined && patch.anatomyMode !== s.anatomyMode) return true;
+  if (patch.faceMorphs && faceMorphsDiffers(s.faceMorphs, patch.faceMorphs)) return true;
   if (patch.sliders) {
     for (const region of REGIONS) {
       const next = patch.sliders[region.id];
@@ -704,6 +730,7 @@ function faceRestore(snap: FaceSnapshot): Partial<CharacterState> {
     ...anatomySnapshot(snap),
     sliders: cloneSliderBank(snap.sliders),
     poses: clonePoseBank(snap.poses),
+    faceMorphs: { ...snap.faceMorphs },
     anatomyMode: snap.anatomyMode,
   };
 }
@@ -817,44 +844,70 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   endFaceEdit: () => set(s => commitEdit(s)),
   /* These walk the wider face history, which also holds anatomy values, so
      they undo both a slider drag and an advanced-control edit. */
-  undoFace: () => { get().endFaceEdit(); set(s => {
-    if (s.faceCompareStart) return {};
-    const previous = s.facePast.at(-1);
-    return previous ? { ...faceRestore(previous), facePast: s.facePast.slice(0, -1),
-      faceFuture: [...s.faceFuture, faceSnapshot(s)].slice(-FACE_HISTORY_LIMIT),
-      ...anatomyStep(s, previous, 'undo') } : {};
-  }); },
-  redoFace: () => { get().endFaceEdit(); set(s => {
-    if (s.faceCompareStart) return {};
-    const next = s.faceFuture.at(-1);
-    return next ? { ...faceRestore(next), faceFuture: s.faceFuture.slice(0, -1),
-      facePast: [...s.facePast, faceSnapshot(s)].slice(-FACE_HISTORY_LIMIT),
-      ...anatomyStep(s, next, 'redo') } : {};
-  }); },
+  undoFace: () => {
+    get().endFaceEdit();
+    set((s) => {
+      if (s.faceCompareStart) return {};
+      const previous = s.facePast.at(-1);
+      if (!previous) return {};
+      useFaceMorphStore.getState().setFaceSlidersExact(previous.faceMorphs);
+      return {
+        ...faceRestore(previous),
+        facePast: s.facePast.slice(0, -1),
+        faceFuture: [...s.faceFuture, faceSnapshot(s)].slice(-FACE_HISTORY_LIMIT),
+        ...anatomyStep(s, previous, 'undo'),
+      };
+    });
+  },
+  redoFace: () => {
+    get().endFaceEdit();
+    set((s) => {
+      if (s.faceCompareStart) return {};
+      const next = s.faceFuture.at(-1);
+      if (!next) return {};
+      useFaceMorphStore.getState().setFaceSlidersExact(next.faceMorphs);
+      return {
+        ...faceRestore(next),
+        faceFuture: s.faceFuture.slice(0, -1),
+        facePast: [...s.facePast, faceSnapshot(s)].slice(-FACE_HISTORY_LIMIT),
+        ...anatomyStep(s, next, 'redo'),
+      };
+    });
+  },
   resetFaceRegion: () => {
     get().endFaceEdit();
-    set(s => {
+    set((s) => {
       if (s.faceCompareStart) return {};
       const region = s.activeRegion;
+      const sectionMorphs = getFaceSlidersForSection(s.featuresSection ?? region);
+      const nextMorphs = { ...s.faceMorphs };
+      for (const m of sectionMorphs) {
+        delete nextMorphs[m.name];
+      }
+      useFaceMorphStore.getState().setFaceSlidersExact(nextMorphs);
       return faceHistory(s, {
         sliders: { ...s.sliders, [region]: { ...REGIONS_BY_ID[region].defaults } },
         poses: { ...s.poses, [region]: identityPose() },
+        faceMorphs: nextMorphs,
       });
     });
   },
   /* Hold-compare swaps the live face for the baseline and banks the edited
      face; the second call (button release) puts it back. Re-entering while
      held is a no-op, so a repeated pointerdown cannot overwrite the bank. */
-  beginFaceCompare: () => set(s => {
+  beginFaceCompare: () => set((s) => {
     if (s.faceCompareStart) return {};
     /* The first hold anchors on the face as it is now; later holds reuse the
        baseline an `applyFaceBaseline` re-anchored. */
     const baseline = s.faceBaseline ?? faceSnapshot(s);
+    useFaceMorphStore.getState().setFaceSlidersExact(baseline.faceMorphs);
     return { faceCompareStart: faceSnapshot(s), faceBaseline: baseline, ...faceRestore(baseline) };
   }),
-  endFaceCompare: () => set(s => s.faceCompareStart
-    ? { ...faceRestore(s.faceCompareStart), faceCompareStart: null }
-    : {}),
+  endFaceCompare: () => set((s) => {
+    if (!s.faceCompareStart) return {};
+    useFaceMorphStore.getState().setFaceSlidersExact(s.faceCompareStart.faceMorphs);
+    return { ...faceRestore(s.faceCompareStart), faceCompareStart: null };
+  }),
   applyFaceBaseline: () => set(s =>
     s.faceCompareStart
       /* Mid-hold: the live fields are the baseline, so re-anchor from the
@@ -949,6 +1002,9 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   name: NAME_DEFAULT,
   stats: { faces: 47868, verts: 2998, tris: 1179 },
   activeRegion: 'nose',
+  featuresSection: null,
+  featuresMode: 'sculpt',
+  faceMorphs: {},
   primaryTab: 'FACE',
   subTab: 'SKIN',
   bodyTab: 'gear',
@@ -1215,6 +1271,69 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   presetNonce: 0,
 
   setActiveRegion: (id) => set({ activeRegion: id }),
+  setFeaturesSection: (featuresSection) => set((s) => {
+    if (!featuresSection) return { featuresSection: null };
+    const entry = FACE_SECTIONS.find((sec) => sec.id === featuresSection);
+    const hasTriMorphs = getFaceSlidersForSection(featuresSection).length > 0;
+    return {
+      featuresSection,
+      activeRegion: entry?.region ?? s.activeRegion,
+      featuresMode: hasTriMorphs ? s.featuresMode : 'handle',
+    };
+  }),
+  setFeaturesMode: (featuresMode) => set({ featuresMode }),
+  setFaceMorph: (name, value) =>
+    set((s) => {
+      if (!Number.isFinite(value)) return {};
+      const clamped = Math.max(-100, Math.min(100, Math.round(value)));
+      const next = { ...s.faceMorphs };
+      if (clamped === 0) {
+        delete next[name];
+      } else {
+        next[name] = clamped;
+      }
+      useFaceMorphStore.getState().setFaceSlidersExact(next);
+      return faceHistory(s, { faceMorphs: next });
+    }),
+  randomizeFaceSculpt: () => {
+    get().endFaceEdit();
+    set((s) => {
+      if (s.faceCompareStart) return {};
+      const activeMorphs = s.featuresSection
+        ? getFaceSlidersForSection(s.featuresSection)
+        : [];
+      const targets = activeMorphs.length > 0
+        ? activeMorphs
+        : FACE_SECTIONS.flatMap((sec) => getFaceSlidersForSection(sec.id));
+      const nextMorphs = { ...s.faceMorphs };
+      for (const m of targets) {
+        if (m.name === 'VampireMorph') continue;
+        const spread = Math.round((Math.random() * 2 - 1) * 32);
+        if (spread === 0) delete nextMorphs[m.name];
+        else nextMorphs[m.name] = Math.max(m.min, Math.min(m.max, spread));
+      }
+      // If active section has no .tri targets (forehead / ears), apply subtle bone variation
+      if (activeMorphs.length === 0 && s.featuresSection) {
+        const reg = s.activeRegion;
+        const cur = s.sliders[reg];
+        const nextSliders = {
+          ...s.sliders,
+          [reg]: {
+            ...cur,
+            width: Math.round((Math.random() * 2 - 1) * 6),
+            length: Math.round((Math.random() * 2 - 1) * 5),
+            depth: Math.round((Math.random() * 2 - 1) * 5),
+            height: Number(((Math.random() * 2 - 1) * 0.4).toFixed(2)),
+            angle: Number(((Math.random() * 2 - 1) * 0.35).toFixed(2)),
+            protrusion: Number(((Math.random() * 2 - 1) * 0.35).toFixed(2)),
+          },
+        };
+        return faceHistory(s, { sliders: nextSliders });
+      }
+      useFaceMorphStore.getState().setFaceSlidersExact(nextMorphs);
+      return faceHistory(s, { faceMorphs: nextMorphs });
+    });
+  },
   setPrimaryTab: (primaryTab) => set({ primaryTab }),
   setSubTab: (subTab) => set({ subTab }),
   setTransformMode: (transformMode) => set({ transformMode }),
@@ -1337,10 +1456,12 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
       } else {
         delete assetSelection.headMesh;
       }
+      useFaceMorphStore.getState().setFaceSlidersExact({});
       return {
         preset: def ? def.id : PRESETS[0].id,
         presetNonce: s.presetNonce + 1,
         sliders: def ? presetSliderBank(def) : buildSliderBank(),
+        faceMorphs: {},
         anatomyMode: 'legacy',
         anatomy: coerceAnatomy(), anatomyAsymmetry: coerceAsymmetry(), anatomyColors: coerceAnatomyColors(),
         anatomyPast: [], anatomyFuture: [], anatomyEditStart: null,
@@ -1463,8 +1584,11 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         : sculptHeadId
           ? { ...s.assetSelection, headMesh: sculptHeadId }
           : s.assetSelection;
+      const loadedFaceMorphs = coerceFaceMorphs(payload.faceMorphs);
+      useFaceMorphStore.getState().setFaceSlidersExact(loadedFaceMorphs);
       return {
         sliders,
+        faceMorphs: loadedFaceMorphs,
         anatomyMode: payload.anatomyMode === 'advanced' ? 'advanced' : 'legacy',
         anatomy: coerceAnatomy(payload.anatomy),
         anatomyAsymmetry: coerceAsymmetry(payload.anatomyAsymmetry),
@@ -1536,6 +1660,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
       lashesOpacity: s.lashesOpacity,
       overlays: s.overlayLayers,
       bodySlide: useBodySlideStore.getState().sliders,
+      faceMorphs: { ...s.faceMorphs },
       anatomyMode: s.anatomyMode,
       ...anatomySnapshot(s),
     });
@@ -1569,6 +1694,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
 export function restoreSession(): Promise<void> {
   return Promise.resolve(useCharacter.persist.rehydrate()).then(() => {
     const s = useCharacter.getState();
+    useFaceMorphStore.getState().setFaceSlidersExact(s.faceMorphs ?? {});
     s.markHydrated(s.restored);
     enableSessionWrites();
   });

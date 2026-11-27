@@ -28,7 +28,7 @@ export function WuxiaBreadcrumbs({
       <button
         type="button"
         onClick={onBack}
-        className="py-1 px-1.5 -ml-1.5 rounded text-[#9f9da6] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#dfba73]"
+        className="inline-flex min-h-[24px] items-center py-1 px-1.5 -ml-1.5 rounded text-[#9f9da6] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#dfba73]"
         title={`Return to ${category}`}
         aria-label={`Return to ${category}`}
       >

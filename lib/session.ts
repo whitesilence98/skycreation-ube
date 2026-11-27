@@ -22,6 +22,7 @@ import {
   type TransformMode,
 } from '@/lib/regions';
 import {
+  coerceFaceMorphs,
   coercePose,
   coerceSliderValues,
   coerceWeight,
@@ -132,6 +133,7 @@ export interface PersistedSession extends AnatomySnapshot {
   toneMapping: ToneMappingId;
   sliders: Record<RegionId, SliderValues>;
   poses: Record<RegionId, GizmoPose>;
+  faceMorphs?: Record<string, number>;
   preset: string;
   utils: UtilityToggles;
   assetSelection: AssetSelection;
@@ -314,6 +316,7 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     toneMapping: isOneOf(TONE_MAPPINGS, o.toneMapping) ? o.toneMapping : defaults.toneMapping,
     sliders,
     poses,
+    faceMorphs: coerceFaceMorphs(o.faceMorphs),
     preset: PRESETS.some((p) => p.id === o.preset) ? (o.preset as string) : defaults.preset,
     utils: coerceToggleSet(o.utils, UTIL_KEYS, defaults.utils),
     /* `sanitizeAssetSelection` drops unknown kinds and non-string ids but
@@ -402,6 +405,7 @@ export function pickSession(s: PersistedSession): PersistedSession {
         offset: [...pose.offset], rotation: [...pose.rotation], scale: [...pose.scale],
       }]),
     ) as Record<RegionId, GizmoPose>,
+    faceMorphs: s.faceMorphs && Object.keys(s.faceMorphs).length ? { ...s.faceMorphs } : {},
     preset: s.preset,
     utils: { ...s.utils },
     assetSelection: { ...s.assetSelection },
