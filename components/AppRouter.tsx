@@ -7,22 +7,23 @@ import { navigateCategory } from '@/lib/editorNav';
 import { editorCategory } from '@/lib/faceControls';
 import { useCharacter } from '@/lib/store';
 
-function currentSnapshot(): AppRouteSnapshot {
+function currentSnapshot(fixedAppMode?: 'studio' | 'builder'): AppRouteSnapshot {
   const char = useCharacter.getState();
   const builder = useBuilderStore.getState();
   return {
-    appMode: char.appMode,
+    appMode: fixedAppMode ?? char.appMode,
     primaryTab: char.primaryTab,
     studioPage: char.studioPage,
     builderMode: builder.mode,
   };
 }
 
-function applyRouteToStores(route: AppRoute): void {
+function applyRouteToStores(route: AppRoute, fixedAppMode?: 'studio' | 'builder'): void {
   const char = useCharacter.getState();
   const builder = useBuilderStore.getState();
 
   if (route.appMode === 'builder') {
+    if (fixedAppMode === 'studio') return;
     if (char.appMode !== 'builder') {
       char.setAppMode('builder');
     }
@@ -32,6 +33,8 @@ function applyRouteToStores(route: AppRoute): void {
     }
     return;
   }
+
+  if (fixedAppMode === 'builder') return;
 
   if (char.appMode !== 'studio') {
     char.setAppMode('studio');
@@ -61,7 +64,7 @@ function writeBrowserHash(nextHash: string, mode: 'push' | 'replace'): void {
  * Synchronizes Studio tabs, Smart Customization, and Room Builder modes
  * with `window.location.hash` and browser Back/Forward history.
  */
-export function AppRouter() {
+export function AppRouter({ fixedAppMode }: { fixedAppMode?: 'studio' | 'builder' }) {
   const hydrated = useCharacter((s) => s.hydrated);
   const applyingFromHistoryRef = useRef(false);
   const initializedRef = useRef(false);
@@ -76,23 +79,23 @@ export function AppRouter() {
       if (parsed) {
         applyingFromHistoryRef.current = true;
         try {
-          applyRouteToStores(parsed);
+          applyRouteToStores(parsed, fixedAppMode);
         } finally {
           applyingFromHistoryRef.current = false;
         }
       }
       // Always normalize canonical hash on initial load without pushing a duplicate entry.
-      writeBrowserHash(formatAppHash(currentSnapshot()), 'replace');
+      writeBrowserHash(formatAppHash(currentSnapshot(fixedAppMode)), 'replace');
     }
 
     // 2. Push URL hash when store navigation state changes from UI interactions.
-    let lastCanonicalHash = formatAppHash(currentSnapshot());
+    let lastCanonicalHash = formatAppHash(currentSnapshot(fixedAppMode));
     const syncStoreToUrl = () => {
       if (applyingFromHistoryRef.current) {
-        lastCanonicalHash = formatAppHash(currentSnapshot());
+        lastCanonicalHash = formatAppHash(currentSnapshot(fixedAppMode));
         return;
       }
-      const nextHash = formatAppHash(currentSnapshot());
+      const nextHash = formatAppHash(currentSnapshot(fixedAppMode));
       if (nextHash === lastCanonicalHash && window.location.hash === nextHash) return;
       lastCanonicalHash = nextHash;
       writeBrowserHash(nextHash, 'push');
@@ -111,7 +114,7 @@ export function AppRouter() {
 
     const unsubBuilder = useBuilderStore.subscribe((state, prev) => {
       if (state.mode === prev.mode) return;
-      if (useCharacter.getState().appMode !== 'builder') return;
+      if ((fixedAppMode ?? useCharacter.getState().appMode) !== 'builder') return;
       syncStoreToUrl();
     });
 
@@ -119,11 +122,11 @@ export function AppRouter() {
     const onUrlChange = () => {
       const parsed = parseAppHash(window.location.hash);
       if (!parsed) {
-        writeBrowserHash(formatAppHash(currentSnapshot()), 'replace');
+        writeBrowserHash(formatAppHash(currentSnapshot(fixedAppMode)), 'replace');
         return;
       }
 
-      const currentHash = formatAppHash(currentSnapshot());
+      const currentHash = formatAppHash(currentSnapshot(fixedAppMode));
       const targetSnapshotHash =
         parsed.appMode === 'builder'
           ? `#room/${parsed.builderMode ?? useBuilderStore.getState().mode}`
@@ -137,13 +140,13 @@ export function AppRouter() {
       if (currentHash !== targetSnapshotHash) {
         applyingFromHistoryRef.current = true;
         try {
-          applyRouteToStores(parsed);
+          applyRouteToStores(parsed, fixedAppMode);
         } finally {
           applyingFromHistoryRef.current = false;
         }
       }
 
-      const canonical = formatAppHash(currentSnapshot());
+      const canonical = formatAppHash(currentSnapshot(fixedAppMode));
       lastCanonicalHash = canonical;
       if (window.location.hash !== canonical) {
         writeBrowserHash(canonical, 'replace');
@@ -159,7 +162,7 @@ export function AppRouter() {
       window.removeEventListener('popstate', onUrlChange);
       window.removeEventListener('hashchange', onUrlChange);
     };
-  }, [hydrated]);
+  }, [hydrated, fixedAppMode]);
 
   return null;
 }

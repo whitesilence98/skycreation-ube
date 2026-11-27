@@ -55,6 +55,7 @@ export function TourController({ playerGroupRef }: TourControllerProps) {
 
       if (k === 'e' && !e.repeat) {
         const builder = useBuilderStore.getState();
+        if (builder.activeStation) return;
         const nearby = builder.nearbyInteract;
         if (nearby) {
           e.preventDefault();
@@ -62,9 +63,12 @@ export function TourController({ playerGroupRef }: TourControllerProps) {
           const def = item ? getSmartObjectDef(item.catalogId) : null;
           if (item && def) {
             const slot = resolveSmartSlot(item, def);
-            // Stand neatly at the furniture front facing out into the room so the
-            // Vanity/Mirror/Windows frame the character's backdrop in Customize view.
-            builder.setPlayerPose([slot.standXZ[0], 0, slot.standXZ[1]], slot.facingYaw + Math.PI);
+            const nextYaw = slot.facingYaw + Math.PI;
+            builder.setPlayerPose([slot.standXZ[0], 0, slot.standXZ[1]], nextYaw);
+            if (playerGroupRef.current) {
+              playerGroupRef.current.position.set(slot.standXZ[0], 0, slot.standXZ[1]);
+              playerGroupRef.current.rotation.y = nextYaw;
+            }
           } else if (playerGroupRef.current) {
             builder.setPlayerPose(
               [playerGroupRef.current.position.x, 0, playerGroupRef.current.position.z],
@@ -73,12 +77,11 @@ export function TourController({ playerGroupRef }: TourControllerProps) {
           }
           const meta = INTERACT_LABELS[nearby.tag];
           useCharacter.getState().setAnimationId('idle');
-          useCharacter.getState().setBackgroundMode('room');
-          useCharacter.getState().setPrimaryTab(meta.tab);
-          useCharacter.getState().setAppMode('studio');
+          builder.openStation(nearby.itemId, nearby.tag);
           useCharacter.getState().showToast(meta.label);
         }
       } else if (k === 'escape') {
+        if (useBuilderStore.getState().activeStation) return;
         e.preventDefault();
         useCharacter.getState().setAnimationId('idle-clip');
         useBuilderStore.getState().setMode('decorate');
@@ -91,11 +94,12 @@ export function TourController({ playerGroupRef }: TourControllerProps) {
 
     const dom = gl.domElement;
     const onPointerDown = (e: PointerEvent) => {
+      if (useBuilderStore.getState().activeStation) return;
       draggingRef.current = true;
       lastXRef.current = e.clientX;
     };
     const onPointerMove = (e: PointerEvent) => {
-      if (!draggingRef.current) return;
+      if (!draggingRef.current || useBuilderStore.getState().activeStation) return;
       const dx = e.clientX - lastXRef.current;
       lastXRef.current = e.clientX;
       camYawRef.current -= dx * 0.0065;
@@ -124,6 +128,7 @@ export function TourController({ playerGroupRef }: TourControllerProps) {
   }, [gl]);
 
   useFrame((_, rawDelta) => {
+    if (useBuilderStore.getState().activeStation) return;
     const player = playerGroupRef.current;
     if (!player) return;
 

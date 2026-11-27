@@ -21,6 +21,8 @@ export interface PlacementValidationResult {
   valid: boolean;
   reason: string | null;
   collidingIds: string[];
+  /** Existing plain wall segments that a Door/Window will auto-replace on commit. */
+  replaceIds?: string[];
 }
 
 export interface WallBatchValidationResult {
@@ -211,11 +213,23 @@ function isWithinRoomFloor(obb: Obb2D, placedItems: PlacedItem[], roomBounds?: R
   return true;
 }
 
+function isWallOpening(catalogId: string): boolean {
+  return /window|doorway/i.test(catalogId);
+}
+
+function isPlainWallSegment(catalogId: string): boolean {
+  return (
+    !isWallOpening(catalogId) &&
+    !catalogId.includes('Corner') &&
+    (catalogId.includes('/wall') || catalogId.includes('paneling'))
+  );
+}
+
 function layersCanCollide(a: CollisionLayer, b: CollisionLayer): boolean {
   if (a === 'floor' && b === 'floor') return true;
   if (a === 'floor' || b === 'floor') return false;
-  if (a === 'rug' || b === 'rug') return false;
-  if (a === 'accent' || b === 'accent') return false;
+  if (a === 'rug' || b === 'rug') return a === 'rug' && b === 'rug';
+  if (a === 'accent' || b === 'accent') return a === 'accent' && b === 'accent';
   return true;
 }
 
@@ -231,7 +245,9 @@ export function validatePlacement(
   const candLayer = getCollisionLayer(candidate);
   const candObb = getItemObb2D(candidate);
   const collidingIds: string[] = [];
+  const replaceIds: string[] = [];
   let firstReason: string | null = null;
+  const candIsOpening = candLayer === 'wall' && isWallOpening(candidate.catalogId);
 
   // Floor-standing solid furniture & rugs must stay inside placed floor tiles
   if ((candLayer === 'solid' || candLayer === 'rug') && !isWithinRoomFloor(candObb, placedItems, options?.roomBounds)) {
@@ -263,6 +279,11 @@ export function validatePlacement(
 
     const existObb = getItemObb2D(existing);
     if (obbIntersects2D(candObb, existObb)) {
+      const aligned = Math.abs(candObb.ax * existObb.ax + candObb.az * existObb.az) > 0.9;
+      if (candIsOpening && existLayer === 'wall' && isPlainWallSegment(existing.catalogId) && aligned) {
+        replaceIds.push(existing.id);
+        continue;
+      }
       collidingIds.push(existing.id);
       firstReason ??= `Overlaps ${itemLabel(existing.catalogId)}`;
     }
@@ -272,6 +293,7 @@ export function validatePlacement(
     valid: collidingIds.length === 0,
     reason: firstReason,
     collidingIds,
+    replaceIds: replaceIds.length > 0 ? replaceIds : undefined,
   };
 }
 

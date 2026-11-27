@@ -17,6 +17,10 @@ import { GhostItem, WallGhostChain } from '@/components/builder/GhostItem';
 import { BuilderCharacter } from '@/components/builder/BuilderCharacter';
 import { TourController } from '@/components/builder/TourController';
 import { RoomLifeController, TimeOfDayLighting } from '@/components/builder/RoomLifeController';
+import { RoomPostPipeline } from '@/components/builder/RoomPostPipeline';
+import { EnvironmentRig } from '@/components/scene/EnvironmentRig';
+import { StatsProbe } from '@/components/scene/StatsProbe';
+import { GlbExportBridge } from '@/lib/exportGlb';
 
 interface BuilderSceneProps {
   manifest: Mo2Manifest | null;
@@ -33,7 +37,9 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
   const roomWidth = useBuilderStore((s) => s.roomWidth);
   const roomDepth = useBuilderStore((s) => s.roomDepth);
   const roomBounds = useBuilderStore((s) => s.roomBounds);
+  const activeStation = useBuilderStore((s) => s.activeStation);
   const hydrated = useBuilderStore((s) => s.hydrated);
+  const lightingIntensity = useCharacter((s) => s.lighting.intensity);
 
   const playerGroupRef = useRef<THREE.Group | null>(null);
   const [orbitEnabled, setOrbitEnabled] = useState(true);
@@ -193,6 +199,9 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
             .showToast(`Cannot place here${check.reason ? `: ${check.reason}` : ''}`);
           return;
         }
+        if (check.replaceIds?.length) {
+          for (const rid of check.replaceIds) store.removeItem(rid);
+        }
         store.placeItem(candidate);
       } else {
         store.selectItem(null);
@@ -252,6 +261,7 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
           store.removeItem(store.selectedItemId);
         }
       } else if (key === 'escape') {
+        if (store.activeStation) return;
         e.preventDefault();
         if (wallStart) {
           setWallStart(null);
@@ -262,7 +272,7 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
         } else if (store.activeSubCategory) {
           store.setSubCategory(null);
         } else {
-          useCharacter.getState().setAppMode('studio');
+          store.setMode('tour');
         }
       }
     };
@@ -281,17 +291,20 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
         gl.toneMappingExposure = 1.05;
         gl.setClearColor('#23262d', 1);
+        gl.info.autoReset = false;
       }}
       style={{ position: 'absolute', inset: 0 }}
     >
+      <EnvironmentRig />
+      <StatsProbe priority={0} />
       <BuilderCamera mode={mode} orbitEnabled={orbitEnabled} />
 
-      {/* Time-of-day interior lighting driven by in-game clock */}
-      <TimeOfDayLighting />
+      {/* Time-of-day interior lighting driven by in-game clock & lighting intensity */}
+      <TimeOfDayLighting intensityScale={lightingIntensity} />
 
       <RoomGrid
         gridSize={grid}
-        visible={mode !== 'tour'}
+        visible={mode !== 'tour' && !activeStation}
         onPointerMoveFloor={handlePointerMoveFloor}
         onClickFloor={handleClickFloor}
         onContextMenuFloor={handleContextMenuFloor}
@@ -347,8 +360,14 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
       {/* Autonomous clock + Room Life AI when building/decorating */}
       <RoomLifeController playerGroupRef={playerGroupRef} />
 
+      {/* Export bridge so Room top-bar GLB export reads the live scene character */}
+      <GlbExportBridge />
+
       {/* Third-person exploration controller in TOUR mode */}
       {mode === 'tour' && <TourController playerGroupRef={playerGroupRef} />}
+
+      {/* Conditional ENB / Grade / SMAA / Station DoF+Bloom post-processing */}
+      <RoomPostPipeline />
     </Canvas>
   );
 }

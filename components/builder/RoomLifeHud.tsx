@@ -39,6 +39,7 @@ const NEED_META: ReadonlyArray<{ key: NeedKey; label: string }> = [
  * Compact clock & time-speed pill mounted inside `BuilderHud`'s top navigation bar.
  */
 export function ClockControlsPill() {
+  const mode = useBuilderStore((s) => s.mode);
   const simTimeMinutes = useRoomLifeStore((s) => s.simTimeMinutes);
   const timeScale = useRoomLifeStore((s) => s.timeScale);
   const aiEnabled = useRoomLifeStore((s) => s.aiEnabled);
@@ -46,6 +47,7 @@ export function ClockControlsPill() {
   const toggleAi = useRoomLifeStore((s) => s.toggleAi);
 
   const clock = formatSimClock(simTimeMinutes);
+  const isTour = mode === 'tour';
 
   return (
     <div
@@ -63,45 +65,56 @@ export function ClockControlsPill() {
 
       <span className="h-3.5 w-px bg-white/15" aria-hidden />
 
-      <div className="flex items-center gap-0.5" role="group" aria-label="Time Speed">
-        {SPEED_OPTIONS.map((opt) => {
-          const active = timeScale === opt.value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setTimeScale(opt.value)}
-              aria-pressed={active}
-              title={opt.value === 0 ? 'Pause simulation clock' : `Set simulation speed to ${opt.label}`}
-              className={cn(
-                'min-h-[24px] min-w-[24px] rounded-[2px] px-1.5 text-[10px] transition-colors focus-visible:outline focus-visible:outline-[#eac87f]',
-                active
-                  ? 'bg-[#dfba73]/25 text-[#f7eedc] border border-[#dfba73]/70'
-                  : 'text-[#a8a39b] hover:bg-white/10 hover:text-white border border-transparent',
-              )}
-            >
-              {opt.label}
-            </button>
-          );
-        })}
-      </div>
+      {isTour ? (
+        <span
+          className="px-1.5 text-[10px] tracking-wider text-[#8c8891] uppercase"
+          title="Daytime clock and Room Life AI are auto-paused in Tour mode"
+        >
+          Paused
+        </span>
+      ) : (
+        <>
+          <div className="flex items-center gap-0.5" role="group" aria-label="Time Speed">
+            {SPEED_OPTIONS.map((opt) => {
+              const active = timeScale === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setTimeScale(opt.value)}
+                  aria-pressed={active}
+                  title={opt.value === 0 ? 'Pause simulation clock' : `Set simulation speed to ${opt.label}`}
+                  className={cn(
+                    'min-h-[24px] min-w-[24px] rounded-[2px] px-1.5 text-[10px] transition-colors focus-visible:outline focus-visible:outline-[#eac87f]',
+                    active
+                      ? 'bg-[#dfba73]/25 text-[#f7eedc] border border-[#dfba73]/70'
+                      : 'text-[#a8a39b] hover:bg-white/10 hover:text-white border border-transparent',
+                  )}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
 
-      <span className="h-3.5 w-px bg-white/15" aria-hidden />
+          <span className="h-3.5 w-px bg-white/15" aria-hidden />
 
-      <button
-        type="button"
-        onClick={toggleAi}
-        aria-pressed={aiEnabled}
-        title="Toggle autonomous Room Life AI when building/decorating"
-        className={cn(
-          'min-h-[24px] rounded-[2px] px-1.5 text-[10px] uppercase tracking-wider transition-colors focus-visible:outline focus-visible:outline-[#eac87f]',
-          aiEnabled
-            ? 'bg-[#dfba73]/20 text-[#eac87f] border border-[#dfba73]/60'
-            : 'text-[#8c8891] hover:text-white border border-transparent',
-        )}
-      >
-        AI {aiEnabled ? 'ON' : 'OFF'}
-      </button>
+          <button
+            type="button"
+            onClick={toggleAi}
+            aria-pressed={aiEnabled}
+            title="Toggle autonomous Room Life AI when building/decorating"
+            className={cn(
+              'min-h-[24px] rounded-[2px] px-1.5 text-[10px] uppercase tracking-wider transition-colors focus-visible:outline focus-visible:outline-[#eac87f]',
+              aiEnabled
+                ? 'bg-[#dfba73]/20 text-[#eac87f] border border-[#dfba73]/60'
+                : 'text-[#8c8891] hover:text-white border border-transparent',
+            )}
+          >
+            AI {aiEnabled ? 'ON' : 'OFF'}
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -112,11 +125,12 @@ export function ClockControlsPill() {
 export function RoomLifeNeedsCard() {
   const [expanded, setExpanded] = useState(false);
   const mode = useBuilderStore((s) => s.mode);
+  const aiEnabled = useRoomLifeStore((s) => s.aiEnabled);
   const activity = useRoomLifeStore((s) => s.activity);
   const needs = useRoomLifeStore((s) => s.needs);
   const thoughtLog = useRoomLifeStore((s) => s.thoughtLog);
 
-  if (mode === 'tour') return null;
+  if (mode === 'tour' || !aiEnabled) return null;
 
   const icon = ACTION_ICONS[activity.actionTag] ?? '✦';
 

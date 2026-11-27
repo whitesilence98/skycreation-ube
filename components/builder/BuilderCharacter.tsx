@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { HeadModel, type SceneHandles } from '@/components/scene/HeadModel';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { FLOOR_SLAB_TOP, useBuilderStore } from '@/lib/builderStore';
+import { useCharacter } from '@/lib/store';
 
 interface BuilderCharacterProps {
   manifest: Mo2Manifest | null;
@@ -21,17 +22,30 @@ export function BuilderCharacter({ manifest, playerGroupRef }: BuilderCharacterP
   const onReady = useCallback((_h: SceneHandles) => {}, []);
   const onDirty = useCallback(() => {}, []);
 
-  // Initialize transform from store when mounted or reset (TourController mutates ref at 60 FPS)
-  const playerPos = useBuilderStore((s) => s.playerPos);
-  const playerYaw = useBuilderStore((s) => s.playerYaw);
   const mode = useBuilderStore((s) => s.mode);
   const ghostCatalogId = useBuilderStore((s) => s.ghostCatalogId);
+  const activeStation = useBuilderStore((s) => s.activeStation);
+  const lightingIntensity = useCharacter((s) => s.lighting.intensity);
 
+  // Sync transform directly on the Three.js Group via store subscription so
+  // walking in TOUR mode (10 Hz minimap pose updates) never re-renders <HeadModel>.
   useEffect(() => {
-    if (!playerGroupRef.current) return;
-    playerGroupRef.current.position.set(playerPos[0], 0, playerPos[2]);
-    playerGroupRef.current.rotation.y = playerYaw;
-  }, [playerGroupRef, playerPos, playerYaw]);
+    const applyPose = (pos: [number, number, number], yaw: number) => {
+      if (!playerGroupRef.current) return;
+      playerGroupRef.current.position.set(pos[0], 0, pos[2]);
+      playerGroupRef.current.rotation.y = yaw;
+    };
+
+    const initial = useBuilderStore.getState();
+    applyPose(initial.playerPos, initial.playerYaw);
+
+    return useBuilderStore.subscribe((state, prev) => {
+      if (state.playerPos === prev.playerPos && state.playerYaw === prev.playerYaw) return;
+      // TourController owns the ref directly while walking in free tour mode
+      if (state.mode === 'tour' && !state.activeStation) return;
+      applyPose(state.playerPos, state.playerYaw);
+    });
+  }, [playerGroupRef]);
 
   useEffect(() => {
     return () => {
@@ -81,6 +95,14 @@ export function BuilderCharacter({ manifest, playerGroupRef }: BuilderCharacterP
           />
         </Suspense>
       </group>
+      {/* Non-shadow studio face catchlight & nose/cheek fill (slightly boosted in Station close-ups) */}
+      <pointLight
+        position={[0.05, 1.52, 0.38]}
+        intensity={(activeStation ? 0.42 : 0.24) * lightingIntensity}
+        color="#ffffff"
+        distance={2.2}
+        decay={2}
+      />
     </group>
   );
 }

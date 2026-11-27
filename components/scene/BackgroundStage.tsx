@@ -1,11 +1,9 @@
 'use client';
 
-import React, { Suspense, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
-import { useGLTF } from '@react-three/drei';
 import type { BackgroundMode } from '@/lib/backgrounds';
-import { RoomStage } from '@/components/builder/RoomPropsLayer';
 
 /** Character foot level: Skyrim female feet rest at y ≈ -1.476m. */
 const FLOOR_Y = -1.476;
@@ -13,57 +11,6 @@ const FLOOR_Y = -1.476;
 interface BackgroundStageProps {
   mode: BackgroundMode;
   customUrl?: string | null;
-}
-
-class GlbStageErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean }
-> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  render() {
-    return this.state.hasError ? null : this.props.children;
-  }
-}
-
-function CustomGlbScene({ url }: { url: string }) {
-  const gltf = useGLTF(url);
-
-  const scene = useMemo(() => {
-    const clone = gltf.scene.clone(true);
-    clone.updateMatrixWorld(true);
-
-    const spawnNode =
-      clone.getObjectByName('CharacterSpawn') ??
-      clone.getObjectByName('PlayerSpawn') ??
-      clone.getObjectByName('SpawnPoint');
-
-    if (spawnNode) {
-      const sp = new THREE.Vector3();
-      spawnNode.getWorldPosition(sp);
-      clone.position.set(-sp.x, FLOOR_Y - sp.y, -sp.z);
-    } else {
-      const box = new THREE.Box3().setFromObject(clone);
-      if (Number.isFinite(box.min.y)) {
-        clone.position.y += FLOOR_Y - box.min.y;
-      }
-    }
-
-    clone.traverse((node) => {
-      if ((node as THREE.Mesh).isMesh) {
-        node.receiveShadow = true;
-        node.castShadow = true;
-      }
-    });
-    return clone;
-  }, [gltf.scene]);
-
-  return <primitive object={scene} />;
 }
 
 /**
@@ -134,37 +81,16 @@ function StudioPool() {
   );
 }
 
-export function BackgroundStage({ mode, customUrl }: BackgroundStageProps) {
+export function BackgroundStage(_props: BackgroundStageProps) {
   const { scene } = useThree();
 
   useEffect(() => {
     scene.fog = null;
-    if (mode === 'room') {
-      scene.background = new THREE.Color('#2b2f3a');
-    } else if (mode === 'void') {
-      scene.background = null;
-    } else {
-      scene.background = new THREE.Color('#16181f');
-    }
+    scene.background = null;
     return () => {
       scene.background = null;
     };
-  }, [mode, scene]);
+  }, [scene]);
 
-  if (mode === 'void') {
-    return <StudioPool />;
-  }
-
-  return (
-    <group name="BackgroundStage">
-      {mode === 'room' && <RoomStage />}
-      {mode === 'custom-3d' && customUrl && (
-        <GlbStageErrorBoundary>
-          <Suspense fallback={null}>
-            <CustomGlbScene url={customUrl} />
-          </Suspense>
-        </GlbStageErrorBoundary>
-      )}
-    </group>
-  );
+  return <StudioPool />;
 }

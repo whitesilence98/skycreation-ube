@@ -7,6 +7,7 @@ interface BottomBarProps {
   hasSelection: boolean;
   hasGhost: boolean;
   hasNearbyInteract: boolean;
+  selectedInteractLabel?: string | null;
 }
 
 function KeyCap({ keys, label }: { keys: string; label: string }) {
@@ -28,6 +29,7 @@ export function BottomBar({
   hasSelection,
   hasGhost,
   hasNearbyInteract,
+  selectedInteractLabel,
 }: BottomBarProps) {
   return (
     <footer
@@ -48,14 +50,16 @@ export function BottomBar({
             <KeyCap keys="L-CLICK" label="Start / Commit Wall" />
             <KeyCap keys="R" label="Rotate" />
             {hasSelection && <KeyCap keys="DEL" label="Remove" />}
-            <KeyCap keys="ESC" label="Cancel / Back" />
+            <KeyCap keys="ESC" label="Done / Cancel" />
           </>
         ) : (
           <>
             <KeyCap keys="L-CLICK" label={hasGhost ? 'Place' : 'Select / Move'} />
+            {!hasGhost && <KeyCap keys="CLICK CHAR" label="Tour" />}
             <KeyCap keys="R" label="Rotate" />
+            {selectedInteractLabel && <KeyCap keys="E" label={selectedInteractLabel} />}
             {hasSelection && <KeyCap keys="DEL" label="Remove" />}
-            <KeyCap keys="ESC" label={hasGhost || hasSelection ? 'Clear' : 'Back'} />
+            <KeyCap keys="ESC" label={hasGhost || hasSelection ? 'Clear' : 'Tour'} />
           </>
         )}
       </div>

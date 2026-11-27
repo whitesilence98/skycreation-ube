@@ -138,7 +138,7 @@ function SceneIssue({ issue }: { issue: string }) {
   );
 }
 
-export function CharacterCreation() {
+export function CharacterCreation({ routeMode = 'builder' }: { routeMode?: 'studio' | 'builder' }) {
   const [manifest, setManifest] = useState<Mo2Manifest | null>(null);
   /** The fetch resolving is what makes `manifest === null` mean "offline"
    *  rather than "not yet" — without it the first paint is indistinguishable
@@ -293,19 +293,24 @@ export function CharacterCreation() {
 
   const previewMode = useCharacter(s => s.previewMode);
   const outfitMode = useCharacter(s => s.primaryTab === 'EQUIPMENT');
-  const appMode = useCharacter(s => s.appMode);
   const loaded = sceneReady && (assetsReady || revealFailsafe);
+
+  useEffect(() => {
+    if (useCharacter.getState().appMode !== routeMode) {
+      useCharacter.getState().setAppMode(routeMode);
+    }
+  }, [routeMode]);
 
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-[#1a1b1f]">
-      <AppRouter />
+      <AppRouter fixedAppMode={routeMode} />
       {/* Nothing is mounted before the manifest settles and names its source:
           an early mount would issue legacy asset requests that pack mode must
           never make. */}
       {sceneReady ? (
         <div className="absolute inset-0">
           <WebGLErrorBoundary>
-            {appMode === 'builder' ? (
+            {routeMode === 'builder' ? (
               <BuilderScene manifest={resolved} />
             ) : (
               <CharacterScene
@@ -319,9 +324,9 @@ export function CharacterCreation() {
       ) : (
         <ViewportBackdrop />
       )}
-      {unavailable ? <UnavailableNotice manifest={manifest} /> : appMode === 'studio' ? <SceneLoader visible={!loaded} /> : null}
-      {sceneReady && sceneIssue && loaded && appMode === 'studio' ? <SceneIssue issue={sceneIssue} /> : null}
-      {sceneReady ? (appMode === 'builder' ? <BuilderHud manifest={resolved} /> : <Hud manifest={resolved} />) : null}
+      {unavailable ? <UnavailableNotice manifest={manifest} /> : routeMode === 'studio' ? <SceneLoader visible={!loaded} /> : null}
+      {sceneReady && sceneIssue && loaded && routeMode === 'studio' ? <SceneIssue issue={sceneIssue} /> : null}
+      {sceneReady ? (routeMode === 'builder' ? <BuilderHud manifest={resolved} /> : <Hud manifest={resolved} />) : null}
     </main>
   );
 }

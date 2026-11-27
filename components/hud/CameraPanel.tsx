@@ -13,7 +13,6 @@ import {
   type CameraFraming,
 } from '@/lib/camera';
 import { ENV_MODES, type EnvMode } from '@/lib/envModes';
-import { BACKGROUND_PRESETS, type BackgroundMode } from '@/lib/backgrounds';
 import { LIGHTING_DEFAULTS, LIGHT_RIGS } from '@/lib/lighting';
 import { useViewState } from '@/lib/viewState';
 import { StudioCard } from '@/components/hud/common/StudioCard';
@@ -94,10 +93,6 @@ export function CameraPanel({ onClose }: CameraPanelProps = {}) {
   const setEnvRotation = useCharacter((s) => s.setEnvRotation);
   const envIntensity = useCharacter((s) => s.envIntensity);
   const setEnvIntensity = useCharacter((s) => s.setEnvIntensity);
-  const backgroundMode = useCharacter((s) => s.backgroundMode);
-  const setBackgroundMode = useCharacter((s) => s.setBackgroundMode);
-  const customBackgroundUrl = useCharacter((s) => s.customBackgroundUrl);
-  const setCustomBackgroundUrl = useCharacter((s) => s.setCustomBackgroundUrl);
   const grade = useCharacter((s) => s.grade);
   const setGrade = useCharacter((s) => s.setGrade);
 
@@ -490,65 +485,6 @@ export function CameraPanel({ onClose }: CameraPanelProps = {}) {
               format={(v) => v.toFixed(2)}
             />
           </div>
-        </div>
-
-        <div className="hud-divider" />
-
-        {/* ── 3D background & stage ── */}
-        <div>
-          <SectionTitle sub="3D STAGE & SCENE">BACKGROUND</SectionTitle>
-          <div className="grid grid-cols-3 gap-[3px]">
-            {BACKGROUND_PRESETS.map((preset) => {
-              const active = backgroundMode === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => setBackgroundMode(preset.id)}
-                  aria-pressed={active}
-                  title={`${preset.label}: ${preset.description}`}
-                  className={cn(
-                    'flex min-h-[34px] flex-col items-center justify-center border px-1 py-1 text-center transition-all focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]/80',
-                    active
-                      ? 'border-[#d8be8c] bg-[#d4b483]/18 text-[#f2e7cf] shadow-[0_0_8px_rgba(216,190,140,0.25)]'
-                      : 'border-[#8c8477]/22 bg-black/25 text-[#9e9584]/75 hover:border-[#d4b483]/40 hover:text-[#d8cebc]',
-                  )}
-                >
-                  <span className="text-[10px] leading-tight font-medium tracking-[0.04em]">{preset.label}</span>
-                  <span className="text-[10px] leading-tight tracking-[0.04em] text-[#a49a88]/70">{preset.sub}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {backgroundMode === 'custom-3d' && (
-            <div className="mt-[6px] flex flex-col gap-[3px]">
-              <div className="flex items-center gap-[4px]">
-                <input
-                  type="text"
-                  placeholder="URL to .glb / .gltf model"
-                  value={customBackgroundUrl ?? ''}
-                  onChange={(e) => setCustomBackgroundUrl(e.target.value || null)}
-                  className="h-[18px] flex-1 border border-[#8c8477]/35 bg-black/40 px-[5px] text-[10px] text-[#e6dcc8] placeholder-[#a49a88]/40 focus:border-[#d8be8c] focus:outline-none"
-                />
-                <label className="flex h-[18px] cursor-pointer items-center border border-[#8c8477]/35 bg-black/30 px-[6px] text-[9px] tracking-[0.05em] text-[#cfc6b4] hover:border-[#d8be8c] hover:text-white">
-                  FILE
-                  <input
-                    type="file"
-                    accept=".glb,.gltf"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const url = URL.createObjectURL(file);
-                        setCustomBackgroundUrl(url);
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </StudioCard>

@@ -13,7 +13,7 @@ import { useRenderStats } from '@/lib/perf';
  * totals, so they are divided by the number of frames actually drawn before
  * being published. The probe runs after the composer's render priority.
  */
-export function StatsProbe() {
+export function StatsProbe({ priority = 3 }: { priority?: number }) {
   const gl = useThree((s) => s.gl);
   const acc = useRef({ frames: 0, seconds: 0 });
 
@@ -35,7 +35,7 @@ export function StatsProbe() {
     a.frames = 0;
     a.seconds = 0;
     info.reset();
-  }, 3);
+  }, priority);
 
   return null;
 }

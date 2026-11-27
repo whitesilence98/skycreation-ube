@@ -1020,7 +1020,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   faceMorphs: {},
   primaryTab: 'FACE',
   subTab: 'SKIN',
-  appMode: 'studio',
+  appMode: 'builder',
   setAppMode: (appMode) =>
     set((s) => ({
       appMode,
@@ -1179,7 +1179,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   envIntensity: 1,
   exposure: 1,
   setExposure: value => set(s => ({ exposure: bounded(value, s.exposure, 0.1, 4) })),
-  backgroundMode: 'room',
+  backgroundMode: 'void',
   customBackgroundUrl: null,
   lighting: { ...LIGHTING_DEFAULTS },
   cameraRotateSpeed: CAMERA_ROTATE_SPEED_DEFAULT,

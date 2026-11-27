@@ -72,7 +72,7 @@ function TopBarRightActions({ manifest }: { manifest: Mo2Manifest | null }) {
       <WuxiaExportDropdown />
       <button
         type="button"
-        onClick={() => useCharacter.getState().setAppMode('builder')}
+        onClick={() => window.location.assign('/')}
         title="Open 3D Room Builder & Tour"
         className="pointer-events-auto h-7 min-h-[28px] px-2 sm:px-2.5 rounded-[2px] text-[10px] font-mono tracking-widest text-[#f5ecd8] bg-[#dfba73]/18 hover:bg-[#dfba73]/30 border border-[#dfba73]/55 transition-all flex items-center gap-1.5 uppercase focus-visible:outline focus-visible:outline-[#eac87f] shadow-[0_0_8px_rgba(223,186,115,0.18)]"
       >

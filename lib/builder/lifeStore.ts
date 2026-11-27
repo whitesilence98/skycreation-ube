@@ -76,8 +76,8 @@ export function formatSimClock(simTimeMinutes: number): {
 
 export const useRoomLifeStore = create<RoomLifeState>((set) => ({
   simTimeMinutes: 510,
-  timeScale: 1,
-  aiEnabled: true,
+  timeScale: 0,
+  aiEnabled: false,
   needs: { ...DEFAULT_NEEDS },
   activity: { ...DEFAULT_ACTIVITY },
   recentItemIds: [],

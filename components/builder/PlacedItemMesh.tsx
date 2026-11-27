@@ -139,14 +139,15 @@ export function PlacedItemMesh({
   const selectItem = useBuilderStore((s) => s.selectItem);
   const moveItem = useBuilderStore((s) => s.moveItem);
   const ghostCatalogId = useBuilderStore((s) => s.ghostCatalogId);
+  const activeStation = useBuilderStore((s) => s.activeStation);
   const groupRef = useRef<THREE.Group | null>(null);
   const [dragState, setDragState] = useState<{ invalid: boolean; reason: string | null }>({
     invalid: false,
     reason: null,
   });
 
-  const canSelect = mode === 'decorate' && !ghostCatalogId;
-  const showGizmo = selected && mode === 'decorate' && !ghostCatalogId;
+  const canSelect = mode === 'decorate' && !ghostCatalogId && !activeStation;
+  const showGizmo = selected && mode === 'decorate' && !ghostCatalogId && !activeStation;
 
   useEffect(() => {
     if (!groupRef.current) return;
@@ -158,6 +159,7 @@ export function PlacedItemMesh({
     snapped: [number, number, number];
     valid: boolean;
     reason: string | null;
+    replaceIds?: string[];
   } => {
     const p = groupRef.current?.position;
     const snapped: [number, number, number] = p
@@ -169,7 +171,7 @@ export function PlacedItemMesh({
       state.placedItems,
       { excludeId: item.id, roomBounds: state.roomBounds },
     );
-    return { snapped, valid: res.valid, reason: res.reason };
+    return { snapped, valid: res.valid, reason: res.reason, replaceIds: res.replaceIds };
   };
 
   const handleSelect = (e: ThreeEvent<MouseEvent>) => {
@@ -223,6 +225,10 @@ export function PlacedItemMesh({
                 .getState()
                 .showToast(`Blocked${check.reason ? `: ${check.reason}` : ''}`);
               return;
+            }
+            if (check.replaceIds?.length) {
+              const store = useBuilderStore.getState();
+              for (const rid of check.replaceIds) store.removeItem(rid);
             }
             moveItem(item.id, check.snapped);
           }}

@@ -11,6 +11,9 @@ import { formatSimClock, useRoomLifeStore } from '@/lib/builder/lifeStore';
 const _hemiSky = new THREE.Color();
 const _hemiGround = new THREE.Color();
 const _sunColor = new THREE.Color();
+const _targetSky = new THREE.Color();
+const _targetGround = new THREE.Color();
+const _targetSun = new THREE.Color();
 
 interface DayKey {
   hour: number;
@@ -53,6 +56,7 @@ function sampleDayLighting(hourFloat: number) {
 export function TimeOfDayLighting({ intensityScale = 1 }: { intensityScale?: number }) {
   const hemiRef = useRef<THREE.HemisphereLight>(null);
   const sunRef = useRef<THREE.DirectionalLight>(null);
+  const lastLightHourRef = useRef(-1);
   const roomWidth = useBuilderStore((s) => s.roomWidth);
   const roomDepth = useBuilderStore((s) => s.roomDepth);
   const shadowHalf = Math.max(11, Math.max(roomWidth, roomDepth) * 0.68);
@@ -60,18 +64,22 @@ export function TimeOfDayLighting({ intensityScale = 1 }: { intensityScale?: num
   useFrame(() => {
     const mins = useRoomLifeStore.getState().simTimeMinutes % 1440;
     const hourFloat = mins / 60;
+    if (lastLightHourRef.current >= 0 && Math.abs(hourFloat - lastLightHourRef.current) < 0.02) {
+      return;
+    }
+    lastLightHourRef.current = hourFloat;
     const { a, b, t } = sampleDayLighting(hourFloat);
 
     if (hemiRef.current) {
-      _hemiSky.set(a.sky).lerp(new THREE.Color(b.sky), t);
-      _hemiGround.set(a.ground).lerp(new THREE.Color(b.ground), t);
+      _hemiSky.set(a.sky).lerp(_targetSky.set(b.sky), t);
+      _hemiGround.set(a.ground).lerp(_targetGround.set(b.ground), t);
       hemiRef.current.color.copy(_hemiSky);
       hemiRef.current.groundColor.copy(_hemiGround);
       hemiRef.current.intensity = THREE.MathUtils.lerp(a.hemiInt, b.hemiInt, t) * intensityScale;
     }
 
     if (sunRef.current) {
-      _sunColor.set(a.sun).lerp(new THREE.Color(b.sun), t);
+      _sunColor.set(a.sun).lerp(_targetSun.set(b.sun), t);
       sunRef.current.color.copy(_sunColor);
       sunRef.current.intensity = THREE.MathUtils.lerp(a.sunInt, b.sunInt, t) * intensityScale;
       sunRef.current.position.set(
@@ -91,7 +99,7 @@ export function TimeOfDayLighting({ intensityScale = 1 }: { intensityScale?: num
         intensity={2.35 * intensityScale}
         color="#fff6ea"
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[1024, 1024]}
         shadow-camera-left={-shadowHalf}
         shadow-camera-right={shadowHalf}
         shadow-camera-top={shadowHalf}
@@ -116,18 +124,21 @@ interface RoomLifeControllerProps {
  */
 export function RoomLifeController({ playerGroupRef }: RoomLifeControllerProps) {
   const mode = useBuilderStore((s) => s.mode);
+  const activeStation = useBuilderStore((s) => s.activeStation);
   const aiEnabled = useRoomLifeStore((s) => s.aiEnabled);
   const brainRef = useRef<RoomLifeBrain | null>(null);
   if (!brainRef.current) brainRef.current = new RoomLifeBrain();
 
   const lastAnimRef = useRef<'walk' | 'idle-clip'>('idle-clip');
   const storeSyncAccumRef = useRef(0);
+  const clockSyncTimerRef = useRef(0);
+  const clockDeltaAccumRef = useRef(0);
   const lastActivityKeyRef = useRef('');
 
   useEffect(() => {
-    if (mode === 'tour' || !aiEnabled) {
+    if (mode === 'tour' || !aiEnabled || activeStation) {
       brainRef.current?.clearPlan();
-      if (mode !== 'tour' && !aiEnabled) {
+      if (mode !== 'tour' && !aiEnabled && !activeStation) {
         if (lastAnimRef.current !== 'idle-clip') {
           lastAnimRef.current = 'idle-clip';
           useCharacter.getState().setAnimationId('idle-clip');
@@ -142,20 +153,29 @@ export function RoomLifeController({ playerGroupRef }: RoomLifeControllerProps) 
         });
       }
     }
-  }, [mode, aiEnabled]);
+  }, [mode, aiEnabled, activeStation]);
 
   useFrame((_, rawDelta) => {
+    // Auto-pause in-game clock & Room Life AI during TOUR mode or active station close-up
+    if (mode === 'tour' || activeStation) return;
+
     const dt = Math.min(rawDelta, 0.05);
     const life = useRoomLifeStore.getState();
     const deltaGameMins = dt * life.timeScale;
 
-    // Advance the room clock across all Room Builder modes
+    // Batch clock store updates to ~4 Hz instead of 60 FPS React re-renders
     if (deltaGameMins > 0) {
-      life.advanceClock(deltaGameMins);
+      clockDeltaAccumRef.current += deltaGameMins;
+      clockSyncTimerRef.current += dt;
+      if (clockSyncTimerRef.current >= 0.25) {
+        life.advanceClock(clockDeltaAccumRef.current);
+        clockDeltaAccumRef.current = 0;
+        clockSyncTimerRef.current = 0;
+      }
     }
 
-    // Yield character locomotion completely to TourController in TOUR mode
-    if (mode === 'tour' || !life.aiEnabled) return;
+    // Yield character locomotion when autonomous AI is off
+    if (!life.aiEnabled) return;
 
     const player = playerGroupRef.current;
     const builder = useBuilderStore.getState();

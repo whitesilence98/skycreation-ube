@@ -37,6 +37,11 @@ export interface RoomBounds {
   maxZ: number;
 }
 
+export interface ActiveStation {
+  itemId: string;
+  tag: InteractTargetTag;
+}
+
 export interface BuilderState {
   mode: BuilderMode;
   activeCategory: BuilderCategory;
@@ -55,6 +60,8 @@ export interface BuilderState {
   playerYaw: number;
   /** Currently in-range interactive prop (set by TourController). */
   nearbyInteract: { itemId: string; tag: InteractTargetTag; label: string } | null;
+  /** Active in-room customization station partial HUD (GTA/Sims style). */
+  activeStation: ActiveStation | null;
   hydrated: boolean;
 
   setMode: (m: BuilderMode) => void;
@@ -75,6 +82,8 @@ export interface BuilderState {
   expandRoomEdge: (edge: RoomEdge, deltaMeters?: number) => void;
   setPlayerPose: (pos: [number, number, number], yaw: number) => void;
   setNearbyInteract: (info: { itemId: string; tag: InteractTargetTag; label: string } | null) => void;
+  openStation: (itemId: string, tag: InteractTargetTag) => void;
+  closeStation: () => void;
   clearAll: () => void;
   resetStarterRoom: () => void;
   markHydrated: () => void;
@@ -482,6 +491,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   playerPos: [-2.0, 0, -0.5],
   playerYaw: 0,
   nearbyInteract: null,
+  activeStation: null,
   hydrated: false,
 
   setMode: (mode) =>
@@ -490,22 +500,27 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       selectedItemId: null,
       ghostCatalogId: null,
       nearbyInteract: null,
+      activeStation: null,
     }),
 
   setCategory: (activeCategory) =>
-    set({
+    set((s) => ({
       activeCategory,
       activeSubCategory: null,
-    }),
+      ...(activeCategory !== 'walls' && s.mode === 'build'
+        ? { mode: 'decorate' as const, ghostCatalogId: null }
+        : {}),
+    })),
 
   setSubCategory: (activeSubCategory) => set({ activeSubCategory }),
   setGrid: (grid) => set({ grid }),
   setSnapAngle: (snapAngle) => set({ snapAngle }),
   setGhost: (ghostCatalogId) =>
-    set({
+    set((s) => ({
       ghostCatalogId,
-      selectedItemId: ghostCatalogId ? null : get().selectedItemId,
-    }),
+      selectedItemId: ghostCatalogId ? null : s.selectedItemId,
+      mode: ghostCatalogId === null && s.mode === 'build' ? 'decorate' : s.mode,
+    })),
 
   rotateGhost: (delta) =>
     set((s) => ({
@@ -629,6 +644,12 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
 
   setPlayerPose: (playerPos, playerYaw) => set({ playerPos, playerYaw }),
   setNearbyInteract: (nearbyInteract) => set({ nearbyInteract }),
+  openStation: (itemId, tag) =>
+    set({
+      activeStation: { itemId, tag },
+      ghostCatalogId: null,
+    }),
+  closeStation: () => set({ activeStation: null }),
 
   clearAll: () =>
     set({
@@ -636,6 +657,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       selectedItemId: null,
       ghostCatalogId: null,
       nearbyInteract: null,
+      activeStation: null,
     }),
 
   resetStarterRoom: () =>
@@ -646,6 +668,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       roomBounds: { ...DEFAULT_BOUNDS },
       selectedItemId: null,
       ghostCatalogId: null,
+      activeStation: null,
       playerPos: [-2.0, 0, -0.5],
       playerYaw: 0,
     }),
