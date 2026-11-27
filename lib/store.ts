@@ -1024,7 +1024,9 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   setAppMode: (appMode) =>
     set((s) => ({
       appMode,
-      ...(appMode === 'builder' ? { showMesh: false, previewMode: false } : { animationId: 'idle' }),
+      ...(appMode === 'builder'
+        ? { showMesh: false, previewMode: false, animationId: 'idle-clip' as const }
+        : { animationId: 'idle' as const }),
       ...(appMode === 'studio' && s.cameraLockMode === 'locked' ? { cameraFraming: 'auto' as const } : {}),
     })),
   bodyTab: 'gear',
