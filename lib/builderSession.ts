@@ -1,6 +1,6 @@
 import { useBuilderStore, type PlacedItem } from '@/lib/builderStore';
 
-const BUILDER_KEY = 'cc-kit-builder-v1';
+const BUILDER_KEY = 'cc-kit-builder-v2';
 
 interface BuilderSessionPayload {
   version: 1;
@@ -40,7 +40,7 @@ export function loadBuilderSession(): BuilderSessionPayload | null {
     return {
       version: 1,
       placedItems: parsed.placedItems,
-      roomWidth: typeof parsed.roomWidth === 'number' && parsed.roomWidth > 0 ? parsed.roomWidth : 8,
+      roomWidth: typeof parsed.roomWidth === 'number' && parsed.roomWidth > 0 ? parsed.roomWidth : 10,
       roomDepth: typeof parsed.roomDepth === 'number' && parsed.roomDepth > 0 ? parsed.roomDepth : 8,
     };
   } catch {

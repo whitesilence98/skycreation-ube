@@ -53,6 +53,9 @@ function sampleDayLighting(hourFloat: number) {
 export function TimeOfDayLighting({ intensityScale = 1 }: { intensityScale?: number }) {
   const hemiRef = useRef<THREE.HemisphereLight>(null);
   const sunRef = useRef<THREE.DirectionalLight>(null);
+  const roomWidth = useBuilderStore((s) => s.roomWidth);
+  const roomDepth = useBuilderStore((s) => s.roomDepth);
+  const shadowHalf = Math.max(11, Math.max(roomWidth, roomDepth) * 0.68);
 
   useFrame(() => {
     const mins = useRoomLifeStore.getState().simTimeMinutes % 1440;
@@ -89,12 +92,12 @@ export function TimeOfDayLighting({ intensityScale = 1 }: { intensityScale?: num
         color="#fff6ea"
         castShadow
         shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-8}
-        shadow-camera-right={8}
-        shadow-camera-top={8}
-        shadow-camera-bottom={-8}
+        shadow-camera-left={-shadowHalf}
+        shadow-camera-right={shadowHalf}
+        shadow-camera-top={shadowHalf}
+        shadow-camera-bottom={-shadowHalf}
         shadow-camera-near={1}
-        shadow-camera-far={28}
+        shadow-camera-far={34}
         shadow-bias={-0.0004}
         shadow-normalBias={0.015}
       />

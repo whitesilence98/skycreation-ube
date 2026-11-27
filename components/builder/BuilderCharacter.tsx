@@ -5,7 +5,7 @@ import type { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { HeadModel, type SceneHandles } from '@/components/scene/HeadModel';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
-import { useBuilderStore } from '@/lib/builderStore';
+import { FLOOR_SLAB_TOP, useBuilderStore } from '@/lib/builderStore';
 
 interface BuilderCharacterProps {
   manifest: Mo2Manifest | null;
@@ -72,7 +72,7 @@ export function BuilderCharacter({ manifest, playerGroupRef }: BuilderCharacterP
         }
       }}
     >
-      <group position={[0, 1.476, 0]}>
+      <group position={[0, 1.476 + FLOOR_SLAB_TOP, 0]}>
         <Suspense fallback={null}>
           <HeadModel
             manifest={manifest}

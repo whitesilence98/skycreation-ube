@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { Grid } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
+import { useBuilderStore } from '@/lib/builderStore';
 
 interface RoomGridProps {
   gridSize: 0.5 | 1.0;
@@ -15,7 +16,7 @@ interface RoomGridProps {
 
 /**
  * Ground shadow receiver, warm Wuxia architectural grid lines, and invisible
- * XZ raycast target at `y = 0` for snapping walls & furniture.
+ * XZ raycast target at `y = 0` that dynamically scales to any expanded room size.
  */
 export function RoomGrid({
   gridSize,
@@ -24,6 +25,14 @@ export function RoomGrid({
   onClickFloor,
   onContextMenuFloor,
 }: RoomGridProps) {
+  const roomWidth = useBuilderStore((s) => s.roomWidth);
+  const roomDepth = useBuilderStore((s) => s.roomDepth);
+  const roomBounds = useBuilderStore((s) => s.roomBounds);
+
+  const centerX = (roomBounds.minX + roomBounds.maxX) * 0.5;
+  const centerZ = (roomBounds.minZ + roomBounds.maxZ) * 0.5;
+  const gridSpan = Math.max(24, roomWidth + 10, roomDepth + 10);
+
   const groundMat = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
@@ -36,37 +45,34 @@ export function RoomGrid({
 
   return (
     <group>
-      {/* Subtle dark matte studio base plane below floor tiles */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -0.105, 0]}
+        position={[centerX, -0.105, centerZ]}
         material={groundMat}
         receiveShadow
       >
-        <planeGeometry args={[36, 36]} />
+        <planeGeometry args={[64, 64]} />
       </mesh>
 
-      {/* Architectural grid overlay at y = 0.001 */}
       {visible && (
         <Grid
-          position={[0, 0.002, 0]}
-          args={[16, 16]}
+          position={[centerX, 0.002, centerZ]}
+          args={[gridSpan, gridSpan]}
           cellSize={gridSize}
           cellThickness={0.55}
           cellColor="#6e6556"
           sectionSize={2.0}
           sectionThickness={1.0}
           sectionColor="#d4b483"
-          fadeDistance={18}
+          fadeDistance={gridSpan + 6}
           fadeStrength={1.6}
           infiniteGrid={false}
         />
       )}
 
-      {/* Invisible raycast target plane at y = 0 for click/hover placement */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0, 0]}
+        position={[centerX, 0, centerZ]}
         onPointerMove={(e) => {
           onPointerMoveFloor?.(e.point);
         }}
@@ -78,7 +84,7 @@ export function RoomGrid({
           onContextMenuFloor?.(e);
         }}
       >
-        <planeGeometry args={[28, 28]} />
+        <planeGeometry args={[64, 64]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
     </group>

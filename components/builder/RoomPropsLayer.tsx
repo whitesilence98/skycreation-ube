@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
-import { useBuilderStore, type PlacedItem } from '@/lib/builderStore';
+import { FLOOR_SLAB_TOP, useBuilderStore, type PlacedItem } from '@/lib/builderStore';
 import { hydrateBuilderSession } from '@/lib/builderSession';
 import { TimeOfDayLighting } from '@/components/builder/RoomLifeController';
 
@@ -105,7 +105,7 @@ export function RoomStage() {
     <group name="UnifiedRoomStage">
       <TimeOfDayLighting intensityScale={0.42} />
       <group rotation={[0, -playerYaw, 0]}>
-        <group position={[-playerPos[0], FLOOR_Y, -playerPos[2]]}>
+        <group position={[-playerPos[0], FLOOR_Y - FLOOR_SLAB_TOP, -playerPos[2]]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.105, 0]} receiveShadow>
             <planeGeometry args={[36, 36]} />
             <meshStandardMaterial color="#252831" roughness={0.92} metalness={0.04} />

@@ -32,6 +32,7 @@ export function BuilderHud({ manifest: _manifest }: { manifest: Mo2Manifest | nu
 
   const exitToStudio = () => {
     useCharacter.getState().setAnimationId('idle');
+    useCharacter.getState().setBackgroundMode('room');
     useCharacter.getState().setAppMode('studio');
   };
 
@@ -59,16 +60,16 @@ export function BuilderHud({ manifest: _manifest }: { manifest: Mo2Manifest | nu
         aria-label="Room Builder Navigation"
         className="pointer-events-auto absolute inset-x-0 top-0 z-20 flex h-[52px] items-center justify-between bg-gradient-to-b from-[#0d0e13]/92 via-[#0d0e13]/65 to-transparent px-2 sm:px-7"
       >
-        {/* Left label */}
+        {/* Left label + 1-click Customize shortcut */}
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={exitToStudio}
             className="flex min-h-[30px] items-center gap-1.5 rounded-[2px] border border-[#dfba73]/45 bg-[#1b1c23]/85 px-2 sm:px-2.5 text-[10px] font-mono tracking-widest text-[#f2dfbe] uppercase transition-colors hover:border-[#dfba73] hover:bg-[#dfba73]/20 focus-visible:outline focus-visible:outline-[#eac87f]"
-            title="Return to Character Customization Studio"
+            title="Open Character Customization Studio with live Room background"
           >
-            <span aria-hidden>←</span>
-            <span className="hidden sm:inline">Studio</span>
+            <span aria-hidden>✦</span>
+            <span className="hidden sm:inline">Customize</span>
           </button>
           {mode !== 'tour' && (
             <button

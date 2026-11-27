@@ -5,7 +5,7 @@ import { OrbitControls } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
-import type { BuilderMode } from '@/lib/builderStore';
+import { useBuilderStore, type BuilderMode } from '@/lib/builderStore';
 
 interface BuilderCameraProps {
   mode: BuilderMode;
@@ -14,14 +14,15 @@ interface BuilderCameraProps {
 
 /**
  * Isometric 3/4 Orbit camera for `build` and `decorate` modes.
- * Automatically shifts viewport projection slightly right on desktop viewports (>= 1024px)
- * to keep the room centered beside the left builder panel.
- * In `tour` mode, OrbitControls unmounts so `TourController` owns 3rd-person follow cam.
+ * Scales max orbit distance dynamically with room dimensions so large lofts/villas
+ * stay comfortably visible, and shifts projection right for desktop left panel.
  */
 export function BuilderCamera({ mode, orbitEnabled }: BuilderCameraProps) {
   const { camera, size } = useThree();
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const prevModeRef = useRef<BuilderMode | null>(null);
+  const roomWidth = useBuilderStore((s) => s.roomWidth);
+  const roomDepth = useBuilderStore((s) => s.roomDepth);
 
   // Desktop left-panel projection compensation (300px panel -> -140px viewOffset)
   useEffect(() => {
@@ -56,7 +57,7 @@ export function BuilderCamera({ mode, orbitEnabled }: BuilderCameraProps) {
     prevModeRef.current = mode;
 
     if (isInitial || wasTour) {
-      camera.position.set(5.4, 5.2, 6.4);
+      camera.position.set(7.2, 6.8, 8.4);
       if (controlsRef.current) {
         controlsRef.current.target.set(-0.2, 0.7, -0.2);
         controlsRef.current.update();
@@ -68,6 +69,8 @@ export function BuilderCamera({ mode, orbitEnabled }: BuilderCameraProps) {
 
   if (mode === 'tour') return null;
 
+  const maxOrbitDist = Math.max(20, Math.max(roomWidth, roomDepth) * 1.65);
+
   return (
     <OrbitControls
       ref={controlsRef}
@@ -77,7 +80,7 @@ export function BuilderCamera({ mode, orbitEnabled }: BuilderCameraProps) {
       enableDamping
       dampingFactor={0.08}
       minDistance={3.2}
-      maxDistance={15}
+      maxDistance={maxOrbitDist}
       minPolarAngle={THREE.MathUtils.degToRad(22)}
       maxPolarAngle={THREE.MathUtils.degToRad(74)}
       target={[-0.2, 0.7, -0.2]}

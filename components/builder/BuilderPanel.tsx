@@ -73,11 +73,14 @@ export function BuilderPanel() {
   const ghostCatalogId = useBuilderStore((s) => s.ghostCatalogId);
   const selectedItemId = useBuilderStore((s) => s.selectedItemId);
   const placedItems = useBuilderStore((s) => s.placedItems);
+  const roomWidth = useBuilderStore((s) => s.roomWidth);
+  const roomDepth = useBuilderStore((s) => s.roomDepth);
 
   const setCategory = useBuilderStore((s) => s.setCategory);
   const setSubCategory = useBuilderStore((s) => s.setSubCategory);
   const setGhost = useBuilderStore((s) => s.setGhost);
   const setMode = useBuilderStore((s) => s.setMode);
+  const resizeRoom = useBuilderStore((s) => s.resizeRoom);
   const resetStarterRoom = useBuilderStore((s) => s.resetStarterRoom);
   const clearAll = useBuilderStore((s) => s.clearAll);
 
@@ -96,6 +99,85 @@ export function BuilderPanel() {
     >
       {/* Top 2D Blueprint Minimap */}
       <BlueprintMinimap />
+
+      {/* Adjustable & Expandable Room Size Bar */}
+      <div className="mt-2 flex flex-col gap-1.5 border-b border-white/10 pb-2">
+        <div className="flex items-center justify-between gap-1 font-mono text-[10px]">
+          <div className="flex items-center gap-1">
+            <span className="text-[#9e9890]">W</span>
+            <button
+              type="button"
+              onClick={() => resizeRoom(roomWidth - 2, roomDepth)}
+              disabled={roomWidth <= 6}
+              title="Shrink room width by 2m"
+              className="flex min-h-[24px] min-w-[24px] items-center justify-center rounded-[2px] border border-white/15 bg-white/[0.04] text-[#d8d2c7] hover:border-[#dfba73]/60 hover:text-white disabled:opacity-35"
+            >
+              −
+            </button>
+            <span className="min-w-[28px] text-center text-[#f2dfbe]">{roomWidth}m</span>
+            <button
+              type="button"
+              onClick={() => resizeRoom(roomWidth + 2, roomDepth)}
+              disabled={roomWidth >= 20}
+              title="Expand room width by 2m"
+              className="flex min-h-[24px] min-w-[24px] items-center justify-center rounded-[2px] border border-white/15 bg-white/[0.04] text-[#d8d2c7] hover:border-[#dfba73]/60 hover:text-white disabled:opacity-35"
+            >
+              +
+            </button>
+          </div>
+
+          <span className="text-[#6f6b64]">×</span>
+
+          <div className="flex items-center gap-1">
+            <span className="text-[#9e9890]">D</span>
+            <button
+              type="button"
+              onClick={() => resizeRoom(roomWidth, roomDepth - 2)}
+              disabled={roomDepth <= 6}
+              title="Shrink room depth by 2m"
+              className="flex min-h-[24px] min-w-[24px] items-center justify-center rounded-[2px] border border-white/15 bg-white/[0.04] text-[#d8d2c7] hover:border-[#dfba73]/60 hover:text-white disabled:opacity-35"
+            >
+              −
+            </button>
+            <span className="min-w-[28px] text-center text-[#f2dfbe]">{roomDepth}m</span>
+            <button
+              type="button"
+              onClick={() => resizeRoom(roomWidth, roomDepth + 2)}
+              disabled={roomDepth >= 20}
+              title="Expand room depth by 2m"
+              className="flex min-h-[24px] min-w-[24px] items-center justify-center rounded-[2px] border border-white/15 bg-white/[0.04] text-[#d8d2c7] hover:border-[#dfba73]/60 hover:text-white disabled:opacity-35"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-1 font-mono text-[10px]">
+          {([
+            [8, 6, '8×6'],
+            [10, 8, '10×8'],
+            [14, 10, '14×10'],
+            [18, 12, '18×12'],
+          ] as const).map(([pw, pd, lbl]) => {
+            const active = roomWidth === pw && roomDepth === pd;
+            return (
+              <button
+                key={lbl}
+                type="button"
+                onClick={() => resizeRoom(pw, pd)}
+                className={cn(
+                  'min-h-[24px] rounded-[2px] border px-1 transition-colors',
+                  active
+                    ? 'border-[#dfba73]/70 bg-[#dfba73]/20 text-[#f2dfbe]'
+                    : 'border-white/10 bg-white/[0.03] text-[#a8a39b] hover:border-white/25 hover:text-white',
+                )}
+              >
+                {lbl}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Category Icon Strip (matches 5 canonical reference tabs: WALLS / FLOORS / WINDOWS / FURNITURE / DECOR) */}
       <div

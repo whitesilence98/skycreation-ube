@@ -133,19 +133,19 @@ export function WuxiaTopNavBar({
   return (
     <header
       className={cn(
-        'pointer-events-auto absolute inset-x-0 top-0 z-20 flex h-[52px] items-center justify-between px-3 sm:px-8 select-none',
+        'pointer-events-auto absolute inset-x-0 top-0 z-20 flex h-[52px] items-center justify-between gap-2 px-3 sm:px-6 select-none',
         className
       )}
       aria-label="Top Navigation Bar"
     >
       {/* Left Slot: Custom Content or clean spacer */}
-      <div className="flex items-center gap-2">
-        {leftSlot !== undefined ? leftSlot : <div className="w-8" />}
+      <div className="flex shrink-0 items-center gap-2">
+        {leftSlot ?? null}
       </div>
 
-      {/* Center: Navigation Carousel */}
+      {/* Center: Navigation Carousel (flows cleanly without overlapping rightSlot) */}
       <nav
-        className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 sm:gap-4 text-sm font-sans"
+        className="flex min-w-0 flex-1 items-center justify-center gap-1.5 sm:gap-3 text-sm font-sans"
         aria-label="Category Carousel"
       >
         {/* Previous Category Keycap Hint (e.g. [Q]) */}
