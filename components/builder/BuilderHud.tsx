@@ -5,6 +5,7 @@ import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { useCharacter } from '@/lib/store';
 import { useBuilderStore, type BuilderMode } from '@/lib/builderStore';
 import { INTERACT_LABELS } from '@/lib/builderCatalog';
+import { getSmartObjectDef, resolveSmartSlot } from '@/lib/builder/smartObjects';
 import { BuilderPanel } from '@/components/builder/BuilderPanel';
 import { BottomBar } from '@/components/builder/BottomBar';
 import { ClockControlsPill, RoomLifeNeedsCard } from '@/components/builder/RoomLifeHud';
@@ -36,8 +37,16 @@ export function BuilderHud({ manifest: _manifest }: { manifest: Mo2Manifest | nu
 
   const triggerInteract = () => {
     if (!nearbyInteract) return;
+    const builder = useBuilderStore.getState();
+    const item = builder.placedItems.find((i) => i.id === nearbyInteract.itemId);
+    const def = item ? getSmartObjectDef(item.catalogId) : null;
+    if (item && def) {
+      const slot = resolveSmartSlot(item, def);
+      builder.setPlayerPose([slot.standXZ[0], 0, slot.standXZ[1]], slot.facingYaw + Math.PI);
+    }
     const meta = INTERACT_LABELS[nearbyInteract.tag];
     useCharacter.getState().setAnimationId('idle');
+    useCharacter.getState().setBackgroundMode('room');
     useCharacter.getState().setPrimaryTab(meta.tab);
     useCharacter.getState().setAppMode('studio');
     useCharacter.getState().showToast(meta.label);

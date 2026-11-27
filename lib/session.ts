@@ -295,7 +295,7 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     grade: coerceGrade(o.grade, defaults.grade),
     envMode: isOneOf(ENV_MODES, o.envMode) ? o.envMode : defaults.envMode,
     envRotation: wrapDegrees(finite(o.envRotation, defaults.envRotation)),
-    backgroundMode: isOneOf(BACKGROUND_MODES, o.backgroundMode) ? o.backgroundMode : (defaults.backgroundMode ?? 'void'),
+    backgroundMode: isOneOf(BACKGROUND_MODES, o.backgroundMode) ? o.backgroundMode : (defaults.backgroundMode ?? 'room'),
     customBackgroundUrl: typeof o.customBackgroundUrl === 'string' ? o.customBackgroundUrl : (defaults.customBackgroundUrl ?? null),
     lighting: coerceLighting(o.lighting, defaults.lighting),
     envIntensity: bounded(o.envIntensity, defaults.envIntensity ?? 1, 0, 2),

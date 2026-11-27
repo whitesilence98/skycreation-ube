@@ -50,7 +50,7 @@ function sampleDayLighting(hourFloat: number) {
  * Smoothly modulates interior hemisphere & key directional lights according to the
  * in-game 24-hour clock in `useRoomLifeStore`.
  */
-export function TimeOfDayLighting() {
+export function TimeOfDayLighting({ intensityScale = 1 }: { intensityScale?: number }) {
   const hemiRef = useRef<THREE.HemisphereLight>(null);
   const sunRef = useRef<THREE.DirectionalLight>(null);
 
@@ -64,13 +64,13 @@ export function TimeOfDayLighting() {
       _hemiGround.set(a.ground).lerp(new THREE.Color(b.ground), t);
       hemiRef.current.color.copy(_hemiSky);
       hemiRef.current.groundColor.copy(_hemiGround);
-      hemiRef.current.intensity = THREE.MathUtils.lerp(a.hemiInt, b.hemiInt, t);
+      hemiRef.current.intensity = THREE.MathUtils.lerp(a.hemiInt, b.hemiInt, t) * intensityScale;
     }
 
     if (sunRef.current) {
       _sunColor.set(a.sun).lerp(new THREE.Color(b.sun), t);
       sunRef.current.color.copy(_sunColor);
-      sunRef.current.intensity = THREE.MathUtils.lerp(a.sunInt, b.sunInt, t);
+      sunRef.current.intensity = THREE.MathUtils.lerp(a.sunInt, b.sunInt, t) * intensityScale;
       sunRef.current.position.set(
         THREE.MathUtils.lerp(a.sunPos[0], b.sunPos[0], t),
         THREE.MathUtils.lerp(a.sunPos[1], b.sunPos[1], t),
@@ -81,11 +81,11 @@ export function TimeOfDayLighting() {
 
   return (
     <>
-      <hemisphereLight ref={hemiRef} args={['#f5efe6', '#2a2e38', 0.85]} />
+      <hemisphereLight ref={hemiRef} args={['#f5efe6', '#2a2e38', 0.85 * intensityScale]} />
       <directionalLight
         ref={sunRef}
         position={[7.5, 11.5, 6.5]}
-        intensity={2.35}
+        intensity={2.35 * intensityScale}
         color="#fff6ea"
         castShadow
         shadow-mapSize={[2048, 2048]}
@@ -98,7 +98,7 @@ export function TimeOfDayLighting() {
         shadow-bias={-0.0004}
         shadow-normalBias={0.015}
       />
-      <directionalLight position={[-6, 5, -5]} intensity={0.75} color="#c9daf0" />
+      <directionalLight position={[-6, 5, -5]} intensity={0.75 * intensityScale} color="#c9daf0" />
     </>
   );
 }

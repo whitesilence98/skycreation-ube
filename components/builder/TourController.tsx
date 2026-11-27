@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { useBuilderStore } from '@/lib/builderStore';
 import { INTERACT_LABELS } from '@/lib/builderCatalog';
 import { buildColliders, resolvePlayerCollision } from '@/lib/builder/collider';
+import { getSmartObjectDef, resolveSmartSlot } from '@/lib/builder/smartObjects';
 import { useCharacter } from '@/lib/store';
 
 interface TourControllerProps {
@@ -36,7 +37,7 @@ export function TourController({ playerGroupRef }: TourControllerProps) {
   const colliders = useMemo(() => buildColliders(placedItems), [placedItems]);
 
   const keysRef = useRef<Record<string, boolean>>({});
-  const camYawRef = useRef<number>(0);
+  const camYawRef = useRef<number>(useBuilderStore.getState().playerYaw + Math.PI);
   const draggingRef = useRef(false);
   const lastXRef = useRef(0);
   const lastAnimRef = useRef<'idle-clip' | 'walk' | 'run'>('idle-clip');
@@ -53,11 +54,26 @@ export function TourController({ playerGroupRef }: TourControllerProps) {
       keysRef.current[k] = true;
 
       if (k === 'e' && !e.repeat) {
-        const nearby = useBuilderStore.getState().nearbyInteract;
+        const builder = useBuilderStore.getState();
+        const nearby = builder.nearbyInteract;
         if (nearby) {
           e.preventDefault();
+          const item = builder.placedItems.find((i) => i.id === nearby.itemId);
+          const def = item ? getSmartObjectDef(item.catalogId) : null;
+          if (item && def) {
+            const slot = resolveSmartSlot(item, def);
+            // Stand neatly at the furniture front facing out into the room so the
+            // Vanity/Mirror/Windows frame the character's backdrop in Customize view.
+            builder.setPlayerPose([slot.standXZ[0], 0, slot.standXZ[1]], slot.facingYaw + Math.PI);
+          } else if (playerGroupRef.current) {
+            builder.setPlayerPose(
+              [playerGroupRef.current.position.x, 0, playerGroupRef.current.position.z],
+              playerGroupRef.current.rotation.y,
+            );
+          }
           const meta = INTERACT_LABELS[nearby.tag];
           useCharacter.getState().setAnimationId('idle');
+          useCharacter.getState().setBackgroundMode('room');
           useCharacter.getState().setPrimaryTab(meta.tab);
           useCharacter.getState().setAppMode('studio');
           useCharacter.getState().showToast(meta.label);
