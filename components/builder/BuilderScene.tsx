@@ -9,6 +9,7 @@ import { KENNEY_UNIT_SCALE, useBuilderStore } from '@/lib/builderStore';
 import { BUILDER_CATALOG_BY_ID } from '@/lib/builderCatalog';
 import { hydrateBuilderSession, saveBuilderSession } from '@/lib/builderSession';
 import { buildWallChain, snapToGrid, type GridPoint } from '@/lib/builder/wallPlacer';
+import { validatePlacement, validateWallBatch } from '@/lib/builder/placementValidator';
 import { BuilderCamera } from '@/components/builder/BuilderCamera';
 import { RoomGrid } from '@/components/builder/RoomGrid';
 import { PlacedItemMesh } from '@/components/builder/PlacedItemMesh';
@@ -31,6 +32,7 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
   const nearbyInteract = useBuilderStore((s) => s.nearbyInteract);
   const roomWidth = useBuilderStore((s) => s.roomWidth);
   const roomDepth = useBuilderStore((s) => s.roomDepth);
+  const roomBounds = useBuilderStore((s) => s.roomBounds);
   const hydrated = useBuilderStore((s) => s.hydrated);
 
   const playerGroupRef = useRef<THREE.Group | null>(null);
@@ -76,6 +78,58 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
     return Math.abs(hoverPoint.x - wallStart.x) + Math.abs(hoverPoint.z - wallStart.z);
   }, [wallStart, hoverPoint]);
 
+  // Live collision checks for active prop ghost, wall ghost, and wall chain
+  const ghostValidation = useMemo(() => {
+    if (mode !== 'decorate' || !ghostCatalogId) {
+      return { valid: true, reason: null as string | null, collidingIds: [] as string[] };
+    }
+    const entry = BUILDER_CATALOG_BY_ID[ghostCatalogId];
+    if (!entry) return { valid: true, reason: null as string | null, collidingIds: [] as string[] };
+    return validatePlacement(
+      {
+        catalogId: entry.id,
+        assetPath: entry.path,
+        category: entry.category,
+        type: entry.type,
+        position: [hoverPoint.x, 0, hoverPoint.z],
+        rotation: ghostRotation,
+        scale: [KENNEY_UNIT_SCALE, KENNEY_UNIT_SCALE, KENNEY_UNIT_SCALE],
+        interactTag: entry.interactTag,
+        noCollide: entry.noCollide,
+      },
+      placedItems,
+      { roomBounds },
+    );
+  }, [mode, ghostCatalogId, hoverPoint.x, hoverPoint.z, ghostRotation, placedItems, roomBounds]);
+
+  const startWallValidation = useMemo(() => {
+    if (mode !== 'build' || wallStart) {
+      return { valid: true, reason: null as string | null, collidingIds: [] as string[] };
+    }
+    const entry = BUILDER_CATALOG_BY_ID[activeWallCatalogId];
+    if (!entry) return { valid: true, reason: null as string | null, collidingIds: [] as string[] };
+    return validatePlacement(
+      {
+        catalogId: entry.id,
+        assetPath: entry.path,
+        category: entry.category,
+        type: 'wall',
+        position: [hoverPoint.x, 0, hoverPoint.z],
+        rotation: ghostRotation,
+        scale: [KENNEY_UNIT_SCALE, KENNEY_UNIT_SCALE, KENNEY_UNIT_SCALE],
+      },
+      placedItems,
+      { roomBounds },
+    );
+  }, [mode, wallStart, activeWallCatalogId, hoverPoint.x, hoverPoint.z, ghostRotation, placedItems, roomBounds]);
+
+  const wallChainValidation = useMemo(() => {
+    if (mode !== 'build' || !wallStart || wallPreviewSegments.length === 0) {
+      return { valid: true, invalidIndices: [] as number[], reason: null as string | null };
+    }
+    return validateWallBatch(wallPreviewSegments, placedItems);
+  }, [mode, wallStart, wallPreviewSegments, placedItems]);
+
   const handlePointerMoveFloor = useCallback(
     (pt: THREE.Vector3) => {
       if (mode === 'tour') return;
@@ -101,6 +155,13 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
         } else {
           const chain = buildWallChain(wallStart, snapped, activeWallCatalogId);
           if (chain.length > 0) {
+            const batchCheck = validateWallBatch(chain, store.placedItems);
+            if (!batchCheck.valid) {
+              useCharacter
+                .getState()
+                .showToast(`Wall blocked${batchCheck.reason ? `: ${batchCheck.reason}` : ''}`);
+              return;
+            }
             store.placeBatch(chain);
           }
           setWallStart(null);
@@ -112,17 +173,27 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
       if (ghostCatalogId) {
         const entry = BUILDER_CATALOG_BY_ID[ghostCatalogId];
         if (!entry) return;
-        store.placeItem({
+        const candidate = {
           catalogId: entry.id,
           assetPath: entry.path,
           category: entry.category,
           type: entry.type,
-          position: [snapped.x, 0, snapped.z],
+          position: [snapped.x, 0, snapped.z] as [number, number, number],
           rotation: ghostRotation,
-          scale: [KENNEY_UNIT_SCALE, KENNEY_UNIT_SCALE, KENNEY_UNIT_SCALE],
+          scale: [KENNEY_UNIT_SCALE, KENNEY_UNIT_SCALE, KENNEY_UNIT_SCALE] as [number, number, number],
           interactTag: entry.interactTag,
           noCollide: entry.noCollide,
+        };
+        const check = validatePlacement(candidate, store.placedItems, {
+          roomBounds: store.roomBounds,
         });
+        if (!check.valid) {
+          useCharacter
+            .getState()
+            .showToast(`Cannot place here${check.reason ? `: ${check.reason}` : ''}`);
+          return;
+        }
+        store.placeItem(candidate);
       } else {
         store.selectItem(null);
       }
@@ -158,6 +229,21 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
         if (store.ghostCatalogId) {
           store.rotateGhost();
         } else if (store.selectedItemId) {
+          const current = store.placedItems.find((i) => i.id === store.selectedItemId);
+          if (current) {
+            const nextRot = ((current.rotation + store.snapAngle) % 360 + 360) % 360;
+            const check = validatePlacement(
+              { ...current, rotation: nextRot },
+              store.placedItems,
+              { excludeId: current.id, roomBounds: store.roomBounds },
+            );
+            if (!check.valid) {
+              useCharacter
+                .getState()
+                .showToast(`Cannot rotate${check.reason ? `: ${check.reason}` : ''}`);
+              return;
+            }
+          }
           store.rotateItem(store.selectedItemId);
         }
       } else if ((key === 'delete' || key === 'backspace') && !e.repeat) {
@@ -230,6 +316,8 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
           segments={wallPreviewSegments}
           endPoint={[hoverPoint.x, 0, hoverPoint.z]}
           lengthMeters={wallPreviewLength}
+          invalidIndices={wallChainValidation.invalidIndices}
+          invalidReason={wallChainValidation.reason}
         />
       )}
       {mode === 'build' && !wallStart && (
@@ -237,6 +325,8 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
           catalogId={activeWallCatalogId}
           position={[hoverPoint.x, 0, hoverPoint.z]}
           rotation={ghostRotation}
+          valid={startWallValidation.valid}
+          invalidReason={startWallValidation.reason}
           promptLabel="START WALL [L-CLICK]"
         />
       )}
@@ -245,6 +335,8 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
           catalogId={ghostCatalogId}
           position={[hoverPoint.x, 0, hoverPoint.z]}
           rotation={ghostRotation}
+          valid={ghostValidation.valid}
+          invalidReason={ghostValidation.reason}
           promptLabel="PLACE [L-CLICK]"
         />
       )}

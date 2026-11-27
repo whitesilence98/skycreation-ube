@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Html, TransformControls, useGLTF } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
@@ -9,7 +9,10 @@ import {
   type BuilderMode,
   type PlacedItem,
 } from '@/lib/builderStore';
+import { useCharacter } from '@/lib/store';
 import { INTERACT_LABELS } from '@/lib/builderCatalog';
+import { registerCatalogExtent } from '@/lib/builder/footprintRegistry';
+import { validatePlacement } from '@/lib/builder/placementValidator';
 
 interface PlacedItemMeshProps {
   item: PlacedItem;
@@ -23,11 +26,15 @@ interface PlacedItemMeshProps {
 function LoadedAsset({
   item,
   selected,
+  dragInvalid,
+  dragReason,
   onSelect,
   showPrompt,
 }: {
   item: PlacedItem;
   selected: boolean;
+  dragInvalid: boolean;
+  dragReason: string | null;
   onSelect: (e: ThreeEvent<MouseEvent>) => void;
   showPrompt: boolean;
 }) {
@@ -53,10 +60,8 @@ function LoadedAsset({
     let oz = 0;
 
     if (item.type === 'floor') {
-      // Top surface of floor tiles sits cleanly at y = 0
       oy = -box.max.y;
     } else if (item.type === 'prop') {
-      // Center furniture/decor around XZ origin so [R] rotates in place
       ox = -center.x;
       oz = -center.z;
     }
@@ -72,26 +77,39 @@ function LoadedAsset({
     };
   }, [gltf.scene, item.type]);
 
+  // Share measured unscaled GLTF bounds with placementValidator
+  useEffect(() => {
+    registerCatalogExtent(item.catalogId, [boxSize.x, boxSize.y, boxSize.z]);
+  }, [item.catalogId, boxSize]);
+
   const interactMeta = item.interactTag ? INTERACT_LABELS[item.interactTag] : null;
 
   return (
     <group onClick={onSelect}>
       <group scale={item.scale}>
         <primitive object={clonedScene} position={localOffset} />
-        {selected && (
+        {(selected || dragInvalid) && (
           <mesh position={boxCenter}>
             <boxGeometry args={[boxSize.x + 0.03, boxSize.y + 0.03, boxSize.z + 0.03]} />
             <meshBasicMaterial
-              color="#eac87f"
+              color={dragInvalid ? '#ff3b3b' : '#eac87f'}
               wireframe
               transparent
-              opacity={0.75}
+              opacity={dragInvalid ? 0.95 : 0.75}
             />
           </mesh>
         )}
       </group>
 
-      {showPrompt && interactMeta && (
+      {dragInvalid && (
+        <Html position={[0, boxSize.y * item.scale[1] + 0.35, 0]} center zIndexRange={[30, 0]}>
+          <div className="pointer-events-none whitespace-nowrap rounded-[2px] border border-[#ff5a5a]/85 bg-[#2a0d0d]/95 px-2.5 py-1 text-[10px] font-mono tracking-wider text-[#ffd2d2] uppercase shadow-lg">
+            {dragReason ? `${dragReason} — Release to revert` : 'Overlap — Release to revert'}
+          </div>
+        </Html>
+      )}
+
+      {!dragInvalid && showPrompt && interactMeta && (
         <Html
           position={[0, boxSize.y * item.scale[1] + 0.35, 0]}
           center
@@ -122,24 +140,40 @@ export function PlacedItemMesh({
   const moveItem = useBuilderStore((s) => s.moveItem);
   const ghostCatalogId = useBuilderStore((s) => s.ghostCatalogId);
   const groupRef = useRef<THREE.Group | null>(null);
+  const [dragState, setDragState] = useState<{ invalid: boolean; reason: string | null }>({
+    invalid: false,
+    reason: null,
+  });
 
-  const canSelect =
-    mode === 'decorate' &&
-    !ghostCatalogId;
+  const canSelect = mode === 'decorate' && !ghostCatalogId;
   const showGizmo = selected && mode === 'decorate' && !ghostCatalogId;
 
   useEffect(() => {
     if (!groupRef.current) return;
     groupRef.current.position.set(item.position[0], item.position[1], item.position[2]);
+    setDragState({ invalid: false, reason: null });
   }, [item.position]);
 
+  const validateCurrentTransform = (): {
+    snapped: [number, number, number];
+    valid: boolean;
+    reason: string | null;
+  } => {
+    const p = groupRef.current?.position;
+    const snapped: [number, number, number] = p
+      ? [Math.round(p.x / grid) * grid, item.position[1], Math.round(p.z / grid) * grid]
+      : item.position;
+    const state = useBuilderStore.getState();
+    const res = validatePlacement(
+      { ...item, position: snapped },
+      state.placedItems,
+      { excludeId: item.id, roomBounds: state.roomBounds },
+    );
+    return { snapped, valid: res.valid, reason: res.reason };
+  };
+
   const handleSelect = (e: ThreeEvent<MouseEvent>) => {
-    // Let BUILD WALLS clicks and active DECORATE brush placements fall straight through to floor grid!
     if (!canSelect) return;
-    if (mode === 'decorate' && item.type === 'floor' && !selected) {
-      // Floor tiles still selectable on deliberate click when no brush active,
-      // unless user drags/places. Keeping stopPropagation only on valid selection.
-    }
     e.stopPropagation();
     selectItem(item.id);
   };
@@ -155,6 +189,8 @@ export function PlacedItemMesh({
           <LoadedAsset
             item={item}
             selected={selected && mode !== 'tour'}
+            dragInvalid={dragState.invalid}
+            dragReason={dragState.reason}
             onSelect={handleSelect}
             showPrompt={mode === 'tour' && isNearbyInteract}
           />
@@ -168,16 +204,27 @@ export function PlacedItemMesh({
           translationSnap={grid}
           size={0.65}
           onMouseDown={() => onDraggingChange?.(true)}
+          onObjectChange={() => {
+            const check = validateCurrentTransform();
+            setDragState((prev) =>
+              prev.invalid === !check.valid && prev.reason === check.reason
+                ? prev
+                : { invalid: !check.valid, reason: check.reason },
+            );
+          }}
           onMouseUp={() => {
             onDraggingChange?.(false);
-            if (groupRef.current) {
-              const p = groupRef.current.position;
-              moveItem(item.id, [
-                Math.round(p.x / grid) * grid,
-                item.position[1],
-                Math.round(p.z / grid) * grid,
-              ]);
+            if (!groupRef.current) return;
+            const check = validateCurrentTransform();
+            setDragState({ invalid: false, reason: null });
+            if (!check.valid) {
+              groupRef.current.position.set(item.position[0], item.position[1], item.position[2]);
+              useCharacter
+                .getState()
+                .showToast(`Blocked${check.reason ? `: ${check.reason}` : ''}`);
+              return;
             }
+            moveItem(item.id, check.snapped);
           }}
         />
       )}
