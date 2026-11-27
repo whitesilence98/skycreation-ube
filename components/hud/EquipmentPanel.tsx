@@ -20,7 +20,6 @@ import {
   IconWuxiaRing,
   IconWuxiaSword,
   IconWuxiaFan,
-  IconYinYang,
 } from '@/components/hud/outfit/WuxiaSlotIcons';
 
 interface ClothingItem {
@@ -53,7 +52,6 @@ interface GridSlotDef {
   equipSlot?: EquipSlot;
   label: string;
   iconType: 'head' | 'robe' | 'hat' | 'scarf' | 'mask' | 'shoulder' | 'earring' | 'talisman' | 'ring';
-  isNew?: boolean;
 }
 
 const GRID_SLOTS: GridSlotDef[] = [
@@ -65,8 +63,8 @@ const GRID_SLOTS: GridSlotDef[] = [
 
   // Row 2
   { id: 'mask', equipSlot: 'panties', label: 'Mask', iconType: 'mask' },
-  { id: 'shoulder', equipSlot: 'bottom', label: 'Shoulders', iconType: 'shoulder', isNew: true },
-  { id: 'earring', equipSlot: 'hands', label: 'Earrings', iconType: 'earring', isNew: true },
+  { id: 'shoulder', equipSlot: 'bottom', label: 'Shoulders', iconType: 'shoulder' },
+  { id: 'earring', equipSlot: 'hands', label: 'Earrings', iconType: 'earring' },
   { id: 'talisman', equipSlot: 'stockings', label: 'Talisman', iconType: 'talisman' },
 
   // Row 3
@@ -243,24 +241,6 @@ export function EquipmentPanel({ manifest }: { manifest: Mo2Manifest | null }) {
           <IconWuxiaFan className="h-9 w-14 text-[#9f9da6] transition-colors group-hover:text-[#e4cca8]" />
         </button>
       </div>
-
-      {/* ─────────────────────────────────────────────────────────────────────────────
-          CALLOUT 4: Appearance Switcher Bar
-          ───────────────────────────────────────────────────────────────────────────── */}
-      <button
-        type="button"
-        onClick={() => navigateCategory('styling')}
-        aria-label="Go to Appearance and Facial Sculpting"
-        className="mt-2.5 flex h-[38px] w-full items-center gap-2.5 rounded-[2px] border border-white/[0.08] bg-[#202126]/90 px-3 text-[#e6e1d8] backdrop-blur-md transition-all hover:border-[#d4b483]/50 hover:bg-[#282930] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#eac87f]"
-      >
-        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white p-0.5 text-black">
-          <IconYinYang className="h-full w-full" />
-        </span>
-        <span className="flex-1 text-left text-xs font-normal tracking-wide text-[#e6e1d8]">Appearance</span>
-        <span className="font-mono text-sm text-[#8a8793]" aria-hidden>
-          ›
-        </span>
-      </button>
     </section>
   );
 }
@@ -296,13 +276,6 @@ function SlotCell({ def, equippedId, item, itemName, isActive, onSelect, onUnequ
               : 'border-white/[0.06] bg-[#202126]/90 hover:border-[#d4b483]/50 hover:bg-[#282930]'
         )}
       >
-        {/* NEW badge */}
-        {def.isNew && !equippedId && (
-          <span className="absolute top-0 right-0 z-10 bg-[#c8b8a9] px-1 py-[0.5px] text-[10px] font-bold leading-tight text-[#1c1b1d] select-none">
-            NEW
-          </span>
-        )}
-
         {/* Equipped Graphic or Default Slot Icon */}
         {equippedId ? (
           <div className="relative flex h-full w-full items-center justify-center p-1">

@@ -286,42 +286,6 @@ export function ToolStrip() {
         )}
       </div>
 
-      {/* 6. 🎽 Outfit / Wardrobe Toggle */}
-      <div className="relative flex items-center">
-        <button
-          type="button"
-          aria-pressed={workspace === 'wardrobe'}
-          aria-label="Wardrobe & Outfits"
-          title="Wardrobe & Outfits"
-          onClick={() => toggleWorkspace('wardrobe')}
-          onMouseEnter={() => setHoveredTool('wardrobe')}
-          onMouseLeave={() => setHoveredTool(null)}
-          className={cn(
-            'group flex h-10 w-10 items-center justify-center rounded-full border backdrop-blur-md transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#dfba73]',
-            workspace === 'wardrobe'
-              ? 'border-[#dfba73] bg-[#dfba73]/25 text-[#dfba73] shadow-[0_0_14px_rgba(223,186,115,0.4)]'
-              : 'border-white/10 bg-[#1e1f26]/85 text-[#cfced4] hover:border-[#dfba73]/50 hover:bg-[#282a34] hover:text-white'
-          )}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className="h-5 w-5 fill-none stroke-current stroke-[1.5]"
-            aria-hidden
-          >
-            <path
-              d="M7 4 L12 8 L17 4 L20 7 L17 10 L17 20 L7 20 L7 10 L4 7 Z"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-        {hoveredTool === 'wardrobe' && (
-          <span className="pointer-events-none absolute right-12 z-50 whitespace-nowrap rounded border border-white/10 bg-[#1e1f26]/95 px-2.5 py-1 text-[11px] text-[#e8dcc2] shadow-xl backdrop-blur-md">
-            Wardrobe & Clothing
-          </span>
-        )}
-      </div>
-
       {/* 7. 🧍 Poses & Stance */}
       <div className="relative flex items-center">
         <button

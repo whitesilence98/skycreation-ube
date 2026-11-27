@@ -79,17 +79,6 @@ function TopBarRightActions({ manifest }: { manifest: Mo2Manifest | null }) {
         <span aria-hidden>⌂</span>
         <span>Room</span>
       </button>
-      <a
-        href="/rigger"
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Auto-Rigger Studio (opens in a new tab)"
-        title="Auto-Rigger Studio (opens in a new tab)"
-        className="pointer-events-auto h-7 px-2 sm:px-2.5 rounded-[2px] text-[10px] font-mono tracking-widest text-[#dfba73] bg-[#dfba73]/10 hover:bg-[#dfba73]/20 border border-[#dfba73]/30 transition-all flex items-center gap-1.5 uppercase"
-      >
-        <span>⚡</span>
-        <span className="hidden xl:inline">Auto-Rigger</span>
-      </a>
     </div>
   );
 }

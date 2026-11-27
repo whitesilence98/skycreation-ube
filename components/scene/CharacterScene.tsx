@@ -190,7 +190,7 @@ function CameraRig({ bodyFraming, packMode }: { bodyFraming: boolean; packMode: 
       bodyMidY = (headY + pelvisY) / 2;
       handsY = pelvisY + 0.04;
     } else {
-      bodyMidY = headY - 0.65;
+      bodyMidY = headY - 0.72;
     }
 
     if (handBone) {
@@ -333,6 +333,7 @@ function CameraRig({ bodyFraming, packMode }: { bodyFraming: boolean; packMode: 
     const orbit = controls as OrbitControlsImpl | null;
     if (!orbit) return;
     let lastPublished = 0;
+    let lastAdaptiveDist = camera.position.distanceTo(orbit.target);
     const publish = (force = false) => {
       const now = performance.now();
       if (!force && now - lastPublished < 80) return;
@@ -344,7 +345,25 @@ function CameraRig({ bodyFraming, packMode }: { bodyFraming: boolean; packMode: 
     };
     const start = () => { moving.current = false; gl.domElement.style.cursor = 'grabbing'; };
     const end = () => { gl.domElement.style.cursor = 'grab'; publish(true); };
-    const change = () => publish();
+    const change = () => {
+      const dist = camera.position.distanceTo(orbit.target);
+      if (!moving.current && Math.abs(dist - lastAdaptiveDist) > 0.004) {
+        lastAdaptiveDist = dist;
+        const anchors = getAnchorWorldY();
+        const faceY = anchors.eyesY - goldenRatioOffset(FRAMING_SPECS.face.standoff, cameraFov);
+        const t = Math.min(1, Math.max(0, (dist - 1.25) / 2.25));
+        const smooth = t * t * (3 - 2 * t);
+        const desiredY = THREE.MathUtils.lerp(faceY, anchors.bodyMidY, smooth);
+        const dy = desiredY - orbit.target.y;
+        if (Math.abs(dy) > 0.0005) {
+          orbit.target.y += dy;
+          camera.position.y += dy;
+        }
+      } else if (moving.current) {
+        lastAdaptiveDist = dist;
+      }
+      publish();
+    };
     publishNow.current = () => publish(true);
     gl.domElement.style.cursor = 'grab';
     publish(true);
@@ -358,7 +377,7 @@ function CameraRig({ bodyFraming, packMode }: { bodyFraming: boolean; packMode: 
       publishNow.current = null;
       gl.domElement.style.cursor = '';
     };
-  }, [camera, controls, gl]);
+  }, [camera, controls, gl, cameraFov, getAnchorWorldY]);
   // Before drei's -1 update: camera and target move together, never fight damping.
   useFrame((_, dt) => {
     if (camera.position.y < FLOOR_Y + 0.14) {

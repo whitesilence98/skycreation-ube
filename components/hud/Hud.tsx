@@ -18,7 +18,6 @@ import { SettingsPanel } from '@/components/hud/SettingsPanel';
 import { BodyProperties } from '@/components/hud/BodyProperties';
 import { AssetPanel } from '@/components/hud/AssetPanel';
 import { WardrobeDrawer } from '@/components/hud/WardrobeDrawer';
-import { OutfitSideActions } from '@/components/hud/outfit/OutfitSideActions';
 import { ImportCustomizationDrawer } from '@/components/hud/common/ImportCustomizationDrawer';
 import { SmartCustomization } from '@/components/hud/smart/SmartCustomization';
 import { GizmoTooltip } from '@/components/hud/GizmoTooltip';
@@ -48,7 +47,7 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
   const toolTrigger = useRef<HTMLElement | null>(null);
   const previousTool = useRef(false);
   const state = useCharacter.getState;
-  const toolOpen = !preview && !['edit', 'sculpt'].includes(workspace);
+  const toolOpen = !preview && !['edit', 'sculpt'].includes(workspace) && !(category === 'outfit' && workspace === 'wardrobe');
   const editorHidden = category === 'outfit' ? (toolOpen && isMobile) : (!editorOpen || (toolOpen && isMobile));
 
   useEffect(() => {
@@ -144,7 +143,14 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
           <LeftPanel manifest={manifest} category={category} />
         </aside>
       )}
-      {!smart && category === 'outfit' && <OutfitSideActions />}
+      {!smart && category === 'outfit' && workspace === 'wardrobe' && (
+        <aside
+          className="pointer-events-auto absolute left-[308px] top-16 z-30 w-[340px] max-w-[calc(100vw-340px)] max-h-[calc(100vh-140px)] overflow-y-auto scrollbar-none"
+          aria-label="Outfit item picker"
+        >
+          <WardrobeDrawer manifest={manifest} onClose={closeTool} />
+        </aside>
+      )}
       {!smart && (category === 'hair' || category === 'styling' || category === 'face') && <ImportCustomizationDrawer isOpen={importDrawerOpen} onClose={() => setImportDrawerOpen(false)} />}
       {!smart && <ToolStrip />}
       {!smart && toolOpen && <aside ref={tools} className="creator-tool-drawer" aria-label="Studio properties" tabIndex={-1}>
@@ -155,7 +161,6 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
         {workspace === 'settings' && <SettingsPanel onClose={closeTool} />}
         {workspace === 'physics' && <BodyProperties manifest={manifest} onClose={closeTool} />}
         {workspace === 'assets' && <AssetPanel manifest={manifest} active onClose={closeTool} />}
-        {workspace === 'wardrobe' && <WardrobeDrawer manifest={manifest} onClose={closeTool} />}
       </aside>}
       <Footer manifest={manifest} onToggleCustomizationDrawer={() => setImportDrawerOpen(v => !v)} />
       <GizmoTooltip />
