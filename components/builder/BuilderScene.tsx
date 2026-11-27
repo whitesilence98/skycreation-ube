@@ -19,6 +19,7 @@ import { TourController } from '@/components/builder/TourController';
 import { RoomLifeController, TimeOfDayLighting } from '@/components/builder/RoomLifeController';
 import { RoomPostPipeline } from '@/components/builder/RoomPostPipeline';
 import { EnvironmentRig } from '@/components/scene/EnvironmentRig';
+import { FrameRateCap } from '@/components/scene/FrameRateCap';
 import { StatsProbe } from '@/components/scene/StatsProbe';
 import { GlbExportBridge } from '@/lib/exportGlb';
 
@@ -33,7 +34,6 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
   const selectedItemId = useBuilderStore((s) => s.selectedItemId);
   const ghostCatalogId = useBuilderStore((s) => s.ghostCatalogId);
   const ghostRotation = useBuilderStore((s) => s.ghostRotation);
-  const nearbyInteract = useBuilderStore((s) => s.nearbyInteract);
   const roomWidth = useBuilderStore((s) => s.roomWidth);
   const roomDepth = useBuilderStore((s) => s.roomDepth);
   const roomBounds = useBuilderStore((s) => s.roomBounds);
@@ -283,6 +283,7 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
 
   return (
     <Canvas
+      frameloop="never"
       shadows
       dpr={[1, 1.5]}
       camera={{ fov: 44, near: 0.1, far: 50, position: [5.4, 5.2, 6.4] }}
@@ -295,6 +296,7 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
       }}
       style={{ position: 'absolute', inset: 0 }}
     >
+      <FrameRateCap maxFps={60} />
       <EnvironmentRig />
       <StatsProbe priority={0} />
       <BuilderCamera mode={mode} orbitEnabled={orbitEnabled} />
@@ -318,7 +320,6 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
           selected={item.id === selectedItemId}
           mode={mode}
           grid={grid}
-          isNearbyInteract={nearbyInteract?.itemId === item.id}
           onDraggingChange={(dragging) => setOrbitEnabled(!dragging)}
         />
       ))}

@@ -25,6 +25,7 @@ import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
 import { useHdr } from '@/lib/hdrState';
 import { inspectHdrHeader, checkHdrDimensions } from '@/lib/hdr';
 import { ExposureEffect } from '@/components/scene/ExposureEffect';
+import { FrameRateCap } from '@/components/scene/FrameRateCap';
 import { StatsProbe } from '@/components/scene/StatsProbe';
 import { isGradeNeutral } from '@/lib/graphics';
 import {
@@ -680,6 +681,7 @@ function createCustomRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
 export function CharacterScene({ manifest, onAssetsReady, onIssue }: CharacterSceneProps) {
   return (
     <Canvas
+      frameloop="never"
       dpr={[1, 1.5]}
       /* One shadow-casting key light (see the light block above). This is the
          stand-in for the SSAO pass that cannot run here: without it the nose,
@@ -701,6 +703,7 @@ export function CharacterScene({ manifest, onAssetsReady, onIssue }: CharacterSc
       }}
       style={{ position: 'absolute', inset: 0 }}
     >
+      <FrameRateCap maxFps={60} />
       <SceneContent manifest={manifest} onAssetsReady={onAssetsReady} onIssue={onIssue} />
     </Canvas>
   );

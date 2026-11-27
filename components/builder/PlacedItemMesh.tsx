@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Html, TransformControls, useGLTF } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
@@ -19,7 +19,6 @@ interface PlacedItemMeshProps {
   selected: boolean;
   mode: BuilderMode;
   grid: 0.5 | 1.0;
-  isNearbyInteract: boolean;
   onDraggingChange?: (dragging: boolean) => void;
 }
 
@@ -42,9 +41,14 @@ function LoadedAsset({
 
   const { clonedScene, localOffset, boxSize, boxCenter } = useMemo(() => {
     const clone = gltf.scene.clone(true);
+    const skipCastShadow =
+      item.type === 'floor' ||
+      item.catalogId.startsWith('rug') ||
+      item.catalogId === 'books' ||
+      item.catalogId.startsWith('pillow');
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        child.castShadow = item.type !== 'floor';
+        child.castShadow = !skipCastShadow;
         child.receiveShadow = true;
       }
     });
@@ -75,7 +79,7 @@ function LoadedAsset({
           ? new THREE.Vector3(0, size.y * 0.5, 0)
           : new THREE.Vector3(center.x + ox, size.y * 0.5, center.z + oz),
     };
-  }, [gltf.scene, item.type]);
+  }, [gltf.scene, item.type, item.catalogId]);
 
   // Share measured unscaled GLTF bounds with placementValidator
   useEffect(() => {
@@ -128,16 +132,18 @@ function LoadedAsset({
   );
 }
 
-export function PlacedItemMesh({
+export const PlacedItemMesh = memo(function PlacedItemMesh({
   item,
   selected,
   mode,
   grid,
-  isNearbyInteract,
   onDraggingChange,
 }: PlacedItemMeshProps) {
   const selectItem = useBuilderStore((s) => s.selectItem);
   const moveItem = useBuilderStore((s) => s.moveItem);
+  const isNearbyInteract = useBuilderStore(
+    (s) => mode === 'tour' && s.nearbyInteract?.itemId === item.id,
+  );
   const ghostCatalogId = useBuilderStore((s) => s.ghostCatalogId);
   const activeStation = useBuilderStore((s) => s.activeStation);
   const groupRef = useRef<THREE.Group | null>(null);
@@ -236,4 +242,4 @@ export function PlacedItemMesh({
       )}
     </>
   );
-}
+});

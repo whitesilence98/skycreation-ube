@@ -2,6 +2,7 @@
 
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
+import { FrameRateCap } from '@/components/scene/FrameRateCap';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { buildHeadGeometry, buildNeckGeometry } from '@/lib/head/geometry';
@@ -196,10 +197,12 @@ export function HeadPreview() {
 
   return (
     <Canvas
+      frameloop="never"
       style={{ position: 'fixed', inset: 0, background: '#14100e' }}
       camera={{ fov: 26, near: 0.01, far: 8, position: [0, -0.012, 0.8] }}
       gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}
     >
+      <FrameRateCap maxFps={60} />
       <color attach="background" args={['#14100e']} />
       {FLAT_LIGHT ? (
         <ambientLight intensity={2.4} color="#ffffff" />

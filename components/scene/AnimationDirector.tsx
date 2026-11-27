@@ -214,6 +214,9 @@ export function AnimationDirector({
     }
   }, [autoBlink, blinkPreview, rigRoot, registry]);
 
+  const lastBlinkRef = useRef<{ left: number; right: number }>({ left: -1, right: -1 });
+  const hasActiveExpr = Object.values(facialExpressions).some((v) => Math.abs(v) > 1e-4);
+
   useEffect(() => {
     applyFacialExpressionWeights(rigRoot, facialExpressions);
     applyFacialExpressionWeights(registry.group, facialExpressions);
@@ -229,10 +232,19 @@ export function AnimationDirector({
             delta * (animationPlaying ? animationSpeed : 1),
             autoBlink && animationPlaying,
           );
-    applyBlinkWeights(rigRoot, left, right);
-    applyBlinkWeights(registry.group, left, right);
-    applyFacialExpressionWeights(rigRoot, facialExpressions);
-    applyFacialExpressionWeights(registry.group, facialExpressions);
+    if (
+      Math.abs(left - lastBlinkRef.current.left) > 1e-4 ||
+      Math.abs(right - lastBlinkRef.current.right) > 1e-4
+    ) {
+      lastBlinkRef.current.left = left;
+      lastBlinkRef.current.right = right;
+      applyBlinkWeights(rigRoot, left, right);
+      applyBlinkWeights(registry.group, left, right);
+    }
+    if (hasActiveExpr) {
+      applyFacialExpressionWeights(rigRoot, facialExpressions);
+      applyFacialExpressionWeights(registry.group, facialExpressions);
+    }
     /* The head-follow and BodyPhysics read world matrices this frame; they
        must reflect the mixer's output before either runs. */
     registry.updateWorld();
