@@ -7,6 +7,7 @@ import { useBuilderStore, type BuilderMode } from '@/lib/builderStore';
 import { INTERACT_LABELS } from '@/lib/builderCatalog';
 import { BuilderPanel } from '@/components/builder/BuilderPanel';
 import { BottomBar } from '@/components/builder/BottomBar';
+import { ClockControlsPill, RoomLifeNeedsCard } from '@/components/builder/RoomLifeHud';
 import { cn } from '@/lib/cn';
 
 const MODE_TABS: ReadonlyArray<{ id: BuilderMode; label: string }> = [
@@ -106,13 +107,14 @@ export function BuilderHud({ manifest: _manifest }: { manifest: Mo2Manifest | nu
           })}
         </nav>
 
-        {/* Top-right Grid & Angle Snap Pills */}
-        <div className="hidden md:flex items-center gap-2">
+        {/* Top-right Clock, AI Speed & Grid/Angle Snap Pills */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <ClockControlsPill />
           <button
             type="button"
             onClick={() => setGrid(grid === 0.5 ? 1.0 : 0.5)}
             title="Toggle placement grid snap increment"
-            className="min-h-[28px] rounded-[2px] border border-white/15 bg-[#1b1c23]/85 px-2.5 font-mono text-[10px] tracking-wider text-[#dcd6cb] uppercase transition-colors hover:border-[#dfba73]/60 hover:text-white"
+            className="hidden lg:inline-flex min-h-[28px] items-center rounded-[2px] border border-white/15 bg-[#1b1c23]/85 px-2.5 font-mono text-[10px] tracking-wider text-[#dcd6cb] uppercase transition-colors hover:border-[#dfba73]/60 hover:text-white"
           >
             GRID: {grid.toFixed(1)}m
           </button>
@@ -120,7 +122,7 @@ export function BuilderHud({ manifest: _manifest }: { manifest: Mo2Manifest | nu
             type="button"
             onClick={() => setSnapAngle(snapAngle === 45 ? 90 : 45)}
             title="Toggle rotation snap increment"
-            className="min-h-[28px] rounded-[2px] border border-white/15 bg-[#1b1c23]/85 px-2.5 font-mono text-[10px] tracking-wider text-[#dcd6cb] uppercase transition-colors hover:border-[#dfba73]/60 hover:text-white"
+            className="hidden lg:inline-flex min-h-[28px] items-center rounded-[2px] border border-white/15 bg-[#1b1c23]/85 px-2.5 font-mono text-[10px] tracking-wider text-[#dcd6cb] uppercase transition-colors hover:border-[#dfba73]/60 hover:text-white"
           >
             {snapAngle}° SNAP
           </button>
@@ -157,6 +159,9 @@ export function BuilderHud({ manifest: _manifest }: { manifest: Mo2Manifest | nu
           )}
         </div>
       )}
+
+      {/* Autonomous Room Life Needs & Activity Card */}
+      <RoomLifeNeedsCard />
 
       {/* Bottom Keyboard Hints */}
       <BottomBar

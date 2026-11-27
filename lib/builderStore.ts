@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { useRoomLifeStore } from '@/lib/builder/lifeStore';
 
 export type BuilderMode = 'build' | 'decorate' | 'tour';
 export type BuilderCategory = 'walls' | 'floors' | 'windows' | 'furniture' | 'decor' | 'lighting';
@@ -328,6 +329,9 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     set((s) => ({
       placedItems: [...s.placedItems, full],
     }));
+    if (full.type === 'prop') {
+      useRoomLifeStore.getState().notifyItemPlaced(id);
+    }
     return id;
   },
 

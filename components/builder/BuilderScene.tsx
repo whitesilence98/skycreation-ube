@@ -15,6 +15,7 @@ import { PlacedItemMesh } from '@/components/builder/PlacedItemMesh';
 import { GhostItem, WallGhostChain } from '@/components/builder/GhostItem';
 import { BuilderCharacter } from '@/components/builder/BuilderCharacter';
 import { TourController } from '@/components/builder/TourController';
+import { RoomLifeController, TimeOfDayLighting } from '@/components/builder/RoomLifeController';
 
 interface BuilderSceneProps {
   manifest: Mo2Manifest | null;
@@ -199,24 +200,8 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
     >
       <BuilderCamera mode={mode} orbitEnabled={orbitEnabled} />
 
-      {/* Crisp daylight interior + isometric architectural shading */}
-      <hemisphereLight args={['#f5efe6', '#2a2e38', 0.85]} />
-      <directionalLight
-        position={[7.5, 11.5, 6.5]}
-        intensity={2.35}
-        color="#fff6ea"
-        castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-8}
-        shadow-camera-right={8}
-        shadow-camera-top={8}
-        shadow-camera-bottom={-8}
-        shadow-camera-near={1}
-        shadow-camera-far={28}
-        shadow-bias={-0.0004}
-        shadow-normalBias={0.015}
-      />
-      <directionalLight position={[-6, 5, -5]} intensity={0.75} color="#c9daf0" />
+      {/* Time-of-day interior lighting driven by in-game clock */}
+      <TimeOfDayLighting />
 
       <RoomGrid
         gridSize={grid}
@@ -266,6 +251,9 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
 
       {/* User's live customized character */}
       <BuilderCharacter manifest={manifest} playerGroupRef={playerGroupRef} />
+
+      {/* Autonomous clock + Room Life AI when building/decorating */}
+      <RoomLifeController playerGroupRef={playerGroupRef} />
 
       {/* Third-person exploration controller in TOUR mode */}
       {mode === 'tour' && <TourController playerGroupRef={playerGroupRef} />}
