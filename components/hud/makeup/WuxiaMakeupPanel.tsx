@@ -16,6 +16,7 @@ import { BEAUTY_SWATCHES, detectSubtype, makeupLabel, type MakeupCategory } from
 import { SKIN_PALETTE_SWATCHES } from '@/components/hud/SkinProperties';
 import { TATTOO_INK_SWATCHES, tattooLabel } from '@/components/hud/TattooPicker';
 import { LASH_INK_SWATCHES } from '@/components/hud/LashesProperties';
+import { MouthPicker } from '@/components/hud/MouthPicker';
 import { cn } from '@/lib/cn';
 
 export type MakeupSectionId =
@@ -26,7 +27,8 @@ export type MakeupSectionId =
   | 'eye_makeup'
   | 'blush'
   | 'accessory'
-  | 'lashes';
+  | 'lashes'
+  | 'mouth';
 
 interface SectionConfig {
   id: MakeupSectionId;
@@ -44,6 +46,7 @@ const MAKEUP_SECTIONS: readonly SectionConfig[] = [
   { id: 'blush', label: 'Blush', badge: 'CHEEK COLOR', categoryKind: 'makeup' },
   { id: 'accessory', label: 'Facial Accessory', badge: 'WARPAINT / INK', categoryKind: 'tattoo' },
   { id: 'lashes', label: 'Eyelashes', badge: 'VOLUME & TINT', categoryKind: 'lashes' },
+  { id: 'mouth', label: 'Mouth & Teeth', badge: 'MESH / TEXTURE' },
 ];
 
 const BROW_SWATCHES: Array<{ name: string; hex: string }> = [
@@ -761,7 +764,7 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
   };
 
   const eyeMeshes = catalogues.eyeMesh ?? [];
-  const showItemGrid = currentSection !== null;
+  const showItemGrid = currentSection !== null && currentSection.id !== 'mouth';
   const showSearchInput = showItemGrid && currentSection.id !== 'skin_texture' && categoryItems.length > 8;
 
   return (
@@ -1286,6 +1289,12 @@ export function WuxiaMakeupPanel({ manifest }: { manifest: Mo2Manifest | null })
                       onChange={setLashesOpacity}
                     />
                   </div>
+                </div>
+              )}
+
+              {currentSection?.id === 'mouth' && (
+                <div className="rounded-sm border border-white/8 bg-[#181920]/85 p-2.5">
+                  <MouthPicker />
                 </div>
               )}
             </div>

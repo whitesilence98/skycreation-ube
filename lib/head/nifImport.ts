@@ -1,8 +1,10 @@
 import type { Mo2MeshOption, Mo2Manifest } from '@/lib/head/faceTexture';
-import { registerDynamicMesh, addDynamicHeadOption, getDynamicSculptHeads, resolveOrBuildSculptHead } from '@/lib/head/dynamicSculpt';
+import { registerDynamicMesh, addDynamicHeadOption, resolveOrBuildSculptHead } from '@/lib/head/dynamicSculpt';
 import type { MeshData } from '@/components/scene/useMeshGeometry';
 import { parsePreset, payloadFromMorphs, type PresetPayload } from '@/lib/presetIO';
 import { sculptHeadFor } from '@/lib/manifestSelect';
+import { fetchCatalogue } from '@/lib/mo2/client';
+import { ensureActiveUbeCategories, loadUbeMorphIndex } from '@/lib/morphs/ubeMorphLoader';
 
 export interface DecodedNifResponse {
   ok: boolean;
@@ -103,6 +105,114 @@ export interface ImportPresetResult {
   kind: 'ok' | 'warn';
 }
 
+async function resolveLashesFromHeadParts(
+  headParts: PresetPayload['headParts'],
+  manifest: Mo2Manifest | null,
+): Promise<{ lashesId: string; note: string } | null> {
+  const lashPart = headParts?.find((p) => /lash/i.test(p.formIdentifier));
+  if (!lashPart) return null;
+
+  const fromManifest = manifest?.assets?.lashes;
+  const rawList = fromManifest?.length
+    ? fromManifest
+    : await fetchCatalogue('lashes').catch(() => []);
+  const albedos = rawList.filter((e) => (e as { mapRole?: string }).mapRole !== 'normal');
+  if (!albedos.length) return null;
+
+  const tokens = lashPart.formIdentifier
+    .toLowerCase()
+    .split(/[|\s._-]+/)
+    .filter((t) => t.length >= 3 && !['ube', 'esp', 'esm', 'esl', 'addon', 'lash', 'lashes', '2'].includes(t));
+
+  const direct = tokens.length
+    ? albedos.find((e) => {
+        const hay = `${e.label ?? ''} ${e.file ?? ''} ${e.rel ?? ''}`.toLowerCase();
+        return tokens.some((t) => hay.includes(t));
+      })
+    : undefined;
+
+  if (direct) {
+    const name = (direct.label ?? direct.file ?? direct.id).toUpperCase();
+    return { lashesId: direct.id, note: `LASHES ${name}` };
+  }
+
+  // Fallback for external lash mods (e.g. Lashivious Lashes) not synced in pack
+  const preferred =
+    albedos.find((e) => /deliah/i.test(e.label ?? e.file ?? '')) ??
+    albedos.find((e) => /eyefemalelashes/i.test(e.file ?? '')) ??
+    albedos[0];
+
+  const prefName = (preferred.label ?? preferred.file ?? preferred.id).toUpperCase();
+  return { lashesId: preferred.id, note: `LASHES ${prefName} (PACK MATCH)` };
+}
+
+async function resolveUbeMorphsFromCustom(
+  rawMorphs: PresetPayload['rawCustomMorphs'],
+): Promise<{ ubeMorphs: Record<string, number>; handledNames: Set<string> } | undefined> {
+  if (!rawMorphs?.length) return undefined;
+  const index = await loadUbeMorphIndex();
+  if (!index) return undefined;
+
+  const canonicalByLower = new Map<string, string>();
+  for (const name of Object.keys(index.morphToCategory)) {
+    canonicalByLower.set(name.toLowerCase(), name);
+    const bare = name.replace(/^(?:EYES|FACE|LIP|EAR|NOSE|BROW|PERS|NEW)_/i, '');
+    canonicalByLower.set(bare.toLowerCase(), name);
+  }
+
+  const out: Record<string, number> = {};
+  const handledNames = new Set<string>();
+  const iniSliders = new Map<string, [string, string]>();
+  for (const [k, v] of Object.entries(index.iniSliders ?? {})) {
+    iniSliders.set(k.toLowerCase(), v);
+  }
+
+  for (const { name, value } of rawMorphs) {
+    if (!value || !Number.isFinite(value) || Math.abs(value) <= 0.001) continue;
+
+    // 1. Prefer authored RaceMenu CharGen INI mapping (exact NegMorph / PosMorph polarity)
+    const iniPair = iniSliders.get(name.toLowerCase());
+    if (iniPair) {
+      handledNames.add(name);
+      const target = value >= 0 ? iniPair[1] : iniPair[0];
+      if (target && index.morphToCategory[target]) {
+        out[target] = Math.min(2, Math.abs(value));
+      }
+      continue;
+    }
+
+    const stripped = name.replace(/^[A-Z0-9]{2,4}_/, '');
+    const lower = stripped.toLowerCase();
+
+    const exact = canonicalByLower.get(lower);
+    if (exact) {
+      out[exact] = Math.max(-2, Math.min(2, value));
+      handledNames.add(name);
+      continue;
+    }
+
+    // 2. Fallback heuristic only for sliders absent from UBE INI
+    const pairs: Array<[string, string]> = value >= 0
+      ? [['out', 'in'], ['up', 'down'], ['upper', 'lower'], ['big', 'small'], ['forward', 'back'], ['wide', 'narrow'], ['longer', 'shorter']]
+      : [['in', 'out'], ['down', 'up'], ['lower', 'upper'], ['small', 'big'], ['back', 'forward'], ['narrow', 'wide'], ['shorter', 'longer']];
+
+    for (const [posSuffix] of pairs) {
+      const hit =
+        canonicalByLower.get(`${lower}${posSuffix}`) ??
+        canonicalByLower.get(`${lower}_${posSuffix}`);
+      if (hit) {
+        out[hit] = Math.min(2, Math.abs(value));
+        handledNames.add(name);
+        break;
+      }
+    }
+  }
+
+  if (Object.keys(out).length === 0) return undefined;
+  await ensureActiveUbeCategories(out);
+  return { ubeMorphs: out, handledNames };
+}
+
 /**
  * High-level import handler for presets and NIF files.
  * Supports:
@@ -132,11 +242,26 @@ export async function importPresetFromFiles(
     const text = await presetFile.text();
     const rawPayload = parsePreset(text, presetFile.name);
 
+    const [lashMatch, ubeResolved] = await Promise.all([
+      !rawPayload.assets?.lashes && rawPayload.headParts?.length
+        ? resolveLashesFromHeadParts(rawPayload.headParts, manifest)
+        : Promise.resolve(null),
+      rawPayload.rawCustomMorphs?.length
+        ? resolveUbeMorphsFromCustom(rawPayload.rawCustomMorphs)
+        : Promise.resolve(undefined),
+    ]);
+
     // The NIF geometry is already baked by RaceMenu, so zero out slider morphs if racemenu
-    const payload: PresetPayload =
+    const basePayload: PresetPayload =
       rawPayload.source === 'racemenu'
         ? { ...rawPayload, regions: payloadFromMorphs([], { baked: true }).regions }
         : rawPayload;
+    const withUbe: PresetPayload = ubeResolved?.ubeMorphs && rawPayload.source !== 'racemenu'
+      ? { ...basePayload, ubeMorphs: ubeResolved.ubeMorphs }
+      : basePayload;
+    const payload: PresetPayload = lashMatch
+      ? { ...withUbe, assets: { ...withUbe.assets, lashes: lashMatch.lashesId } }
+      : withUbe;
 
     const charName = rawPayload.name || nifFile.name.replace(/\.nif$/i, '').trim();
     const summary = `IMPORTED ${presetFile.name} + ${nifFile.name}`;
@@ -173,21 +298,52 @@ export async function importPresetFromFiles(
     const dynamicHead = await resolveOrBuildSculptHead(manifest, text, presetFile.name);
     const head = dynamicHead ?? sculptHeadFor(manifest, rawPayload.sourceFile);
 
+    const [lashMatch, ubeResolved] = await Promise.all([
+      !rawPayload.assets?.lashes && rawPayload.headParts?.length
+        ? resolveLashesFromHeadParts(rawPayload.headParts, manifest)
+        : Promise.resolve(null),
+      rawPayload.rawCustomMorphs?.length
+        ? resolveUbeMorphsFromCustom(rawPayload.rawCustomMorphs)
+        : Promise.resolve(undefined),
+    ]);
+
+    const ubeMorphs = ubeResolved?.ubeMorphs;
     const isBaked = rawPayload.source === 'racemenu' && head?.origin === 'racemenu-export';
-    const payload: PresetPayload = isBaked
-      ? { ...rawPayload, regions: payloadFromMorphs([], { baked: true }).regions }
-      : rawPayload;
+    let basePayload: PresetPayload;
+    if (isBaked) {
+      basePayload = { ...rawPayload, regions: payloadFromMorphs([], { baked: true }).regions };
+    } else if (rawPayload.source === 'racemenu' && ubeResolved && rawPayload.rawCustomMorphs?.length) {
+      // Exclude UBE TRI vertex morphs from bone sliders so they are never double-applied on skeleton scale
+      const nonUbeCustom = rawPayload.rawCustomMorphs.filter((m) => !ubeResolved.handledNames.has(m.name));
+      basePayload = {
+        ...rawPayload,
+        regions: payloadFromMorphs(nonUbeCustom, { baked: true }).regions,
+      };
+    } else {
+      basePayload = rawPayload;
+    }
+    const withUbe: PresetPayload = ubeMorphs && !isBaked
+      ? { ...basePayload, ubeMorphs }
+      : basePayload;
+    const payload: PresetPayload = lashMatch
+      ? { ...withUbe, assets: { ...withUbe.assets, lashes: lashMatch.lashesId } }
+      : withUbe;
 
     let summary = `IMPORTED ${presetFile.name}`;
     let kind: 'ok' | 'warn' = 'ok';
 
     if (rawPayload.source === 'racemenu') {
       const notes: string[] = [];
-      if (rawPayload.unmapped) notes.push(`${rawPayload.unmapped} MORPHS UNMAPPED`);
+      const ubeCount = ubeMorphs ? Object.keys(ubeMorphs).length : 0;
+      const exprCount = rawPayload.facialExpressions ? Object.keys(rawPayload.facialExpressions).length : 0;
+      if (ubeCount) notes.push(`${ubeCount} UBE MORPHS`);
+      if (exprCount) notes.push(`${exprCount} EXPR`);
+      if (rawPayload.unmapped && !ubeCount) notes.push(`${rawPayload.unmapped} MORPHS UNMAPPED`);
       if (head) notes.push(`HEAD ${head.label.toUpperCase()}`);
-      else notes.push('NO BAKED HEAD');
+      else if (!ubeCount) notes.push('NO BAKED HEAD');
+      if (lashMatch) notes.push(lashMatch.note);
       summary = `IMPORTED ${presetFile.name} · ${notes.join(' · ')}`;
-      if (rawPayload.unmapped || !head) kind = 'warn';
+      if ((rawPayload.unmapped && !ubeCount) || (!head && !ubeCount)) kind = 'warn';
     }
 
     return {

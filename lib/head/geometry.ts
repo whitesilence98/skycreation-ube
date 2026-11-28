@@ -710,7 +710,7 @@ export function applyNeckDelta(
   bodyContext?: NeckBodyContext | null,
 ): void {
   const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
-  if (!posAttr || posAttr.count !== 11761) return;
+  if (!posAttr || posAttr.count * 3 !== basePositions.length) return;
 
   let current = posAttr.array as Float32Array;
   if (current === basePositions) {
@@ -722,7 +722,7 @@ export function applyNeckDelta(
 
   const normAttr = geometry.getAttribute('normal') as THREE.BufferAttribute | undefined;
   let currentNorm: Float32Array | null = null;
-  if (normAttr && baseNormals) {
+  if (normAttr && baseNormals && normAttr.array.length === baseNormals.length) {
     if (normAttr.array === baseNormals) {
       currentNorm = new Float32Array(baseNormals);
       normAttr.array = currentNorm;
@@ -730,6 +730,15 @@ export function applyNeckDelta(
       currentNorm = normAttr.array as Float32Array;
       currentNorm.set(baseNormals);
     }
+  }
+
+  if (posAttr.count !== 11761) {
+    posAttr.needsUpdate = true;
+    if (normAttr && currentNorm) {
+      normAttr.needsUpdate = true;
+    }
+    geometry.computeBoundingSphere();
+    return;
   }
 
   if (enabled) {

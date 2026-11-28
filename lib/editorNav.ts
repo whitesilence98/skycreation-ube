@@ -23,6 +23,7 @@ export function navigateCategory(id: EditorCategory): void {
     styling: 'FACE',
   };
   state().setPrimaryTab(tabs[id]);
+  state().setStudioPage('default');
   state().setWorkspace('edit');
   if (id === 'face') state().applyFaceBaseline();
   if (id === 'body') {

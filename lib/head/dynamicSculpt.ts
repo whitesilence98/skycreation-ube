@@ -3,6 +3,7 @@ import type { MeshData } from '@/components/scene/useMeshGeometry';
 import { CANONICAL_HEAD_URL, CANONICAL_HEAD_VERTICES, CANONICAL_HEAD_TOPOLOGY,
   validateSculptPayload, type SculptPayload } from '@/lib/head/sculptPayload';
 import { NECK_SEAM_HEAD_INDICES } from '@/lib/head/neckDeltas';
+import { loadUbeMorphIndex } from '@/lib/morphs/ubeMorphLoader';
 import {
   loadPersistedHeadOptions,
   savePersistedHeadOptions,
@@ -110,7 +111,12 @@ function computeVertexNormals(positions: Float32Array, indices: number[]): Float
 }
 
 /** Displace base mesh positions by RaceMenu .jslot sculpt deltas. */
-function applySculptDeltas(base: MeshData, block: SculptBlock, divisor: number): MeshData {
+function applySculptDeltas(
+  base: MeshData,
+  block: SculptBlock,
+  divisor: number,
+  seamMap11761?: number[],
+): MeshData {
   if (!block.data || !block.data.length || !divisor) {
     return base;
   }
@@ -119,15 +125,48 @@ function applySculptDeltas(base: MeshData, block: SculptBlock, divisor: number):
   const scale = 0.01288 / divisor;
   const numVertices = base.positions.length / 3;
 
+  // Remap 11,498-vertex RaceMenu CharGen sculpt indices onto UV-split 11,761-vertex UBE pack head
+  let reverseSeamMap: number[][] | null = null;
+  if (
+    block.vertices === 11498 &&
+    numVertices === 11761 &&
+    seamMap11761 &&
+    seamMap11761.length === 11761
+  ) {
+    reverseSeamMap = [];
+    for (let dst = 0; dst < seamMap11761.length; dst++) {
+      const src = seamMap11761[dst];
+      let list = reverseSeamMap[src];
+      if (!list) {
+        list = [];
+        reverseSeamMap[src] = list;
+      }
+      list.push(dst);
+    }
+  }
+
   for (let i = 0; i < block.data.length; i++) {
     const pt = block.data[i];
     const vIdx = pt[0];
-    if (vIdx >= 0 && vIdx < numVertices) {
+    const dx = pt[1] * scale;
+    const dy = pt[3] * scale;
+    const dz = pt[2] * scale;
+    if (reverseSeamMap) {
+      const targets = reverseSeamMap[vIdx];
+      if (targets) {
+        for (let k = 0; k < targets.length; k++) {
+          const d = targets[k] * 3;
+          pos[d + 0] += dx;
+          pos[d + 1] += dy;
+          pos[d + 2] += dz;
+        }
+      }
+    } else if (vIdx >= 0 && vIdx < numVertices) {
       // Swizzle: in RaceMenu FaceGen, pt[1]=X, pt[2]=Y, pt[3]=Z
       // In Three.js / Web coordinate frame: X = pt[1], Y = pt[3], Z = pt[2]
-      pos[vIdx * 3 + 0] += pt[1] * scale;
-      pos[vIdx * 3 + 1] += pt[3] * scale;
-      pos[vIdx * 3 + 2] += pt[2] * scale;
+      pos[vIdx * 3 + 0] += dx;
+      pos[vIdx * 3 + 1] += dy;
+      pos[vIdx * 3 + 2] += dz;
     }
   }
 
@@ -315,15 +354,18 @@ export async function resolveOrBuildSculptHead(
     };
   }
 
-  // 4. Load base UBE head geometry
-  const baseHeadData = await fetchBaseMesh(headUrl);
+  // 4. Load base UBE head geometry & seam map
+  const [baseHeadData, ubeIndex] = await Promise.all([
+    fetchBaseMesh(headUrl),
+    loadUbeMorphIndex(),
+  ]);
   if (!baseHeadData) {
     console.error('[dynamicSculpt] Could not fetch base UBE head from', headUrl);
     return undefined;
   }
 
-  // 5. Apply sculpt deltas to head
-  const sculptedHead = applySculptDeltas(baseHeadData, headBlock, divisor);
+  // 5. Apply sculpt deltas to head (mapping 11,498 -> 11,761 indices when needed)
+  const sculptedHead = applySculptDeltas(baseHeadData, headBlock, divisor, ubeIndex?.headSeamMap11761);
 
   // Generate dynamic mesh URLs
   const safeStem = fileName.replace(/\.jslot$/i, '').trim();

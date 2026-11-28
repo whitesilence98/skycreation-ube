@@ -28,7 +28,36 @@ export const EXPRESSION_ALIASES = {
   smile: ['smile', 'Smile'],
   smallSmile: ['smallSmile', 'Small_smile'],
   closedSmile: ['closedSmile', 'ClosedSmile_topless'],
+  wideSmile: ['wideSmile', 'WideSmile_topless'],
+  kiss: ['kiss', 'Kiss'],
+  puckeringLips: ['puckeringLips', 'Puckering_Lips'],
+  bitingLips: ['bitingLips', 'Biting_lips'],
+  openedLips: ['openedLips', 'Opened_lips'],
+  lick: ['lick', 'Lick'],
+  yawning: ['yawning', 'Yawning'],
+  tired: ['tired', 'Tired'],
+  stress: ['stress', 'Stress'],
+  skeptical: ['skeptical', 'Skeptical'],
+  ahegao: ['ahegao', 'Ahegao'],
   moodHappy: ['moodHappy', 'MoodHappy'],
+  moodAnger: ['moodAnger', 'MoodAnger'],
+  moodDisgusted: ['moodDisgusted', 'MoodDisgusted'],
+  moodFear: ['moodFear', 'MoodFear'],
+  moodPuzzled: ['moodPuzzled', 'MoodPuzzled'],
+  moodSad: ['moodSad', 'MoodSad'],
+  moodSurprised: ['moodSurprised', 'MoodSurprised', 'MoodSurprise'],
+  browUpLeft: ['browUpLeft', 'BrowUpLeft'],
+  browUpRight: ['browUpRight', 'BrowUpRight'],
+  browDownLeft: ['browDownLeft', 'BrowDownLeft'],
+  browDownRight: ['browDownRight', 'BrowDownRight'],
+  browInLeft: ['browInLeft', 'BrowInLeft'],
+  browInRight: ['browInRight', 'BrowInRight'],
+  squintLeft: ['squintLeft', 'SquintLeft'],
+  squintRight: ['squintRight', 'SquintRight'],
+  lookUp: ['lookUp', 'LookUp'],
+  lookDown: ['lookDown', 'LookDown', 'LookDawn'],
+  lookLeft: ['lookLeft', 'LookLeft'],
+  lookRight: ['lookRight', 'LookRight'],
   jawOpen: ['jawOpen', 'JawOpen', 'CTRL_expressions_jawOpen', 'BigAah'],
   viseme_aa: ['viseme_aa', 'Aah'],
   viseme_E: ['viseme_E', 'Eh'],
@@ -37,14 +66,92 @@ export const EXPRESSION_ALIASES = {
   viseme_I: ['viseme_I', 'Eee'],
   viseme_PP: ['viseme_PP', 'BMP'],
   viseme_FF: ['viseme_FF', 'FV'],
+  phoneme_ChJSh: ['phoneme_ChJSh', 'ChJSh'],
+  phoneme_DST: ['phoneme_DST', 'DST'],
+  phoneme_I: ['phoneme_I', 'I'],
+  phoneme_K: ['phoneme_K', 'K'],
+  phoneme_N: ['phoneme_N', 'N'],
+  phoneme_R: ['phoneme_R', 'R'],
+  phoneme_Th: ['phoneme_Th', 'Th'],
+  phoneme_W: ['phoneme_W', 'W'],
 } as const;
 
 export type FacialExpressionId = keyof typeof EXPRESSION_ALIASES;
 
+export type ExpressionGroupId = 'mood' | 'modifier' | 'phoneme' | 'extras';
+
+export interface ExpressionControlMeta {
+  id: FacialExpressionId;
+  label: string;
+  group: ExpressionGroupId;
+}
+
+export const EXPRESSION_CONTROLS: readonly ExpressionControlMeta[] = [
+  // Mood
+  { id: 'moodHappy', label: 'Mood: Happy', group: 'mood' },
+  { id: 'moodSurprised', label: 'Mood: Surprised', group: 'mood' },
+  { id: 'moodAnger', label: 'Mood: Anger', group: 'mood' },
+  { id: 'moodSad', label: 'Mood: Sad', group: 'mood' },
+  { id: 'moodFear', label: 'Mood: Fear', group: 'mood' },
+  { id: 'moodPuzzled', label: 'Mood: Puzzled', group: 'mood' },
+  { id: 'moodDisgusted', label: 'Mood: Disgusted', group: 'mood' },
+  // Modifier
+  { id: 'lookUp', label: 'Look Up', group: 'modifier' },
+  { id: 'lookDown', label: 'Look Down', group: 'modifier' },
+  { id: 'lookLeft', label: 'Look Left', group: 'modifier' },
+  { id: 'lookRight', label: 'Look Right', group: 'modifier' },
+  { id: 'browUpLeft', label: 'Brow Up L', group: 'modifier' },
+  { id: 'browUpRight', label: 'Brow Up R', group: 'modifier' },
+  { id: 'browDownLeft', label: 'Brow Down L', group: 'modifier' },
+  { id: 'browDownRight', label: 'Brow Down R', group: 'modifier' },
+  { id: 'browInLeft', label: 'Brow In L', group: 'modifier' },
+  { id: 'browInRight', label: 'Brow In R', group: 'modifier' },
+  { id: 'squintLeft', label: 'Squint L', group: 'modifier' },
+  { id: 'squintRight', label: 'Squint R', group: 'modifier' },
+  // Phoneme
+  { id: 'jawOpen', label: 'BigAah (Jaw Open)', group: 'phoneme' },
+  { id: 'viseme_aa', label: 'Aah', group: 'phoneme' },
+  { id: 'viseme_O', label: 'Oh', group: 'phoneme' },
+  { id: 'viseme_E', label: 'Eh', group: 'phoneme' },
+  { id: 'viseme_U', label: 'OohQ', group: 'phoneme' },
+  { id: 'viseme_I', label: 'Eee', group: 'phoneme' },
+  { id: 'viseme_PP', label: 'BMP', group: 'phoneme' },
+  { id: 'viseme_FF', label: 'FV', group: 'phoneme' },
+  { id: 'phoneme_ChJSh', label: 'ChJSh', group: 'phoneme' },
+  { id: 'phoneme_DST', label: 'DST', group: 'phoneme' },
+  { id: 'phoneme_I', label: 'I', group: 'phoneme' },
+  { id: 'phoneme_K', label: 'K', group: 'phoneme' },
+  { id: 'phoneme_N', label: 'N', group: 'phoneme' },
+  { id: 'phoneme_R', label: 'R', group: 'phoneme' },
+  { id: 'phoneme_Th', label: 'Th', group: 'phoneme' },
+  { id: 'phoneme_W', label: 'W', group: 'phoneme' },
+  // Extras / Expressions
+  { id: 'smallSmile', label: 'Small Smile', group: 'extras' },
+  { id: 'smile', label: 'Smile', group: 'extras' },
+  { id: 'closedSmile', label: 'Closed Smile', group: 'extras' },
+  { id: 'wideSmile', label: 'Wide Smile', group: 'extras' },
+  { id: 'mouthSmileLeft', label: 'Smile Corner L', group: 'extras' },
+  { id: 'mouthSmileRight', label: 'Smile Corner R', group: 'extras' },
+  { id: 'kiss', label: 'Kiss', group: 'extras' },
+  { id: 'puckeringLips', label: 'Puckering Lips', group: 'extras' },
+  { id: 'bitingLips', label: 'Biting Lips', group: 'extras' },
+  { id: 'openedLips', label: 'Opened Lips', group: 'extras' },
+  { id: 'lick', label: 'Lick', group: 'extras' },
+  { id: 'yawning', label: 'Yawning', group: 'extras' },
+  { id: 'tired', label: 'Tired', group: 'extras' },
+  { id: 'stress', label: 'Stress', group: 'extras' },
+  { id: 'skeptical', label: 'Skeptical', group: 'extras' },
+  { id: 'ahegao', label: 'Ahegao', group: 'extras' },
+] as const;
+
 const UBE_EXPR_URL = '/assets/morphs/head/ube-facial-expressions.json';
 const UBE_EXPR_FLAG = '__ubeFacialExpressions';
-const UBE_HEAD_VERT_COUNT = 11761;
+const UBE_HEAD_BASE_VERT_COUNT = 11498;
+const UBE_HEAD_SEAM_VERT_COUNT = 11761;
 const UBE_MOUTH_VERT_COUNT = 9043;
+const UBE_EYES_VERT_COUNT = 1892;
+const UBE_LASHES_VERT_COUNT = 1216;
+const UBE_BROWS_VERT_COUNT = 501;
 
 const SMILE_TARGET_NAMES = new Set<string>([
   'mouthSmileLeft',
@@ -64,17 +171,20 @@ const NATIVE_CHECK_NAMES = [
 
 const MANAGED_EXPRESSION_NAMES: ReadonlySet<string> = new Set(Object.keys(EXPRESSION_ALIASES));
 
+export interface UbeExpressionPartData {
+  vertexCount: number;
+  morphs: Record<string, SparseMorphDelta>;
+}
+
 export interface UbeExpressionBundle {
   version: number;
   names: string[];
-  head: {
-    vertexCount: number;
-    morphs: Record<string, SparseMorphDelta>;
-  };
-  mouth: {
-    vertexCount: number;
-    morphs: Record<string, SparseMorphDelta>;
-  };
+  headSeamMap11761?: number[];
+  head: UbeExpressionPartData;
+  mouth: UbeExpressionPartData;
+  eyes?: UbeExpressionPartData;
+  lashes?: UbeExpressionPartData;
+  brows?: UbeExpressionPartData;
 }
 
 let bundlePromise: Promise<UbeExpressionBundle | null> | null = null;
@@ -349,6 +459,29 @@ const CUSTOM_SMILE_CONFIGS: Readonly<Record<string, SmileConfig>> = {
   },
 };
 
+function expandRemappedHeadMorph(
+  targetVertCount: number,
+  sparse: SparseMorphDelta,
+  seamMap: number[] | undefined,
+): Float32Array {
+  if (targetVertCount === UBE_HEAD_BASE_VERT_COUNT) {
+    return expandSparseMorph(targetVertCount, sparse, 1.0);
+  }
+  const base = expandSparseMorph(UBE_HEAD_BASE_VERT_COUNT, sparse, 1.0);
+  if (!seamMap || seamMap.length !== targetVertCount) {
+    return new Float32Array(targetVertCount * 3);
+  }
+  const out = new Float32Array(targetVertCount * 3);
+  for (let v = 0; v < targetVertCount; v++) {
+    const src = seamMap[v] * 3;
+    const dst = v * 3;
+    out[dst] = base[src];
+    out[dst + 1] = base[src + 1];
+    out[dst + 2] = base[src + 2];
+  }
+  return out;
+}
+
 function attachHeadExpressions(
   headGeo: THREE.BufferGeometry | null,
   ubeData: UbeExpressionBundle | null,
@@ -363,13 +496,14 @@ function attachHeadExpressions(
     return false;
   }
 
-  // Wait for UBE speech viseme deltas on UBE head count before locking initial GPU morph count.
-  if (!ubeData && !bundleAttempted && pos.count === UBE_HEAD_VERT_COUNT) {
+  const isUbeHeadCount = pos.count === UBE_HEAD_BASE_VERT_COUNT || pos.count === UBE_HEAD_SEAM_VERT_COUNT;
+  if (!ubeData && !bundleAttempted && isUbeHeadCount) {
     return false;
   }
 
   const landmarks = measureMouthLandmarks(pos);
   const entries: MorphTargetEntry[] = [];
+  const bundleBaseVc = ubeData?.head?.vertexCount ?? UBE_HEAD_BASE_VERT_COUNT;
 
   for (const name of Object.keys(EXPRESSION_ALIASES)) {
     const smileCfg = CUSTOM_SMILE_CONFIGS[name];
@@ -381,12 +515,12 @@ function attachHeadExpressions(
       continue;
     }
 
-    if (ubeData && pos.count === (ubeData.head.vertexCount ?? UBE_HEAD_VERT_COUNT)) {
+    if (ubeData && (pos.count === bundleBaseVc || (bundleBaseVc === UBE_HEAD_BASE_VERT_COUNT && pos.count === UBE_HEAD_SEAM_VERT_COUNT))) {
       const sparse = ubeData.head.morphs[name];
       if (sparse) {
         entries.push({
           name,
-          deltas: expandSparseMorph(pos.count, sparse, 1.0),
+          deltas: expandRemappedHeadMorph(pos.count, sparse, ubeData.headSeamMap11761),
         });
       }
     }
@@ -395,29 +529,30 @@ function attachHeadExpressions(
   return mergeNamedMorphTargets(headGeo, entries, MANAGED_EXPRESSION_NAMES, UBE_EXPR_FLAG);
 }
 
-function attachMouthExpressions(
-  mouthGeo: THREE.BufferGeometry | null,
-  ubeData: UbeExpressionBundle | null,
+function attachPartExpressions(
+  geo: THREE.BufferGeometry | null | undefined,
+  partData: UbeExpressionPartData | undefined,
+  expectedFallbackVertCount: number,
   force: boolean,
+  zeroSmileTargets: boolean,
 ): boolean {
-  if (!mouthGeo || !ubeData) return false;
-  const pos = mouthGeo.getAttribute('position') as THREE.BufferAttribute | undefined;
-  const expectedVerts = ubeData.mouth.vertexCount ?? UBE_MOUTH_VERT_COUNT;
+  if (!geo || !partData) return false;
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
+  const expectedVerts = partData.vertexCount ?? expectedFallbackVertCount;
   if (!pos || pos.count !== expectedVerts) return false;
 
-  const hasNative = hasNamedMorphTarget(mouthGeo, NATIVE_CHECK_NAMES);
-  if (hasNative && (!force || !mouthGeo.userData[UBE_EXPR_FLAG])) {
+  const hasNative = hasNamedMorphTarget(geo, NATIVE_CHECK_NAMES);
+  if (hasNative && (!force || !geo.userData[UBE_EXPR_FLAG])) {
     return false;
   }
 
   const entries: MorphTargetEntry[] = [];
   for (const name of Object.keys(EXPRESSION_ALIASES)) {
-    if (SMILE_TARGET_NAMES.has(name)) {
-      // Custom anatomical smiles keep lips softly closed; keep internal teeth/tongue still.
+    if (zeroSmileTargets && SMILE_TARGET_NAMES.has(name)) {
       entries.push({ name, deltas: new Float32Array(pos.count * 3) });
       continue;
     }
-    const sparse = ubeData.mouth.morphs[name];
+    const sparse = partData.morphs[name];
     if (!sparse) continue;
     entries.push({
       name,
@@ -425,25 +560,30 @@ function attachMouthExpressions(
     });
   }
 
-  return mergeNamedMorphTargets(mouthGeo, entries, MANAGED_EXPRESSION_NAMES, UBE_EXPR_FLAG);
+  return mergeNamedMorphTargets(geo, entries, MANAGED_EXPRESSION_NAMES, UBE_EXPR_FLAG);
 }
 
 /**
- * Ensures `headGeo` and `mouthGeo` carry calibrated anatomical smile morphs +
- * UBE speech visemes + smooth morph normals. Leaves pre-authored MetaHuman / glTF
- * expression targets untouched.
+ * Ensures Head, Mouth, Eyes, Lashes, and Brows carry all RaceMenu Mood,
+ * Modifier, Phoneme, and Expression GPU morph targets while preserving native glTF keys.
  */
 export function attachExpressionMorphTargets(
   headGeo: THREE.BufferGeometry | null,
   mouthGeo: THREE.BufferGeometry | null,
   options?: AttachExpressionOptions,
+  eyeGeo?: THREE.BufferGeometry | null,
+  lashesGeo?: THREE.BufferGeometry | null,
+  browsGeo?: THREE.BufferGeometry | null,
 ): boolean {
   const ubeData = options?.ubeData ?? bundleCache;
   const force = Boolean(options?.force);
 
   let updated = false;
   updated = attachHeadExpressions(headGeo, ubeData, force) || updated;
-  updated = attachMouthExpressions(mouthGeo, ubeData, force) || updated;
+  updated = attachPartExpressions(mouthGeo, ubeData?.mouth, UBE_MOUTH_VERT_COUNT, force, true) || updated;
+  updated = attachPartExpressions(eyeGeo, ubeData?.eyes, UBE_EYES_VERT_COUNT, force, false) || updated;
+  updated = attachPartExpressions(lashesGeo, ubeData?.lashes, UBE_LASHES_VERT_COUNT, force, false) || updated;
+  updated = attachPartExpressions(browsGeo, ubeData?.brows, UBE_BROWS_VERT_COUNT, force, false) || updated;
   return updated;
 }
 

@@ -57,8 +57,31 @@ const SLUG_TO_CATEGORY: Record<string, EditorCategory> = {
 
 const BUILDER_MODES: ReadonlySet<BuilderMode> = new Set(['build', 'decorate', 'tour']);
 
+const SLUG_TO_STUDIO_PAGE: Record<string, StudioPage> = {
+  expressions: 'expressions',
+  'ube-morphs': 'ube_morphs',
+  ube_morphs: 'ube_morphs',
+  sculpt: 'sculpt',
+  '3d-sculpt': 'sculpt',
+  'head-base': 'head_base',
+  head_base: 'head_base',
+  'body-paint': 'body_paint',
+  body_paint: 'body_paint',
+  smart: 'smart',
+};
+
+const STUDIO_PAGE_TO_SLUG: Record<StudioPage, string | null> = {
+  default: null,
+  expressions: 'expressions',
+  ube_morphs: 'ube-morphs',
+  sculpt: 'sculpt',
+  head_base: 'head-base',
+  body_paint: 'body-paint',
+  smart: 'smart',
+};
+
 /**
- * Parse a URL hash string (e.g. `#hair`, `#makeup/smart`, `#room/tour`) into a structured route.
+ * Parse a URL hash string (e.g. `#hair`, `#makeup/smart`, `#features/expressions`, `#room/tour`) into a structured route.
  * Returns `null` for empty or unrecognized hashes.
  */
 export function parseAppHash(rawHash: string): AppRoute | null {
@@ -80,8 +103,11 @@ export function parseAppHash(rawHash: string): AppRoute | null {
   const category = SLUG_TO_CATEGORY[seg1];
   if (!category) return null;
 
-  const supportsSmart = category === 'hair' || category === 'styling';
-  const studioPage: StudioPage = supportsSmart && seg2 === 'smart' ? 'smart' : 'default';
+  const mappedPage = seg2 ? SLUG_TO_STUDIO_PAGE[seg2] : undefined;
+  const studioPage: StudioPage =
+    mappedPage === 'smart' && category !== 'hair' && category !== 'styling'
+      ? 'default'
+      : (mappedPage ?? 'default');
 
   return {
     appMode: 'studio',
@@ -101,8 +127,9 @@ export function formatAppHash(snapshot: AppRouteSnapshot): string {
 
   const category = editorCategory(snapshot.primaryTab);
   const slug = CATEGORY_TO_SLUG[category];
-  if ((category === 'hair' || category === 'styling') && snapshot.studioPage === 'smart') {
-    return `#${slug}/smart`;
+  if (snapshot.studioPage === 'smart' && category !== 'hair' && category !== 'styling') {
+    return `#${slug}`;
   }
-  return `#${slug}`;
+  const sub = STUDIO_PAGE_TO_SLUG[snapshot.studioPage];
+  return sub ? `#${slug}/${sub}` : `#${slug}`;
 }

@@ -13,8 +13,9 @@ export function FrameRateCap({ maxFps = 60 }: { maxFps?: number }) {
 
   useEffect(() => {
     const intervalMs = 1000 / maxFps;
+    const startMs = performance.now();
     let rafId = 0;
-    let lastTime = performance.now();
+    let lastTime = startMs;
     let mounted = true;
 
     const loop = (now: number) => {
@@ -24,7 +25,8 @@ export function FrameRateCap({ maxFps = 60 }: { maxFps?: number }) {
       // Allow a 0.5 ms jitter tolerance so 60 Hz VSync never skips alternating frames
       if (elapsed >= intervalMs - 0.5) {
         lastTime = now - (elapsed % intervalMs);
-        advance(now);
+        // R3F advance(timestamp) expects seconds in frameloop="never" mode
+        advance((now - startMs) / 1000);
       }
     };
 

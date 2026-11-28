@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { cn } from '@/lib/cn';
 import { IconDoubleChevron } from '@/components/hud/outfit/WuxiaSlotIcons';
 
@@ -79,6 +79,14 @@ export function WuxiaTopNavBar({
 }: WuxiaTopNavBarProps) {
   const [internalTab, setInternalTab] = useState(defaultTab);
   const currentTab = controlledTab !== undefined ? controlledTab : internalTab;
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  useEffect(() => {
+    const el = tabRefs.current[currentTab];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+  }, [currentTab]);
 
   const selectTab = useCallback(
     (tabId: string) => {
@@ -138,21 +146,23 @@ export function WuxiaTopNavBar({
       )}
       aria-label="Top Navigation Bar"
     >
-      {/* Left Slot: Custom Content or clean spacer */}
-      <div className="flex shrink-0 items-center gap-2">
-        {leftSlot ?? null}
-      </div>
+      {/* Left Slot: Only occupy layout width when populated */}
+      {leftSlot ? (
+        <div className="flex shrink-0 items-center gap-2">
+          {leftSlot}
+        </div>
+      ) : null}
 
       {/* Center: Navigation Carousel (flows cleanly without overlapping rightSlot) */}
       <nav
-        className="flex min-w-0 flex-1 items-center justify-center gap-1.5 sm:gap-3 text-sm font-sans"
+        className="flex min-w-0 flex-1 items-center justify-start xl:justify-center gap-1 sm:gap-2 text-sm font-sans"
         aria-label="Category Carousel"
       >
         {/* Previous Category Keycap Hint (e.g. [Q]) */}
         {showKeycaps && (
           <span
             className={cn(
-              'flex h-[18px] items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 px-1 font-mono text-[10px] font-medium text-[#eae5dc]',
+              'flex h-[18px] shrink-0 items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 px-1 font-mono text-[10px] font-medium text-[#eae5dc]',
               tabs.length <= 1 && 'opacity-40'
             )}
             aria-hidden
@@ -169,7 +179,7 @@ export function WuxiaTopNavBar({
             onClick={() => cycleTab('prev')}
             aria-label="Previous category"
             className={cn(
-              'flex h-6 w-6 items-center justify-center text-[#93828c] transition-colors hover:text-[#e4cca8] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]',
+              'flex h-6 w-6 shrink-0 items-center justify-center text-[#93828c] transition-colors hover:text-[#e4cca8] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]',
               tabs.length <= 1 && 'opacity-30 cursor-default hover:text-[#93828c]'
             )}
           >
@@ -178,18 +188,21 @@ export function WuxiaTopNavBar({
         )}
 
         {/* Tab Items */}
-        <div className="flex items-center gap-3 sm:gap-5 overflow-x-auto max-w-[calc(100vw-280px)] sm:max-w-none scrollbar-none">
+        <div className="flex min-w-0 items-center gap-3 xl:gap-4 overflow-x-auto scrollbar-none px-1 py-1">
           {tabs.map(tab => {
             const isActive = currentTab === tab.id;
             return (
               <button
                 key={tab.id}
+                ref={(el) => {
+                  tabRefs.current[tab.id] = el;
+                }}
                 type="button"
                 disabled={tab.disabled}
                 onClick={() => selectTab(tab.id)}
                 aria-pressed={isActive}
                 className={cn(
-                  'group relative text-[14.5px] tracking-wide transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]',
+                  'group relative shrink-0 whitespace-nowrap text-[13px] xl:text-[14px] tracking-wide transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]',
                   isActive
                     ? 'font-medium text-[#e4cca8]'
                     : 'text-[#93828c] hover:text-[#d4c8cf]',
@@ -226,7 +239,7 @@ export function WuxiaTopNavBar({
             onClick={() => cycleTab('next')}
             aria-label="Next category"
             className={cn(
-              'flex h-6 w-6 items-center justify-center text-[#93828c] transition-colors hover:text-[#e4cca8] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]',
+              'flex h-6 w-6 shrink-0 items-center justify-center text-[#93828c] transition-colors hover:text-[#e4cca8] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#eac87f]',
               tabs.length <= 1 && 'opacity-30 cursor-default hover:text-[#93828c]'
             )}
           >
@@ -238,7 +251,7 @@ export function WuxiaTopNavBar({
         {showKeycaps && (
           <span
             className={cn(
-              'flex h-[18px] items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 px-1 font-mono text-[10px] font-medium text-[#eae5dc]',
+              'flex h-[18px] shrink-0 items-center justify-center rounded-[2px] border border-white/20 bg-[#5f5a5e]/70 px-1 font-mono text-[10px] font-medium text-[#eae5dc]',
               tabs.length <= 1 && 'opacity-40'
             )}
             aria-hidden
@@ -249,7 +262,7 @@ export function WuxiaTopNavBar({
       </nav>
 
       {/* Right Slot: Custom Content + Collapse Toggle */}
-      <div className="flex items-center gap-2 pointer-events-auto">
+      <div className="flex shrink-0 items-center gap-1.5 pointer-events-auto">
         {rightSlot}
         {onToggleCollapse && (
           <button

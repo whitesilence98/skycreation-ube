@@ -20,6 +20,7 @@ import { AssetPanel } from '@/components/hud/AssetPanel';
 import { WardrobeDrawer } from '@/components/hud/WardrobeDrawer';
 import { ImportCustomizationDrawer } from '@/components/hud/common/ImportCustomizationDrawer';
 import { SmartCustomization } from '@/components/hud/smart/SmartCustomization';
+import { FaceMenuScreen } from '@/components/hud/facemenu/FaceMenuScreen';
 import { GizmoTooltip } from '@/components/hud/GizmoTooltip';
 import { editorCategory, CATEGORY_LABELS, type EditorCategory, type FaceSectionId } from '@/lib/faceControls';
 import { useCharacter } from '@/lib/store';
@@ -39,6 +40,12 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
      one canvas would fight for the same space. */
   const studioPage = useCharacter(s => s.studioPage);
   const smart = (category === 'hair' || category === 'styling') && studioPage === 'smart';
+  const isFaceMenuSubPage =
+    studioPage === 'expressions' ||
+    studioPage === 'ube_morphs' ||
+    studioPage === 'sculpt' ||
+    studioPage === 'head_base' ||
+    studioPage === 'body_paint';
   const [section, setSection] = useState<FaceSectionId>(() => useCharacter.getState().activeRegion);
   const [editorOpen, setEditorOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -140,10 +147,18 @@ export function Hud({ manifest }: { manifest: Mo2Manifest | null }) {
       ) : (
         <aside id="creator-editor" className={`creator-editor ${category === 'face' ? 'creator-editor-face' : category === 'outfit' ? 'creator-editor-outfit' : ''}`}
           aria-label={`${CATEGORY_LABELS[category]} editor`} hidden={editorHidden} inert={compare}>
-          <LeftPanel manifest={manifest} category={category} />
+          {isFaceMenuSubPage ? (
+            <FaceMenuScreen
+              page={studioPage}
+              category={category}
+              manifest={manifest}
+            />
+          ) : (
+            <LeftPanel manifest={manifest} category={category} />
+          )}
         </aside>
       )}
-      {!smart && category === 'outfit' && workspace === 'wardrobe' && (
+      {!smart && !isFaceMenuSubPage && category === 'outfit' && workspace === 'wardrobe' && (
         <aside
           className="pointer-events-auto absolute left-[308px] top-16 z-30 w-[340px] max-w-[calc(100vw-340px)] max-h-[calc(100vh-140px)] overflow-y-auto scrollbar-none"
           aria-label="Outfit item picker"

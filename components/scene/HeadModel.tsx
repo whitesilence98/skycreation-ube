@@ -28,6 +28,7 @@ import { bodyScaleFactors } from '@/lib/anatomy/bodyScale';
 import { useCharacter } from '@/lib/store';
 import { MeshOverlay } from '@/components/scene/MeshOverlay';
 import { FaceGizmo } from '@/components/scene/FaceGizmo';
+import { SculptBrushController } from '@/components/scene/SculptBrushController';
 import { AuthoredPart } from '@/components/scene/AuthoredPart';
 import { SkinnedPart } from '@/components/scene/SkinnedPart';
 import { EquippedGarment } from '@/components/scene/EquippedGarment';
@@ -55,6 +56,14 @@ import {
   computeMorphedPositions,
   type FaceTriBundle,
 } from '@/lib/morphs/faceMorphLoader';
+import {
+  accumulateUbeMorphDeltas,
+  ensureActiveUbeCategories,
+  loadUbeMorphIndex,
+  type UbeTriPartKey,
+} from '@/lib/morphs/ubeMorphLoader';
+import { getSculptBrushDeltas, hasSculptBrushDeltas } from '@/lib/head/sculptBrush';
+import { buildBodyPaintBlobUrl, hasActiveBodyPaint } from '@/lib/head/bodyPaint';
 import {
   attachBlinkMorphTargets,
   getCachedUbeEyeBlinkData,
@@ -249,7 +258,26 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
      to head, brows, eyes, lashes, and mouth geometries without colliding
      with applyNeckDelta / pose follow. */
   const faceSliders = useFaceMorphStore((s) => s.faceSliders);
+  const ubeMorphs = useCharacter((s) => s.ubeMorphs);
+  const sculptBrushVersion = useCharacter((s) => s.sculptBrushVersion);
+  const [ubeLoadTick, setUbeLoadTick] = useState(0);
   const [faceTriBundle, setFaceTriBundle] = useState<FaceTriBundle | null>(null);
+
+  useEffect(() => {
+    void loadUbeMorphIndex().then((idx) => {
+      if (idx) setUbeLoadTick((t) => t + 1);
+    });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void ensureActiveUbeCategories(ubeMorphs).then((changed) => {
+      if (!cancelled && changed) setUbeLoadTick((t) => t + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ubeMorphs]);
   const morphedHeadBaseRef = useRef<Float32Array | null>(null);
   const browsBasePositionsRef = useRef<Float32Array | null>(null);
   const eyeBasePositionsRef = useRef<Float32Array | null>(null);
@@ -314,61 +342,83 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
 
   // Compute morphed head base buffer and deform companion facial geometries
   useEffect(() => {
-    if (!faceTriBundle) return;
-
     const hasActiveMorphs = Object.values(faceSliders).some(
       (v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) > 0.001,
     );
+    const hasActiveUbe = Object.values(ubeMorphs).some(
+      (v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) > 0.001,
+    );
+    const baseVertCount = headBuild.basePositions ? Math.floor(headBuild.basePositions.length / 3) : 0;
+    const ubeTopologySupported = !importedHead || baseVertCount === 11498 || baseVertCount === 11761;
+    const brushActive = ubeTopologySupported && hasSculptBrushDeltas();
 
-    if (headBuild.basePositions && faceTriBundle.head && !importedHead && hasActiveMorphs) {
-      morphedHeadBaseRef.current = computeMorphedPositions(
-        headBuild.basePositions,
-        faceSliders,
-        faceTriBundle.head,
-        morphedHeadBaseRef.current ?? undefined,
-      );
+    if (headBuild.basePositions && ((faceTriBundle?.head && !importedHead && hasActiveMorphs) || (ubeTopologySupported && hasActiveUbe) || brushActive)) {
+      const coordCount = headBuild.basePositions.length;
+      const vertCount = Math.floor(coordCount / 3);
+      let target =
+        morphedHeadBaseRef.current && morphedHeadBaseRef.current.length >= coordCount
+          ? morphedHeadBaseRef.current
+          : new Float32Array(coordCount);
+
+      if (faceTriBundle?.head && !importedHead && hasActiveMorphs) {
+        target =
+          computeMorphedPositions(headBuild.basePositions, faceSliders, faceTriBundle.head, target) ??
+          target;
+      } else {
+        target.set(headBuild.basePositions);
+      }
+
+      if (hasActiveUbe && ubeTopologySupported) {
+        accumulateUbeMorphDeltas(target, vertCount, 'head', ubeMorphs);
+      }
+
+      if (brushActive) {
+        const brush = getSculptBrushDeltas(vertCount);
+        if (brush) {
+          for (let i = 0; i < coordCount; i++) {
+            target[i] += brush[i];
+          }
+        }
+      }
+
+      morphedHeadBaseRef.current = target;
     } else {
       morphedHeadBaseRef.current = null;
     }
 
-    if (browsGeo && browsBasePositionsRef.current && faceTriBundle.brows) {
-      applyPartFaceMorphs(
-        browsGeo,
-        browsBasePositionsRef.current,
-        faceSliders,
-        faceTriBundle.brows,
-      );
-    }
+    const applyCompanion = (
+      geo: THREE.BufferGeometry | null,
+      base: Float32Array | null,
+      tri: FaceTriBundle['brows'],
+      partKey: UbeTriPartKey,
+    ) => {
+      if (!geo || !base) return;
+      const posAttr = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
+      if (!posAttr) return;
+      if (tri && hasActiveMorphs) {
+        applyPartFaceMorphs(geo, base, faceSliders, tri);
+      } else if (!hasActiveUbe) {
+        (posAttr.array as Float32Array).set(base);
+        posAttr.needsUpdate = true;
+        geo.computeVertexNormals();
+        return;
+      } else {
+        (posAttr.array as Float32Array).set(base);
+      }
+      if (hasActiveUbe) {
+        accumulateUbeMorphDeltas(posAttr.array as Float32Array, posAttr.count, partKey, ubeMorphs);
+        posAttr.needsUpdate = true;
+        geo.computeVertexNormals();
+      }
+    };
 
-    if (eyeGeo && eyeBasePositionsRef.current && faceTriBundle.eyes) {
-      applyPartFaceMorphs(
-        eyeGeo,
-        eyeBasePositionsRef.current,
-        faceSliders,
-        faceTriBundle.eyes,
-      );
-    }
-
-    if (lashesGeo && lashesBasePositionsRef.current && faceTriBundle.lashes) {
-      applyPartFaceMorphs(
-        lashesGeo,
-        lashesBasePositionsRef.current,
-        faceSliders,
-        faceTriBundle.lashes,
-      );
-    }
-
-    if (mouthGeo && mouthBasePositionsRef.current && faceTriBundle.mouth) {
-      applyPartFaceMorphs(
-        mouthGeo,
-        mouthBasePositionsRef.current,
-        faceSliders,
-        faceTriBundle.mouth,
-      );
-    }
+    applyCompanion(browsGeo, browsBasePositionsRef.current, faceTriBundle?.brows ?? null, 'brows');
+    applyCompanion(eyeGeo, eyeBasePositionsRef.current, faceTriBundle?.eyes ?? null, 'eyes');
+    applyCompanion(lashesGeo, lashesBasePositionsRef.current, faceTriBundle?.lashes ?? null, 'lashes');
+    applyCompanion(mouthGeo, mouthBasePositionsRef.current, faceTriBundle?.mouth ?? null, 'mouth');
 
     onDirty();
-  }, [faceTriBundle, faceSliders, headBuild, importedHead, browsGeo, eyeGeo, lashesGeo, mouthGeo, onDirty]);
+  }, [faceTriBundle, faceSliders, ubeMorphs, ubeLoadTick, sculptBrushVersion, headBuild, importedHead, browsGeo, eyeGeo, lashesGeo, mouthGeo, onDirty]);
 
   /* ── body weight ──────────────────────────────────────────────────
      A `_0`/`_1` pair is two meshes over one atlas, exactly as in Skyrim. When
@@ -822,10 +872,17 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
       force: true,
       ubeData: ubeBlinkData,
     });
-    const exprAttached = attachExpressionMorphTargets(headBuild.geometry, mouthGeo, {
-      force: true,
-      ubeData: ubeExprData,
-    });
+    const exprAttached = attachExpressionMorphTargets(
+      headBuild.geometry,
+      mouthGeo,
+      {
+        force: true,
+        ubeData: ubeExprData,
+      },
+      eyeGeo,
+      lashesGeo,
+      browsGeo,
+    );
     if (!blinkAttached && !exprAttached) return;
     rig.root.traverse((obj) => {
       if (
@@ -833,7 +890,8 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
         (obj.geometry === headBuild.geometry ||
           obj.geometry === eyeGeo ||
           obj.geometry === lashesGeo ||
-          obj.geometry === mouthGeo)
+          obj.geometry === mouthGeo ||
+          obj.geometry === browsGeo)
       ) {
         obj.updateMorphTargets();
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
@@ -849,8 +907,12 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     lashesGeo,
     eyeGeo,
     mouthGeo,
+    browsGeo,
     faceTriBundle,
     faceSliders,
+    ubeMorphs,
+    ubeLoadTick,
+    sculptBrushVersion,
     ubeBlinkData,
     ubeBlinkSettled,
     ubeExprData,
@@ -967,8 +1029,8 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
 
   const applyFollow = useCallback(
     (relTransform: THREE.Matrix4 | null, followHead: THREE.Matrix4 | null) => {
-      const basePos = (!importedHead && morphedHeadBaseRef.current) || headBuild.basePositions;
-      const hasTriMorph = Boolean(!importedHead && morphedHeadBaseRef.current);
+      const basePos = morphedHeadBaseRef.current || headBuild.basePositions;
+      const hasTriMorph = Boolean(morphedHeadBaseRef.current);
       applyNeckDelta(
         headBuild.geometry,
         basePos,
@@ -994,11 +1056,11 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     [headBuild, weight, bodyMesh, skeletonRegistry, onDirty, importedHead],
   );
 
-  // Re-compose head geometry cleanly whenever .tri morphs update
+  // Re-compose head geometry cleanly whenever .tri morphs or sculpt brush strokes update
   useEffect(() => {
     const { relTransform, followHead } = syncFollow();
     applyFollow(relTransform, followHead);
-  }, [faceTriBundle, faceSliders, syncFollow, applyFollow]);
+  }, [faceTriBundle, faceSliders, ubeMorphs, ubeLoadTick, sculptBrushVersion, syncFollow, applyFollow]);
 
   /* Last head+spine world matrices the follow was computed from. Paused and
      rest frames leave them identical, so the seam/facial-follow work is skipped
@@ -1747,21 +1809,64 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
     manifest?.body?.roughnessTexture ??
     manifest?.textures?.bodyRoughness ??
     '/assets/preset-pack/textures/body/diamond_body_rough.webp';
-  const bodyTexState = useMaterialTexture(bodyMaterial, 'map', bodyTexUrl, {
+  const bodyOverlays = useCharacter((s) => s.bodyOverlays);
+  const [bodyPaintUrls, setBodyPaintUrls] = useState<{ body?: string; hands?: string; feet?: string }>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    const revocations: string[] = [];
+
+    const run = async () => {
+      const slots = ['body', 'hands', 'feet'] as const;
+      const entries = await Promise.all(
+        slots.map(async (slot) => {
+          const layer = bodyOverlays[slot];
+          if (!hasActiveBodyPaint(layer)) return [slot, undefined] as const;
+          const url = await buildBodyPaintBlobUrl(bodyTexUrl, layer);
+          if (url) revocations.push(url);
+          return [slot, url ?? undefined] as const;
+        }),
+      );
+      if (cancelled) {
+        for (const u of revocations) URL.revokeObjectURL(u);
+        return;
+      }
+      setBodyPaintUrls({
+        body: entries[0][1],
+        hands: entries[1][1],
+        feet: entries[2][1],
+      });
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+      for (const u of revocations) URL.revokeObjectURL(u);
+    };
+  }, [bodyTexUrl, bodyOverlays]);
+
+  const effectiveBodyTexUrl = bodyPaintUrls.body ?? bodyTexUrl;
+  const effectiveHandsTexUrl = bodyPaintUrls.hands ?? bodyTexUrl;
+  const effectiveFeetTexUrl = bodyPaintUrls.feet ?? bodyTexUrl;
+
+  const bodyTexState = useMaterialTexture(bodyMaterial, 'map', effectiveBodyTexUrl, {
     colorSpace: THREE.SRGBColorSpace,
     wrap: true,
   });
   useMaterialTexture(bodyMaterial, 'normalMap', bodyNormalUrl, { wrap: true });
   useMaterialTexture(bodyMaterial, 'roughnessMap', bodyRoughUrl, { wrap: true });
-  /* The body, hands and feet are one character over one selected atlas. This
-     override is why a prebaked limb cannot paint its own baked-in material:
-     every `skin` slot on the three takes the body selection, and a missing
-     normal map falls back to the same stable, already-validated body normal
-     rather than to nothing. The gloss mask rides the same override so a limb
-     cannot end up with the torso's roughness. */
+
   const bodySkinOverride = useMemo(
-    () => ({ texture: bodyTexUrl, normalTexture: bodyNormalUrl, roughnessTexture: bodyRoughUrl }),
-    [bodyTexUrl, bodyNormalUrl, bodyRoughUrl],
+    () => ({ texture: effectiveBodyTexUrl, normalTexture: bodyNormalUrl, roughnessTexture: bodyRoughUrl }),
+    [effectiveBodyTexUrl, bodyNormalUrl, bodyRoughUrl],
+  );
+  const handsSkinOverride = useMemo(
+    () => ({ texture: effectiveHandsTexUrl, normalTexture: bodyNormalUrl, roughnessTexture: bodyRoughUrl }),
+    [effectiveHandsTexUrl, bodyNormalUrl, bodyRoughUrl],
+  );
+  const feetSkinOverride = useMemo(
+    () => ({ texture: effectiveFeetTexUrl, normalTexture: bodyNormalUrl, roughnessTexture: bodyRoughUrl }),
+    [effectiveFeetTexUrl, bodyNormalUrl, bodyRoughUrl],
   );
   /* Stable identity for the same reason as `clothingFallback`: `SkinnedPart`
      keys its texture/material effect on these objects, and an inline literal
@@ -2029,7 +2134,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
                inherit `SkinnedPart`'s hair default and draw translucent with a
                0.35 alpha test. */
             defaultRole="skin"
-            fallbackTexture={bodyTexUrl}
+            fallbackTexture={effectiveBodyTexUrl}
             fallbackNormalByRole={bodyNormalFallback}
             fallbackRoughnessByRole={bodyRoughnessFallback}
             skinOverride={bodySkinOverride}
@@ -2066,11 +2171,11 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           mesh={handsMesh}
           registry={skeletonRegistry}
           rigDonor={bodyMesh ?? undefined}
-          defaultRole="skin"
-          fallbackTexture={bodyTexUrl}
-          fallbackNormalByRole={bodyNormalFallback}
-          fallbackRoughnessByRole={bodyRoughnessFallback}
-          skinOverride={bodySkinOverride}
+            defaultRole="skin"
+            fallbackTexture={effectiveHandsTexUrl}
+            fallbackNormalByRole={bodyNormalFallback}
+            fallbackRoughnessByRole={bodyRoughnessFallback}
+            skinOverride={handsSkinOverride}
           skinColor={skinColor}
           skinDetailMap={skinDetailTex}
           skinDetail={skinDetail}
@@ -2085,11 +2190,11 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
           mesh={feetMesh}
           registry={skeletonRegistry}
           rigDonor={bodyMesh ?? undefined}
-          defaultRole="skin"
-          fallbackTexture={bodyTexUrl}
-          fallbackNormalByRole={bodyNormalFallback}
-          fallbackRoughnessByRole={bodyRoughnessFallback}
-          skinOverride={bodySkinOverride}
+            defaultRole="skin"
+            fallbackTexture={effectiveFeetTexUrl}
+            fallbackNormalByRole={bodyNormalFallback}
+            fallbackRoughnessByRole={bodyRoughnessFallback}
+            skinOverride={feetSkinOverride}
           skinColor={skinColor}
           skinDetailMap={skinDetailTex}
           skinDetail={skinDetail}
@@ -2189,6 +2294,7 @@ export function HeadModel({ manifest, onReady, onDirty, onAssetsReady, onIssue }
       })}
       {!importedHead && <MeshOverlay rig={rig} headBuild={headBuild} />}
       {!importedHead && <FaceGizmo rig={rig} />}
+      {!importedHead && <SculptBrushController rig={rig} headBuild={headBuild} />}
     </group>
   );
 }

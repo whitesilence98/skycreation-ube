@@ -9,6 +9,7 @@ import {
   type TransformMode,
 } from '@/lib/regions';
 import { coerceHair, type HairSettings } from '@/lib/hair/settings';
+import { coerceBodyPaintMap, type BodyPaintMap } from '@/lib/head/bodyPaintTypes';
 import type { GizmoPose, OverlayLayer } from '@/lib/store';
 import { ASSET_KINDS, type AssetSelection } from '@/lib/manifestSelect';
 import { isEquipSelection, type EquipSelection } from '@/lib/equipment';
@@ -77,6 +78,88 @@ export interface PresetFile extends Partial<AnatomySnapshot> {
   bodySlide?: Record<string, number>;
   /** Active FaceGen CharGen .tri morph sliders (-100 .. 100). */
   faceMorphs?: Record<string, number>;
+  /** Extended UBE 2.0 `John/*.tri` morphs (-1 .. 2). */
+  ubeMorphs?: Record<string, number>;
+  /** Facial expression & viseme weights (`0..1`). */
+  facialExpressions?: Record<string, number>;
+  /** Body/Hands/Feet paint overlays. */
+  bodyOverlays?: BodyPaintMap;
+  /** Raw custom RaceMenu morph entries left over after region slider mapping. */
+  rawCustomMorphs?: Array<{ name: string; value: number }>;
+  /** RaceMenu `headParts` entries (`formIdentifier`, `type`) from a `.jslot`. */
+  headParts?: Array<{ formIdentifier: string; type?: number }>;
+}
+
+const JSLOT_EXPR_MAP: Record<string, string> = {
+  lookup: 'lookUp',
+  lookdown: 'lookDown',
+  lookdawn: 'lookDown',
+  lookleft: 'lookLeft',
+  lookright: 'lookRight',
+  moodhappy: 'moodHappy',
+  moodsad: 'moodSad',
+  moodfear: 'moodFear',
+  moodanger: 'moodAnger',
+  moodpuzzled: 'moodPuzzled',
+  mooddisgusted: 'moodDisgusted',
+  moodsurprised: 'moodSurprised',
+  moodsurprise: 'moodSurprised',
+  squintleft: 'squintLeft',
+  squintright: 'squintRight',
+  browupleft: 'browUpLeft',
+  browupright: 'browUpRight',
+  browdownleft: 'browDownLeft',
+  browdownright: 'browDownRight',
+  browinleft: 'browInLeft',
+  browinright: 'browInRight',
+  smile: 'smile',
+  mouthsmile: 'smile',
+  small_smile: 'smallSmile',
+  smallsmile: 'smallSmile',
+  closedsmile_topless: 'closedSmile',
+  closedsmile: 'closedSmile',
+  widesmile_topless: 'wideSmile',
+  widesmile: 'wideSmile',
+  kiss: 'kiss',
+  yawning: 'yawning',
+  tired: 'tired',
+  stress: 'stress',
+  skeptical: 'skeptical',
+  biting_lips: 'bitingLips',
+  puckering_lips: 'puckeringLips',
+  opened_lips: 'openedLips',
+  lick: 'lick',
+  ahegao: 'ahegao',
+  bigaah: 'jawOpen',
+  aah: 'viseme_aa',
+  oh: 'viseme_O',
+  eh: 'viseme_E',
+  oohq: 'viseme_U',
+  eee: 'viseme_I',
+  bmp: 'viseme_PP',
+  fv: 'viseme_FF',
+};
+
+export function coerceUbeMorphs(v: unknown): Record<string, number> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, raw] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof raw === 'number' && Number.isFinite(raw) && Math.abs(raw) > 0.001) {
+      out[k] = Math.max(-2, Math.min(2, raw));
+    }
+  }
+  return out;
+}
+
+export function coerceFacialExpressionsMap(v: unknown): Record<string, number> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, raw] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0.001) {
+      out[k] = Math.max(0, Math.min(1, raw));
+    }
+  }
+  return out;
 }
 
 /**
@@ -117,14 +200,23 @@ export function payloadFromMorphs(
 
   // Pass 1: index what the file actually contains.
   const present = new Map<string, number>();
+  const facialExpressions: Record<string, number> = {};
+  const rawCustomMorphs: Array<{ name: string; value: number }> = [];
   let unmapped = 0;
   for (const entry of morphs) {
     if (!entry || typeof entry !== 'object') continue;
     if (typeof entry.name !== 'string' || typeof entry.value !== 'number' || !Number.isFinite(entry.value)) {
       continue;
     }
+    const stripped = entry.name.replace(/^[A-Z0-9]{2,4}_/, '');
+    const exprId = JSLOT_EXPR_MAP[stripped.toLowerCase()];
+    if (exprId && entry.value > 0.001) {
+      facialExpressions[exprId] = Math.max(facialExpressions[exprId] ?? 0, Math.min(1, entry.value));
+    }
+    rawCustomMorphs.push({ name: entry.name, value: entry.value });
+
     if (lookup.has(entry.name)) present.set(entry.name, entry.value);
-    else unmapped += 1;
+    else if (!exprId) unmapped += 1;
   }
 
   /* Pass 2: one morph per slider — the best-ranked name the file supplies.
@@ -175,6 +267,8 @@ export function payloadFromMorphs(
     regions,
     unmapped,
     source: 'racemenu',
+    ...(Object.keys(facialExpressions).length ? { facialExpressions } : {}),
+    ...(rawCustomMorphs.length ? { rawCustomMorphs } : {}),
     weight: typeof meta?.actorWeight === 'number' && Number.isFinite(meta.actorWeight)
       && meta.actorWeight >= 0 && meta.actorWeight <= 100 ? meta.actorWeight / 100 : undefined,
   };
@@ -228,6 +322,16 @@ export interface PresetPayload extends Partial<AnatomySnapshot> {
   bodySlide?: Record<string, number>;
   /** Active FaceGen CharGen .tri morph sliders (-100 .. 100). */
   faceMorphs?: Record<string, number>;
+  /** Extended UBE 2.0 `John/*.tri` morphs (-1 .. 2). */
+  ubeMorphs?: Record<string, number>;
+  /** Facial expression & viseme weights (`0..1`). */
+  facialExpressions?: Record<string, number>;
+  /** Body/Hands/Feet paint overlays. */
+  bodyOverlays?: BodyPaintMap;
+  /** Raw custom RaceMenu morph entries left over after region slider mapping. */
+  rawCustomMorphs?: Array<{ name: string; value: number }>;
+  /** RaceMenu `headParts` entries (`formIdentifier`, `type`) from a `.jslot`. */
+  headParts?: Array<{ formIdentifier: string; type?: number }>;
 }
 
 /**
@@ -405,6 +509,9 @@ export function buildPresetFile(args: {
   overlays?: OverlayLayer[];
   bodySlide?: Record<string, number>;
   faceMorphs?: Record<string, number>;
+  ubeMorphs?: Record<string, number>;
+  facialExpressions?: Record<string, number>;
+  bodyOverlays?: BodyPaintMap;
 } & Partial<AnatomySnapshot>): PresetFile {
   return {
     format: PRESET_FORMAT,
@@ -431,6 +538,9 @@ export function buildPresetFile(args: {
     overlays: args.overlays,
     bodySlide: args.bodySlide,
     faceMorphs: args.faceMorphs && Object.keys(args.faceMorphs).length ? { ...args.faceMorphs } : undefined,
+    ubeMorphs: args.ubeMorphs && Object.keys(args.ubeMorphs).length ? { ...args.ubeMorphs } : undefined,
+    facialExpressions: args.facialExpressions && Object.keys(args.facialExpressions).length ? { ...args.facialExpressions } : undefined,
+    bodyOverlays: args.bodyOverlays,
     anatomyMode: args.anatomyMode === 'advanced' ? 'advanced' : 'legacy',
     anatomy: coerceAnatomy(args.anatomy),
     anatomyAsymmetry: coerceAsymmetry(args.anatomyAsymmetry),
@@ -642,6 +752,9 @@ export function parsePreset(text: string, fileName?: string): PresetPayload {
           ? (obj.bodySlide as Record<string, number>)
           : mapLegacySilhouetteToBodySlide(coerceAnatomy(obj.anatomy)),
       faceMorphs: obj.faceMorphs ? coerceFaceMorphs(obj.faceMorphs) : undefined,
+      ubeMorphs: coerceUbeMorphs(obj.ubeMorphs),
+      facialExpressions: coerceFacialExpressionsMap(obj.facialExpressions),
+      bodyOverlays: obj.bodyOverlays ? coerceBodyPaintMap(obj.bodyOverlays) : undefined,
     };
   }
 
@@ -692,9 +805,23 @@ export function parsePreset(text: string, fileName?: string): PresetPayload {
     hair = { tone } as unknown as HairSettings;
   }
 
+  const rawHeadParts = Array.isArray(obj.headParts) ? (obj.headParts as unknown[]) : [];
+  const headParts = rawHeadParts
+    .filter((p): p is { formIdentifier: string; type?: number } =>
+      !!p &&
+      typeof p === 'object' &&
+      typeof (p as { formIdentifier?: unknown }).formIdentifier === 'string' &&
+      (p as { formIdentifier: string }).formIdentifier.trim().length > 0,
+    )
+    .map((p) => ({
+      formIdentifier: p.formIdentifier.trim(),
+      ...(typeof p.type === 'number' ? { type: p.type } : {}),
+    }));
+
   return {
     ...mapped,
     hair: hair ?? mapped.hair,
+    ...(headParts.length > 0 ? { headParts } : {}),
     /* The `.jslot`'s own basename, so import can find the head mesh whose
        sculpt was baked from this file. A `.jslot` has no `name` field
        (RaceMenu writes the filename outside the JSON), so the basename is the

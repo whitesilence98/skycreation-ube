@@ -1,21 +1,14 @@
 'use client';
 
-import { useCharacter } from '@/lib/store';
+import { useCharacter, type StudioPage } from '@/lib/store';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
-import { WuxiaTopNavBar } from '@/components/hud/common/WuxiaTopNavBar';
+import { WuxiaTopNavBar, type TopNavTab } from '@/components/hud/common/WuxiaTopNavBar';
 import { WuxiaExportDropdown } from '@/components/hud/common/WuxiaExportDropdown';
 import { WuxiaImportButton } from '@/components/hud/common/WuxiaImportButton';
 
 function TopBarRightActions({ manifest }: { manifest: Mo2Manifest | null }) {
-  const blinkPreview = useCharacter((s) => s.blinkPreview);
-  const setBlinkPreview = useCharacter((s) => s.setBlinkPreview);
-  const triggerBlink = useCharacter((s) => s.triggerBlink);
-  const facialExpressions = useCharacter((s) => s.facialExpressions);
-  const setFacialExpressions = useCharacter((s) => s.setFacialExpressions);
   const cameraLockMode = useCharacter((s) => s.cameraLockMode);
   const toggleCameraLockMode = useCharacter((s) => s.toggleCameraLockMode);
-  const isClosedHeld = blinkPreview !== null;
-  const isSmiling = (facialExpressions.smile ?? 0) > 0 || (facialExpressions.smallSmile ?? 0) > 0;
   const isCamLocked = cameraLockMode === 'locked';
 
   return (
@@ -33,40 +26,6 @@ function TopBarRightActions({ manifest }: { manifest: Mo2Manifest | null }) {
       >
         <span aria-hidden>{isCamLocked ? '🔒' : '🔓'}</span>
         <span className="hidden md:inline">{isCamLocked ? 'Cam Lock' : 'Free Cam'}</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => setFacialExpressions(isSmiling ? {} : { smile: 0.85 })}
-        aria-pressed={isSmiling}
-        title="Preview smooth anatomical Duchenne smile"
-        className={`pointer-events-auto h-7 px-2 sm:px-2.5 rounded-[2px] text-[10px] font-mono tracking-wider transition-all flex items-center gap-1 uppercase focus-visible:outline focus-visible:outline-[#eac87f] border ${
-          isSmiling
-            ? 'text-[#f5ecd8] bg-[#dfba73]/25 border-[#dfba73] shadow-[0_0_10px_rgba(223,186,115,0.3)]'
-            : 'text-[#d9d2c5] bg-[#1e1f26]/80 hover:bg-[#282a34] border-white/15 hover:border-[#dfba73]/50'
-        }`}
-      >
-        Smile
-      </button>
-      <button
-        type="button"
-        onClick={triggerBlink}
-        title="Play one natural eye blink"
-        className="pointer-events-auto h-7 px-2 sm:px-2.5 rounded-[2px] text-[10px] font-mono tracking-wider text-[#d9d2c5] bg-[#1e1f26]/80 hover:bg-[#282a34] border border-white/15 hover:border-[#dfba73]/50 transition-all flex items-center gap-1 uppercase focus-visible:outline focus-visible:outline-[#eac87f]"
-      >
-        Blink
-      </button>
-      <button
-        type="button"
-        onClick={() => setBlinkPreview(isClosedHeld ? null : 1)}
-        aria-pressed={isClosedHeld}
-        title="Hold eyes closed to inspect eyelid seam, shading, and lashes"
-        className={`pointer-events-auto h-7 px-2 sm:px-2.5 rounded-[2px] text-[10px] font-mono tracking-wider transition-all flex items-center gap-1 uppercase focus-visible:outline focus-visible:outline-[#eac87f] border ${
-          isClosedHeld
-            ? 'text-[#f5ecd8] bg-[#dfba73]/25 border-[#dfba73] shadow-[0_0_10px_rgba(223,186,115,0.3)]'
-            : 'text-[#d9d2c5] bg-[#1e1f26]/80 hover:bg-[#282a34] border-white/15 hover:border-[#dfba73]/50'
-        }`}
-      >
-        {isClosedHeld ? 'Open Eyes' : 'Hold Closed'}
       </button>
       <WuxiaImportButton manifest={manifest} />
       <WuxiaExportDropdown />
@@ -97,69 +56,28 @@ export function TopBar({ manifest }: { manifest: Mo2Manifest | null }) {
   const setPreviewMode = useCharacter((s) => s.setPreviewMode);
   const showToast = useCharacter((s) => s.showToast);
 
-  // If in Preset mode:
-  if (isPreset) {
+  const studioTabs: TopNavTab[] = [
+    { id: 'default', label: isOutfit ? 'Wardrobe' : 'Customization' },
+    { id: 'expressions', label: 'Expressions' },
+    { id: 'ube_morphs', label: 'Morphs' },
+    { id: 'sculpt', label: '3D Sculpt' },
+    { id: 'head_base', label: 'Head & Base' },
+    { id: 'body_paint', label: 'Body Paint' },
+    ...(isHair || isMakeup ? [{ id: 'smart', label: 'Smart' }] : []),
+  ];
+
+  const validTab = studioTabs.some((t) => t.id === studioPage) ? studioPage : 'default';
+
+  if (isPreset || isHair || isMakeup || isFace || isBody || isOutfit) {
     return (
       <WuxiaTopNavBar
-        tabs={[
-          { id: 'customization', label: 'Customization' },
-          { id: 'makeup', label: 'Makeup' },
-        ]}
-        activeTab="customization"
+        tabs={studioTabs}
+        activeTab={validTab}
         onTabChange={(tabId) => {
-          if (tabId === 'makeup') {
-            useCharacter.getState().setPrimaryTab('FACE');
-          } else {
-            useCharacter.getState().setPrimaryTab('PRESET');
-          }
+          useCharacter.getState().setStudioPage(tabId as StudioPage);
         }}
         isCollapsed={preview}
         onToggleCollapse={() => setPreviewMode(!preview)}
-        rightSlot={<TopBarRightActions manifest={manifest} />}
-      />
-    );
-  }
-
-  // If in Hairstyle, Makeup, Features, or Physique mode:
-  if (isHair || isMakeup || isFace || isBody) {
-    const hasSmart = isHair || isMakeup;
-    return (
-      <WuxiaTopNavBar
-        tabs={
-          hasSmart
-            ? [
-                { id: 'customization', label: 'Customization' },
-                { id: 'smart_customization', label: 'Smart Customization' },
-              ]
-            : [{ id: 'customization', label: 'Customization' }]
-        }
-        activeTab={hasSmart && studioPage === 'smart' ? 'smart_customization' : 'customization'}
-        onTabChange={(tabId) =>
-          useCharacter
-            .getState()
-            .setStudioPage(tabId === 'smart_customization' ? 'smart' : 'default')}
-        isCollapsed={preview}
-        onToggleCollapse={() => setPreviewMode(!preview)}
-        rightSlot={<TopBarRightActions manifest={manifest} />}
-      />
-    );
-  }
-
-  // If in Wardrobe mode:
-  if (isOutfit) {
-    return (
-      <WuxiaTopNavBar
-        isCollapsed={preview}
-        onToggleCollapse={() => setPreviewMode(!preview)}
-        onTabChange={(tabId) => {
-          if (tabId === 'backgrounds') {
-            useCharacter.getState().setWorkspace('camera');
-          } else if (tabId === 'weapon') {
-            showToast('Weapon slots selected');
-          } else {
-            showToast(`Category switched: ${tabId}`);
-          }
-        }}
         rightSlot={<TopBarRightActions manifest={manifest} />}
       />
     );

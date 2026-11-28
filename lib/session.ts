@@ -23,13 +23,16 @@ import {
 } from '@/lib/regions';
 import {
   coerceFaceMorphs,
+  coerceFacialExpressionsMap,
   coercePose,
   coerceSliderValues,
+  coerceUbeMorphs,
   coerceWeight,
   isRegionId,
   sanitizeAssetSelection,
   sanitizeOverlayLayers,
 } from '@/lib/presetIO';
+import { coerceBodyPaintMap, createDefaultBodyPaintMap, type BodyPaintMap } from '@/lib/head/bodyPaintTypes';
 import { CATEGORY_MAP, type AssetSelection, type UiCategory } from '@/lib/manifestSelect';
 import { isEquipSelection, isEquipSlot, type EquipSelection, type EquipSlot } from '@/lib/equipment';
 import { HAIR_TABS, coerceHair, type HairSettings, type HairTab } from '@/lib/hair/settings';
@@ -134,6 +137,9 @@ export interface PersistedSession extends AnatomySnapshot {
   sliders: Record<RegionId, SliderValues>;
   poses: Record<RegionId, GizmoPose>;
   faceMorphs?: Record<string, number>;
+  ubeMorphs?: Record<string, number>;
+  facialExpressions?: Record<string, number>;
+  bodyOverlays?: BodyPaintMap;
   preset: string;
   utils: UtilityToggles;
   assetSelection: AssetSelection;
@@ -318,6 +324,9 @@ export function coerceSession(raw: unknown, defaults: PersistedSession): Persist
     sliders,
     poses,
     faceMorphs: coerceFaceMorphs(o.faceMorphs),
+    ubeMorphs: coerceUbeMorphs(o.ubeMorphs),
+    facialExpressions: coerceFacialExpressionsMap(o.facialExpressions),
+    bodyOverlays: o.bodyOverlays ? coerceBodyPaintMap(o.bodyOverlays) : createDefaultBodyPaintMap(),
     preset: PRESETS.some((p) => p.id === o.preset) ? (o.preset as string) : defaults.preset,
     utils: coerceToggleSet(o.utils, UTIL_KEYS, defaults.utils),
     /* `sanitizeAssetSelection` drops unknown kinds and non-string ids but
@@ -408,6 +417,9 @@ export function pickSession(s: PersistedSession): PersistedSession {
       }]),
     ) as Record<RegionId, GizmoPose>,
     faceMorphs: s.faceMorphs && Object.keys(s.faceMorphs).length ? { ...s.faceMorphs } : {},
+    ubeMorphs: s.ubeMorphs && Object.keys(s.ubeMorphs).length ? { ...s.ubeMorphs } : {},
+    facialExpressions: s.facialExpressions && Object.keys(s.facialExpressions).length ? { ...s.facialExpressions } : {},
+    bodyOverlays: s.bodyOverlays ? coerceBodyPaintMap(s.bodyOverlays) : createDefaultBodyPaintMap(),
     preset: s.preset,
     utils: { ...s.utils },
     assetSelection: { ...s.assetSelection },

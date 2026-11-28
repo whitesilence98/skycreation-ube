@@ -22,10 +22,20 @@ import {
   OVERLAY_BLENDS,
   buildPresetFile,
   coerceFaceMorphs,
+  coerceFacialExpressionsMap,
+  coerceUbeMorphs,
   resolvePresetId,
   type PresetFile,
   type PresetPayload,
 } from '@/lib/presetIO';
+import {
+  coerceBodyPaintMap,
+  createDefaultBodyPaintMap,
+  type BodyPaintLayer,
+  type BodyPaintMap,
+  type BodyPaintSlot,
+} from '@/lib/head/bodyPaintTypes';
+import { clearSculptBrushDeltas, type SculptBrushMode } from '@/lib/head/sculptBrush';
 import { getFaceSlidersForSection, useFaceMorphStore } from '@/lib/morphs/faceMorphStore';
 import { FACE_SECTIONS, type FaceSectionId } from '@/lib/faceControls';
 import {
@@ -40,8 +50,9 @@ import {
 import type { AssetSelection, AssetKind, AssetCatalogues, UiCategory } from '@/lib/manifestSelect';
 import type { EquipSelection, EquipSlot } from '@/lib/equipment';
 import { DEFAULT_HAIR, coerceHair, applyHairStyle as hairStyle, type HairSettings, type HairTab } from '@/lib/hair/settings';
-/** The two screens the Hair and Makeup workspaces can show. */
-export type StudioPage = 'default' | 'smart';import type { CatalogueEntry } from '@/lib/mo2/types';
+/** Active studio workspace page controlled via the top switch bar. */
+export type StudioPage = 'default' | 'expressions' | 'ube_morphs' | 'sculpt' | 'head_base' | 'body_paint' | 'smart';
+import type { CatalogueEntry } from '@/lib/mo2/types';
 import { type EnvMode } from '@/lib/envModes';
 import { type BackgroundMode } from '@/lib/backgrounds';
 import { type CameraFraming, type CameraLockMode, type CameraPoseRequest, CAMERA_FOV_DEFAULT, CAMERA_FOV_MIN, CAMERA_FOV_MAX, CAMERA_ROTATE_SPEED_DEFAULT, CAMERA_ROTATE_SPEED_MIN, CAMERA_ROTATE_SPEED_MAX } from '@/lib/camera';
@@ -250,6 +261,28 @@ export interface CharacterState extends AnatomySnapshot {
   physiqueSection: string | null;
   makeupSection: string | null;
   faceMorphs: Record<string, number>;
+  /** Extended UBE 2.0 `John/*.tri` sculpt morph sliders (-2 .. 2). */
+  ubeMorphs: Record<string, number>;
+  setUbeMorph: (name: string, value: number) => void;
+  setUbeMorphs: (next: Record<string, number>) => void;
+  resetUbeMorphCategory: (names: readonly string[]) => void;
+  resetUbeMorphs: () => void;
+  /** Interactive 3D brush sculpt controls. */
+  sculptBrushMode: SculptBrushMode;
+  setSculptBrushMode: (mode: SculptBrushMode) => void;
+  sculptBrushRadius: number;
+  setSculptBrushRadius: (r: number) => void;
+  sculptBrushStrength: number;
+  setSculptBrushStrength: (v: number) => void;
+  sculptBrushSymmetry: boolean;
+  setSculptBrushSymmetry: (v: boolean) => void;
+  sculptBrushVersion: number;
+  bumpSculptBrushVersion: () => void;
+  resetSculptBrush: () => void;
+  /** Body / Hands / Feet paint overlays. */
+  bodyOverlays: BodyPaintMap;
+  setBodyPaint: (slot: BodyPaintSlot, patch: Partial<BodyPaintLayer>) => void;
+  resetBodyPaint: (slot?: BodyPaintSlot) => void;
   primaryTab: string;
   subTab: string;
   /** Top-level workspace mode: character studio vs interactive room builder. */
@@ -1018,6 +1051,56 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
   physiqueSection: null,
   makeupSection: null,
   faceMorphs: {},
+  ubeMorphs: {},
+  setUbeMorph: (name, value) =>
+    set((s) => {
+      const clamped = Math.max(-2, Math.min(2, Math.round(value * 1000) / 1000));
+      const next = { ...s.ubeMorphs };
+      if (Math.abs(clamped) <= 0.001) delete next[name];
+      else next[name] = clamped;
+      return { ubeMorphs: next };
+    }),
+  setUbeMorphs: (next) => set({ ubeMorphs: coerceUbeMorphs(next) }),
+  resetUbeMorphCategory: (names) =>
+    set((s) => {
+      const next = { ...s.ubeMorphs };
+      for (const n of names) delete next[n];
+      return { ubeMorphs: next };
+    }),
+  resetUbeMorphs: () => set({ ubeMorphs: {} }),
+  sculptBrushMode: 'inflate',
+  setSculptBrushMode: (sculptBrushMode) => set({ sculptBrushMode }),
+  sculptBrushRadius: 0.025,
+  setSculptBrushRadius: (r) => set({ sculptBrushRadius: Math.min(0.08, Math.max(0.005, r)) }),
+  sculptBrushStrength: 0.35,
+  setSculptBrushStrength: (v) => set({ sculptBrushStrength: Math.min(1.0, Math.max(0.05, v)) }),
+  sculptBrushSymmetry: true,
+  setSculptBrushSymmetry: (sculptBrushSymmetry) => set({ sculptBrushSymmetry }),
+  sculptBrushVersion: 0,
+  bumpSculptBrushVersion: () => set((s) => ({ sculptBrushVersion: s.sculptBrushVersion + 1 })),
+  resetSculptBrush: () => {
+    clearSculptBrushDeltas();
+    set((s) => ({ sculptBrushVersion: s.sculptBrushVersion + 1 }));
+  },
+  bodyOverlays: createDefaultBodyPaintMap(),
+  setBodyPaint: (slot, patch) =>
+    set((s) => ({
+      bodyOverlays: {
+        ...s.bodyOverlays,
+        [slot]: { ...s.bodyOverlays[slot], ...patch },
+      },
+    })),
+  resetBodyPaint: (slot) =>
+    set((s) => {
+      const defaults = createDefaultBodyPaintMap();
+      if (!slot) return { bodyOverlays: defaults };
+      return {
+        bodyOverlays: {
+          ...s.bodyOverlays,
+          [slot]: defaults[slot],
+        },
+      };
+    }),
   primaryTab: 'FACE',
   subTab: 'SKIN',
   appMode: 'builder',
@@ -1505,6 +1588,7 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
         presetNonce: s.presetNonce + 1,
         sliders: def ? presetSliderBank(def) : buildSliderBank(),
         faceMorphs: {},
+        ubeMorphs: {},
         anatomyMode: 'legacy',
         anatomy: coerceAnatomy(), anatomyAsymmetry: coerceAsymmetry(), anatomyColors: coerceAnatomyColors(),
         anatomyPast: [], anatomyFuture: [], anatomyEditStart: null,
@@ -1623,15 +1707,24 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
          the import only nudged the sliders by a millimetre and looked like a
          no-op. An explicit selection in the file still wins. */
       const assetSelection = payload.assets
-        ? payload.assets
+        ? (payload.source === 'racemenu'
+            ? { ...s.assetSelection, ...payload.assets, ...(sculptHeadId ? { headMesh: sculptHeadId } : {}) }
+            : { ...payload.assets, ...(sculptHeadId ? { headMesh: sculptHeadId } : {}) })
         : sculptHeadId
           ? { ...s.assetSelection, headMesh: sculptHeadId }
           : s.assetSelection;
       const loadedFaceMorphs = coerceFaceMorphs(payload.faceMorphs);
       useFaceMorphStore.getState().setFaceSlidersExact(loadedFaceMorphs);
+      clearSculptBrushDeltas();
+      const loadedUbeMorphs = payload.ubeMorphs ? coerceUbeMorphs(payload.ubeMorphs) : {};
+      const loadedExprs = payload.facialExpressions ? coerceFacialExpressionsMap(payload.facialExpressions) : {};
       return {
         sliders,
         faceMorphs: loadedFaceMorphs,
+        ubeMorphs: loadedUbeMorphs,
+        facialExpressions: loadedExprs,
+        sculptBrushVersion: s.sculptBrushVersion + 1,
+        bodyOverlays: payload.bodyOverlays ? coerceBodyPaintMap(payload.bodyOverlays) : s.bodyOverlays,
         anatomyMode: payload.anatomyMode === 'advanced' ? 'advanced' : 'legacy',
         anatomy: coerceAnatomy(payload.anatomy),
         anatomyAsymmetry: coerceAsymmetry(payload.anatomyAsymmetry),
@@ -1704,6 +1797,9 @@ export const useCharacter = create<CharacterState>()(persist((set, get) => ({
       overlays: s.overlayLayers,
       bodySlide: useBodySlideStore.getState().sliders,
       faceMorphs: { ...s.faceMorphs },
+      ubeMorphs: { ...s.ubeMorphs },
+      facialExpressions: { ...s.facialExpressions },
+      bodyOverlays: coerceBodyPaintMap(s.bodyOverlays),
       anatomyMode: s.anatomyMode,
       ...anatomySnapshot(s),
     });
