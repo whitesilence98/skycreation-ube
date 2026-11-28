@@ -69,7 +69,7 @@ export interface BrainStepInput {
 export interface BrainStepOutput {
   pos: [number, number];
   yaw: number;
-  animationId: 'walk' | 'idle-clip';
+  animationId: 'idle-clip';
   needs: NeedsMap;
   activity: LifeActivitySnapshot;
   consumedRecentItemId: string | null;
@@ -276,7 +276,7 @@ export class RoomLifeBrain {
     const grid = this.ensureGrid(input.placedItems);
     let pos: [number, number] = [input.pos[0], input.pos[1]];
     let yaw = input.yaw;
-    let animationId: 'walk' | 'idle-clip' = 'idle-clip';
+    let animationId: 'idle-clip' = 'idle-clip';
     let consumedRecentItemId: string | null = null;
     let newThought: string | null = null;
 
@@ -364,7 +364,7 @@ export class RoomLifeBrain {
             const maxTurn = TURN_SPEED_RAD * input.dtRealSec;
             yaw += Math.max(-maxTurn, Math.min(maxTurn, deltaYaw));
           }
-          animationId = input.timeScale > 0 ? 'walk' : 'idle-clip';
+          animationId = 'idle-clip';
           const progress =
             head.waypoints.length > 0 ? Math.min(1, head.cursor / head.waypoints.length) : 0;
           activity = {

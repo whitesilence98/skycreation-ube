@@ -24,6 +24,7 @@ import { GradeEffect } from '@/components/scene/GradeEffect';
 import { isGradeNeutral } from '@/lib/graphics';
 import { useCharacter, type ToneMappingId } from '@/lib/store';
 import { useBuilderStore } from '@/lib/builderStore';
+import { useGraphicsSettings } from '@/lib/graphicsSettings';
 
 const COMPOSER_TONE_MODE: Record<ToneMappingId, ToneMappingMode> = {
   neutral: ToneMappingMode.NEUTRAL,
@@ -58,13 +59,16 @@ export function RoomPostPipeline() {
   const exposure = useCharacter((s) => s.exposure);
   const fx = useCharacter((s) => s.fx);
   const grade = useCharacter((s) => s.grade);
+  const roomPostFx = useGraphicsSettings((s) => s.roomPostFx);
 
   const inStation = activeStation !== null;
-  const useBloom = inStation && fx.bloom;
-  const useDof = inStation && fx.dof;
-  const useSmaa = inStation && fx.smaa;
-  const useVignette = inStation && fx.vignette;
-  const useGrain = inStation && fx.grain;
+  const allowRoomFx =
+    roomPostFx === 'always' || (roomPostFx === 'station' && inStation);
+  const useBloom = allowRoomFx && fx.bloom;
+  const useDof = roomPostFx !== 'off' && inStation && fx.dof;
+  const useSmaa = allowRoomFx && fx.smaa;
+  const useVignette = allowRoomFx && fx.vignette;
+  const useGrain = allowRoomFx && fx.grain;
   const gradeActive = !isGradeNeutral(grade);
 
   // During free Room Tour / Build / Decorate, skip EffectComposer unless ENB,

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useGraphicsSettings } from '@/lib/graphicsSettings';
 import { cn } from '@/lib/cn';
 
 export interface StudioCardProps {
@@ -33,6 +34,7 @@ export function StudioCard({
   children,
 }: StudioCardProps) {
   const [minimized, setMinimized] = useState(defaultMinimized);
+  const glassBlur = useGraphicsSettings((s) => s.glassBlur);
   const isEmbedded = (variant ?? (onClose ? 'floating' : 'embedded')) === 'embedded';
   const hasHeader = Boolean(title || badge || headerTrailing || onClose || allowMinimize);
   const hasFooter = Boolean(!minimized && (footerLeading || footerTrailing || showSparkle));
@@ -50,7 +52,8 @@ export function StudioCard({
           isEmbedded
             ? 'border-0 bg-transparent shadow-none backdrop-blur-none p-0 gap-3'
             : cn(
-                'rounded-[2px] border border-[#463a2e] bg-[#161311]/92 shadow-[0_16px_40px_rgba(0,0,0,0.65)] backdrop-blur-md',
+                'rounded-[2px] border border-[#463a2e] bg-[#161311]/94 shadow-[0_16px_40px_rgba(0,0,0,0.65)]',
+                glassBlur && 'backdrop-blur-md',
                 minimized ? 'p-2.5 pb-2 bg-[#161311]/96' : 'p-3 gap-2.5',
               ),
         )}

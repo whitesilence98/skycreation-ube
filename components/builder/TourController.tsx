@@ -40,7 +40,7 @@ export function TourController({ playerGroupRef }: TourControllerProps) {
   const camYawRef = useRef<number>(useBuilderStore.getState().playerYaw + Math.PI);
   const draggingRef = useRef(false);
   const lastXRef = useRef(0);
-  const lastAnimRef = useRef<'idle-clip' | 'walk' | 'run'>('idle-clip');
+  const lastAnimRef = useRef<'idle-clip' | 'idle' | 'selfie' | 'rest'>('idle-clip');
   const lastNearbyIdRef = useRef<string | null>(null);
   const minimapSyncAccumRef = useRef(0);
 
@@ -140,7 +140,7 @@ export function TourController({ playerGroupRef }: TourControllerProps) {
     const running = Boolean(keys['shift']);
 
     const hasInput = forwardInput !== 0 || strafeInput !== 0;
-    const nextAnim: 'idle-clip' | 'walk' | 'run' = !hasInput ? 'idle-clip' : running ? 'run' : 'walk';
+    const nextAnim: 'idle-clip' = 'idle-clip';
 
     if (nextAnim !== lastAnimRef.current) {
       lastAnimRef.current = nextAnim;

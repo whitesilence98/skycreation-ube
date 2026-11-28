@@ -14,6 +14,7 @@ import { BlueprintMinimap } from '@/components/builder/BlueprintMinimap';
 import { ItemTile } from '@/components/hud/common/ItemTile';
 import { WuxiaBreadcrumbs } from '@/components/hud/common/WuxiaBreadcrumbs';
 import { WuxiaRibbonPill } from '@/components/hud/common/WuxiaRibbonPill';
+import { useGraphicsSettings } from '@/lib/graphicsSettings';
 import { cn } from '@/lib/cn';
 
 function CategoryGlyph({ id }: { id: BuilderCategory }) {
@@ -83,6 +84,7 @@ export function BuilderPanel() {
   const resizeRoom = useBuilderStore((s) => s.resizeRoom);
   const resetStarterRoom = useBuilderStore((s) => s.resetStarterRoom);
   const clearAll = useBuilderStore((s) => s.clearAll);
+  const glassBlur = useGraphicsSettings((s) => s.glassBlur);
 
   const currentMeta =
     BUILDER_CATEGORY_META.find((m) => m.id === activeCategory) ?? BUILDER_CATEGORY_META[0];
@@ -95,7 +97,10 @@ export function BuilderPanel() {
   return (
     <aside
       aria-label="Room Builder Catalog"
-      className="pointer-events-auto flex max-h-[calc(100dvh-118px)] w-[274px] sm:w-[322px] flex-col rounded-[4px] border border-[#d4b483]/35 bg-[#15161c]/90 p-2.5 sm:p-3 text-[#f2efe8] shadow-[0_14px_40px_rgba(0,0,0,0.65)] backdrop-blur-md select-none"
+      className={cn(
+        'pointer-events-auto flex max-h-[calc(100dvh-118px)] w-[274px] sm:w-[322px] flex-col rounded-[4px] border border-[#d4b483]/35 bg-[#15161c]/94 p-2.5 sm:p-3 text-[#f2efe8] shadow-[0_14px_40px_rgba(0,0,0,0.65)] select-none',
+        glassBlur && 'backdrop-blur-md',
+      )}
     >
       {/* Top 2D Blueprint Minimap */}
       <BlueprintMinimap />

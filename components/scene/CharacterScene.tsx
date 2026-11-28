@@ -26,6 +26,8 @@ import { useHdr } from '@/lib/hdrState';
 import { inspectHdrHeader, checkHdrDimensions } from '@/lib/hdr';
 import { ExposureEffect } from '@/components/scene/ExposureEffect';
 import { FrameRateCap } from '@/components/scene/FrameRateCap';
+import { GraphicsRuntimeBridge } from '@/components/scene/GraphicsRuntimeBridge';
+import { SHADOW_QUALITY_SPEC, useGraphicsSettings } from '@/lib/graphicsSettings';
 import { StatsProbe } from '@/components/scene/StatsProbe';
 import { isGradeNeutral } from '@/lib/graphics';
 import {
@@ -512,6 +514,20 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
   const bodyFraming = (manifest?.sourceLayout === 'pack' && (primaryTab === 'BODY' || primaryTab === 'EQUIPMENT')) || primaryTab === 'PRESET';
   const backgroundMode = useCharacter((s) => s.backgroundMode);
   const customBackgroundUrl = useCharacter((s) => s.customBackgroundUrl);
+  const shadowQuality = useGraphicsSettings((s) => s.shadowQuality);
+  const shadowSpec = SHADOW_QUALITY_SPEC[shadowQuality];
+  const keyLightRef = useRef<THREE.DirectionalLight>(null);
+
+  useEffect(() => {
+    const key = keyLightRef.current;
+    if (!key) return;
+    if (key.shadow.map) {
+      key.shadow.map.dispose();
+      key.shadow.map = null;
+    }
+    key.shadow.mapSize.set(shadowSpec.mapSize, shadowSpec.mapSize);
+    key.shadow.needsUpdate = true;
+  }, [shadowSpec.mapSize, shadowSpec.enabled]);
 
   const isBody = bodyFraming;
   const packMode = manifest?.sourceLayout === 'pack';
@@ -539,11 +555,12 @@ function SceneContent({ manifest, onAssetsReady, onIssue }: CharacterSceneProps)
           is an orthographic box around its target, calibrated for both tight
           head framing and full-body silhouette framing. */}
       <directionalLight
+        ref={keyLightRef}
         position={dirs.key}
         intensity={2.8 * lighting.intensity}
         color={lighting.keyColor}
-        castShadow
-        shadow-mapSize={[1024, 1024]}
+        castShadow={shadowSpec.enabled}
+        shadow-mapSize={[shadowSpec.mapSize, shadowSpec.mapSize]}
         shadow-camera-left={isBody ? -1.1 : -0.55}
         shadow-camera-right={isBody ? 1.1 : 0.55}
         shadow-camera-top={isBody ? 0.95 : 0.75}
@@ -703,7 +720,8 @@ export function CharacterScene({ manifest, onAssetsReady, onIssue }: CharacterSc
       }}
       style={{ position: 'absolute', inset: 0 }}
     >
-      <FrameRateCap maxFps={60} />
+      <FrameRateCap />
+      <GraphicsRuntimeBridge />
       <SceneContent manifest={manifest} onAssetsReady={onAssetsReady} onIssue={onIssue} />
     </Canvas>
   );

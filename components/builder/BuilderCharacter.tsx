@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, type RefObject } from 'react';
+import { memo, Suspense, useCallback, useEffect, type RefObject } from 'react';
 import type { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { HeadModel, type SceneHandles } from '@/components/scene/HeadModel';
@@ -18,7 +18,10 @@ interface BuilderCharacterProps {
  * Room Builder scene. Clicking the character in `build`/`decorate` zooms into
  * 3rd-person `tour` mode.
  */
-export function BuilderCharacter({ manifest, playerGroupRef }: BuilderCharacterProps) {
+export const BuilderCharacter = memo(function BuilderCharacter({
+  manifest,
+  playerGroupRef,
+}: BuilderCharacterProps) {
   const onReady = useCallback((_h: SceneHandles) => {}, []);
   const onDirty = useCallback(() => {}, []);
 
@@ -71,21 +74,26 @@ export function BuilderCharacter({ manifest, playerGroupRef }: BuilderCharacterP
   };
 
   return (
-    <group
-      ref={playerGroupRef}
-      name="builder-player-root"
-      onClick={handleClick}
-      onPointerOver={(e) => {
-        if (!canClickToTour) return;
-        e.stopPropagation();
-        document.body.style.cursor = 'pointer';
-      }}
-      onPointerOut={() => {
-        if (document.body.style.cursor === 'pointer') {
-          document.body.style.cursor = 'auto';
-        }
-      }}
-    >
+    <group ref={playerGroupRef} name="builder-player-root">
+      {/* Lightweight 8-sided cylinder hitbox so mouse move doesn't raycast 80k+ character triangles */}
+      {canClickToTour && (
+        <mesh
+          position={[0, 0.85, 0]}
+          onClick={handleClick}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            document.body.style.cursor = 'pointer';
+          }}
+          onPointerOut={() => {
+            if (document.body.style.cursor === 'pointer') {
+              document.body.style.cursor = 'auto';
+            }
+          }}
+        >
+          <cylinderGeometry args={[0.32, 0.32, 1.7, 8]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      )}
       <group position={[0, 1.476 + FLOOR_SLAB_TOP, 0]}>
         <Suspense fallback={null}>
           <HeadModel
@@ -105,4 +113,4 @@ export function BuilderCharacter({ manifest, playerGroupRef }: BuilderCharacterP
       />
     </group>
   );
-}
+});

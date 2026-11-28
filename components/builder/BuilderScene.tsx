@@ -1,11 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { Canvas, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Mo2Manifest } from '@/lib/head/faceTexture';
 import { useCharacter } from '@/lib/store';
-import { KENNEY_UNIT_SCALE, useBuilderStore } from '@/lib/builderStore';
+import {
+  KENNEY_UNIT_SCALE,
+  useBuilderStore,
+  type BuilderMode,
+  type PlacedItem,
+  type RoomBounds,
+} from '@/lib/builderStore';
 import { BUILDER_CATALOG_BY_ID } from '@/lib/builderCatalog';
 import { hydrateBuilderSession, saveBuilderSession } from '@/lib/builderSession';
 import { buildWallChain, snapToGrid, type GridPoint } from '@/lib/builder/wallPlacer';
@@ -20,59 +26,45 @@ import { RoomLifeController, TimeOfDayLighting } from '@/components/builder/Room
 import { RoomPostPipeline } from '@/components/builder/RoomPostPipeline';
 import { EnvironmentRig } from '@/components/scene/EnvironmentRig';
 import { FrameRateCap } from '@/components/scene/FrameRateCap';
+import { GraphicsRuntimeBridge } from '@/components/scene/GraphicsRuntimeBridge';
 import { StatsProbe } from '@/components/scene/StatsProbe';
 import { GlbExportBridge } from '@/lib/exportGlb';
 
-interface BuilderSceneProps {
-  manifest: Mo2Manifest | null;
+interface PlacementOverlayProps {
+  mode: BuilderMode;
+  ghostCatalogId: string | null;
+  ghostRotation: number;
+  wallStart: GridPoint | null;
+  activeWallCatalogId: string;
+  placedItems: PlacedItem[];
+  roomBounds: RoomBounds;
+  hoverUpdaterRef: MutableRefObject<((pt: GridPoint) => void) | null>;
 }
 
-export function BuilderScene({ manifest }: BuilderSceneProps) {
-  const mode = useBuilderStore((s) => s.mode);
-  const grid = useBuilderStore((s) => s.grid);
-  const placedItems = useBuilderStore((s) => s.placedItems);
-  const selectedItemId = useBuilderStore((s) => s.selectedItemId);
-  const ghostCatalogId = useBuilderStore((s) => s.ghostCatalogId);
-  const ghostRotation = useBuilderStore((s) => s.ghostRotation);
-  const roomWidth = useBuilderStore((s) => s.roomWidth);
-  const roomDepth = useBuilderStore((s) => s.roomDepth);
-  const roomBounds = useBuilderStore((s) => s.roomBounds);
-  const activeStation = useBuilderStore((s) => s.activeStation);
-  const hydrated = useBuilderStore((s) => s.hydrated);
-  const lightingIntensity = useCharacter((s) => s.lighting.intensity);
-
-  const playerGroupRef = useRef<THREE.Group | null>(null);
-  const [orbitEnabled, setOrbitEnabled] = useState(true);
+/**
+ * Isolates pointer-hover placement state from `BuilderScene` so moving the
+ * cursor across grid cells never re-renders placed furniture or `<BuilderCharacter>`.
+ */
+function PlacementOverlay({
+  mode,
+  ghostCatalogId,
+  ghostRotation,
+  wallStart,
+  activeWallCatalogId,
+  placedItems,
+  roomBounds,
+  hoverUpdaterRef,
+}: PlacementOverlayProps) {
   const [hoverPoint, setHoverPoint] = useState<GridPoint>({ x: 0, z: 0 });
-  const [wallStart, setWallStart] = useState<GridPoint | null>(null);
 
-  // Hydrate saved room layout once on mount
   useEffect(() => {
-    hydrateBuilderSession();
-  }, []);
-
-  // Debounced session persistence when placed items change
-  useEffect(() => {
-    if (!hydrated) return;
-    const timer = window.setTimeout(() => {
-      saveBuilderSession(placedItems, roomWidth, roomDepth);
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [placedItems, roomWidth, roomDepth, hydrated]);
-
-  // Clear in-progress wall draw when switching out of build mode
-  useEffect(() => {
-    if (mode !== 'build') {
-      setWallStart(null);
-    }
-  }, [mode]);
-
-  // Determine which wall asset is active during BUILD WALLS mode
-  const activeWallCatalogId = useMemo(() => {
-    if (!ghostCatalogId) return 'structure/wall';
-    const entry = BUILDER_CATALOG_BY_ID[ghostCatalogId];
-    return entry?.type === 'wall' ? entry.id : 'structure/wall';
-  }, [ghostCatalogId]);
+    hoverUpdaterRef.current = (pt) => {
+      setHoverPoint((prev) => (prev.x === pt.x && prev.z === pt.z ? prev : pt));
+    };
+    return () => {
+      hoverUpdaterRef.current = null;
+    };
+  }, [hoverUpdaterRef]);
 
   const wallPreviewSegments = useMemo(() => {
     if (mode !== 'build' || !wallStart) return [];
@@ -84,7 +76,6 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
     return Math.abs(hoverPoint.x - wallStart.x) + Math.abs(hoverPoint.z - wallStart.z);
   }, [wallStart, hoverPoint]);
 
-  // Live collision checks for active prop ghost, wall ghost, and wall chain
   const ghostValidation = useMemo(() => {
     if (mode !== 'decorate' || !ghostCatalogId) {
       return { valid: true, reason: null as string | null, collidingIds: [] as string[] };
@@ -136,15 +127,106 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
     return validateWallBatch(wallPreviewSegments, placedItems);
   }, [mode, wallStart, wallPreviewSegments, placedItems]);
 
+  if (mode === 'tour') return null;
+
+  return (
+    <>
+      {mode === 'build' && wallStart && (
+        <WallGhostChain
+          segments={wallPreviewSegments}
+          endPoint={[hoverPoint.x, 0, hoverPoint.z]}
+          lengthMeters={wallPreviewLength}
+          invalidIndices={wallChainValidation.invalidIndices}
+          invalidReason={wallChainValidation.reason}
+        />
+      )}
+      {mode === 'build' && !wallStart && (
+        <GhostItem
+          catalogId={activeWallCatalogId}
+          position={[hoverPoint.x, 0, hoverPoint.z]}
+          rotation={ghostRotation}
+          valid={startWallValidation.valid}
+          invalidReason={startWallValidation.reason}
+          promptLabel="START WALL [L-CLICK]"
+        />
+      )}
+      {mode === 'decorate' && ghostCatalogId && (
+        <GhostItem
+          catalogId={ghostCatalogId}
+          position={[hoverPoint.x, 0, hoverPoint.z]}
+          rotation={ghostRotation}
+          valid={ghostValidation.valid}
+          invalidReason={ghostValidation.reason}
+          promptLabel="PLACE [L-CLICK]"
+        />
+      )}
+    </>
+  );
+}
+
+interface BuilderSceneProps {
+  manifest: Mo2Manifest | null;
+}
+
+export function BuilderScene({ manifest }: BuilderSceneProps) {
+  const mode = useBuilderStore((s) => s.mode);
+  const grid = useBuilderStore((s) => s.grid);
+  const placedItems = useBuilderStore((s) => s.placedItems);
+  const selectedItemId = useBuilderStore((s) => s.selectedItemId);
+  const ghostCatalogId = useBuilderStore((s) => s.ghostCatalogId);
+  const ghostRotation = useBuilderStore((s) => s.ghostRotation);
+  const roomWidth = useBuilderStore((s) => s.roomWidth);
+  const roomDepth = useBuilderStore((s) => s.roomDepth);
+  const roomBounds = useBuilderStore((s) => s.roomBounds);
+  const activeStation = useBuilderStore((s) => s.activeStation);
+  const hydrated = useBuilderStore((s) => s.hydrated);
+  const lightingIntensity = useCharacter((s) => s.lighting.intensity);
+
+  const playerGroupRef = useRef<THREE.Group | null>(null);
+  const hoverUpdaterRef = useRef<((pt: GridPoint) => void) | null>(null);
+  const [orbitEnabled, setOrbitEnabled] = useState(true);
+  const [wallStart, setWallStart] = useState<GridPoint | null>(null);
+
+  // Hydrate saved room layout once on mount
+  useEffect(() => {
+    hydrateBuilderSession();
+  }, []);
+
+  // Debounced session persistence when placed items change
+  useEffect(() => {
+    if (!hydrated) return;
+    const timer = window.setTimeout(() => {
+      saveBuilderSession(placedItems, roomWidth, roomDepth);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [placedItems, roomWidth, roomDepth, hydrated]);
+
+  // Clear in-progress wall draw when switching out of build mode
+  useEffect(() => {
+    if (mode !== 'build') {
+      setWallStart(null);
+    }
+  }, [mode]);
+
+  // Determine which wall asset is active during BUILD WALLS mode
+  const activeWallCatalogId = useMemo(() => {
+    if (!ghostCatalogId) return 'structure/wall';
+    const entry = BUILDER_CATALOG_BY_ID[ghostCatalogId];
+    return entry?.type === 'wall' ? entry.id : 'structure/wall';
+  }, [ghostCatalogId]);
+
+  const isPlacing = mode === 'build' || Boolean(ghostCatalogId);
+
+  const handleDraggingChange = useCallback((dragging: boolean) => {
+    setOrbitEnabled(!dragging);
+  }, []);
+
   const handlePointerMoveFloor = useCallback(
     (pt: THREE.Vector3) => {
-      if (mode === 'tour') return;
       const snapped = snapToGrid(pt.x, pt.z, grid);
-      setHoverPoint((prev) =>
-        prev.x === snapped.x && prev.z === snapped.z ? prev : snapped,
-      );
+      hoverUpdaterRef.current?.(snapped);
     },
-    [mode, grid],
+    [grid],
   );
 
   const handleClickFloor = useCallback(
@@ -284,8 +366,8 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
   return (
     <Canvas
       frameloop="never"
-      shadows
-      dpr={[1, 1.5]}
+      shadows={{ type: THREE.PCFShadowMap }}
+      dpr={[1, 1.25]}
       camera={{ fov: 44, near: 0.1, far: 50, position: [5.4, 5.2, 6.4] }}
       onCreated={({ gl }) => {
         gl.outputColorSpace = THREE.SRGBColorSpace;
@@ -296,7 +378,8 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
       }}
       style={{ position: 'absolute', inset: 0 }}
     >
-      <FrameRateCap maxFps={60} />
+      <FrameRateCap />
+      <GraphicsRuntimeBridge />
       <EnvironmentRig />
       <StatsProbe priority={0} />
       <BuilderCamera mode={mode} orbitEnabled={orbitEnabled} />
@@ -307,7 +390,7 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
       <RoomGrid
         gridSize={grid}
         visible={mode !== 'tour' && !activeStation}
-        onPointerMoveFloor={handlePointerMoveFloor}
+        onPointerMoveFloor={isPlacing ? handlePointerMoveFloor : undefined}
         onClickFloor={handleClickFloor}
         onContextMenuFloor={handleContextMenuFloor}
       />
@@ -320,40 +403,21 @@ export function BuilderScene({ manifest }: BuilderSceneProps) {
           selected={item.id === selectedItemId}
           mode={mode}
           grid={grid}
-          onDraggingChange={(dragging) => setOrbitEnabled(!dragging)}
+          onDraggingChange={handleDraggingChange}
         />
       ))}
 
       {/* Active ghost preview: wall chain in BUILD WALLS, or single prop in DECORATE */}
-      {mode === 'build' && wallStart && (
-        <WallGhostChain
-          segments={wallPreviewSegments}
-          endPoint={[hoverPoint.x, 0, hoverPoint.z]}
-          lengthMeters={wallPreviewLength}
-          invalidIndices={wallChainValidation.invalidIndices}
-          invalidReason={wallChainValidation.reason}
-        />
-      )}
-      {mode === 'build' && !wallStart && (
-        <GhostItem
-          catalogId={activeWallCatalogId}
-          position={[hoverPoint.x, 0, hoverPoint.z]}
-          rotation={ghostRotation}
-          valid={startWallValidation.valid}
-          invalidReason={startWallValidation.reason}
-          promptLabel="START WALL [L-CLICK]"
-        />
-      )}
-      {mode === 'decorate' && ghostCatalogId && (
-        <GhostItem
-          catalogId={ghostCatalogId}
-          position={[hoverPoint.x, 0, hoverPoint.z]}
-          rotation={ghostRotation}
-          valid={ghostValidation.valid}
-          invalidReason={ghostValidation.reason}
-          promptLabel="PLACE [L-CLICK]"
-        />
-      )}
+      <PlacementOverlay
+        mode={mode}
+        ghostCatalogId={ghostCatalogId}
+        ghostRotation={ghostRotation}
+        wallStart={wallStart}
+        activeWallCatalogId={activeWallCatalogId}
+        placedItems={placedItems}
+        roomBounds={roomBounds}
+        hoverUpdaterRef={hoverUpdaterRef}
+      />
 
       {/* User's live customized character */}
       <BuilderCharacter manifest={manifest} playerGroupRef={playerGroupRef} />

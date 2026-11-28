@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Grid } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -18,7 +18,7 @@ interface RoomGridProps {
  * Ground shadow receiver, warm Wuxia architectural grid lines, and invisible
  * XZ raycast target at `y = 0` that dynamically scales to any expanded room size.
  */
-export function RoomGrid({
+export const RoomGrid = memo(function RoomGrid({
   gridSize,
   visible,
   onPointerMoveFloor,
@@ -73,9 +73,13 @@ export function RoomGrid({
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[centerX, 0, centerZ]}
-        onPointerMove={(e) => {
-          onPointerMoveFloor?.(e.point);
-        }}
+        onPointerMove={
+          onPointerMoveFloor
+            ? (e) => {
+                onPointerMoveFloor(e.point);
+              }
+            : undefined
+        }
         onClick={(e) => {
           onClickFloor?.(e.point, e);
         }}
@@ -89,4 +93,4 @@ export function RoomGrid({
       </mesh>
     </group>
   );
-}
+});

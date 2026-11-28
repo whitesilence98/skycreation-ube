@@ -5,6 +5,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useBuilderStore } from '@/lib/builderStore';
 import { useCharacter } from '@/lib/store';
+import { SHADOW_QUALITY_SPEC, useGraphicsSettings } from '@/lib/graphicsSettings';
 import { RoomLifeBrain } from '@/lib/builder/lifeBrain';
 import { formatSimClock, useRoomLifeStore } from '@/lib/builder/lifeStore';
 
@@ -59,7 +60,20 @@ export function TimeOfDayLighting({ intensityScale = 1 }: { intensityScale?: num
   const lastLightHourRef = useRef(-1);
   const roomWidth = useBuilderStore((s) => s.roomWidth);
   const roomDepth = useBuilderStore((s) => s.roomDepth);
+  const shadowQuality = useGraphicsSettings((s) => s.shadowQuality);
+  const shadowSpec = SHADOW_QUALITY_SPEC[shadowQuality];
   const shadowHalf = Math.max(11, Math.max(roomWidth, roomDepth) * 0.68);
+
+  useEffect(() => {
+    const sun = sunRef.current;
+    if (!sun) return;
+    if (sun.shadow.map) {
+      sun.shadow.map.dispose();
+      sun.shadow.map = null;
+    }
+    sun.shadow.mapSize.set(shadowSpec.mapSize, shadowSpec.mapSize);
+    sun.shadow.needsUpdate = true;
+  }, [shadowSpec.mapSize, shadowSpec.enabled]);
 
   useFrame(() => {
     const mins = useRoomLifeStore.getState().simTimeMinutes % 1440;
@@ -98,8 +112,8 @@ export function TimeOfDayLighting({ intensityScale = 1 }: { intensityScale?: num
         position={[7.5, 11.5, 6.5]}
         intensity={2.35 * intensityScale}
         color="#fff6ea"
-        castShadow
-        shadow-mapSize={[1024, 1024]}
+        castShadow={shadowSpec.enabled}
+        shadow-mapSize={[shadowSpec.mapSize, shadowSpec.mapSize]}
         shadow-camera-left={-shadowHalf}
         shadow-camera-right={shadowHalf}
         shadow-camera-top={shadowHalf}

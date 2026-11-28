@@ -3,13 +3,15 @@
 import { memo, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Html, TransformControls, useGLTF } from '@react-three/drei';
-import type { ThreeEvent } from '@react-three/fiber';
+import { useThree, type ThreeEvent } from '@react-three/fiber';
 import {
   useBuilderStore,
   type BuilderMode,
   type PlacedItem,
 } from '@/lib/builderStore';
 import { useCharacter } from '@/lib/store';
+import { useGraphicsSettings } from '@/lib/graphicsSettings';
+import { applyTextureAnisotropy } from '@/components/scene/GraphicsRuntimeBridge';
 import { INTERACT_LABELS } from '@/lib/builderCatalog';
 import { registerCatalogExtent } from '@/lib/builder/footprintRegistry';
 import { validatePlacement } from '@/lib/builder/placementValidator';
@@ -38,11 +40,15 @@ function LoadedAsset({
   showPrompt: boolean;
 }) {
   const gltf = useGLTF(item.assetPath);
+  const { gl } = useThree();
+  const anisotropy = useGraphicsSettings((s) => s.anisotropy);
 
   const { clonedScene, localOffset, boxSize, boxCenter } = useMemo(() => {
     const clone = gltf.scene.clone(true);
     const skipCastShadow =
       item.type === 'floor' ||
+      Boolean(item.noCollide) ||
+      item.catalogId.startsWith('lighting/') ||
       item.catalogId.startsWith('rug') ||
       item.catalogId === 'books' ||
       item.catalogId.startsWith('pillow');
@@ -85,6 +91,11 @@ function LoadedAsset({
   useEffect(() => {
     registerCatalogExtent(item.catalogId, [boxSize.x, boxSize.y, boxSize.z]);
   }, [item.catalogId, boxSize]);
+
+  // Apply configured anisotropic filtering cleanly to newly mounted room GLB textures
+  useEffect(() => {
+    applyTextureAnisotropy(clonedScene, anisotropy, gl.capabilities.getMaxAnisotropy());
+  }, [clonedScene, anisotropy, gl]);
 
   const interactMeta = item.interactTag ? INTERACT_LABELS[item.interactTag] : null;
 

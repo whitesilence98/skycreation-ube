@@ -7,10 +7,11 @@ import { useCharacter } from '@/lib/store';
 import type { SkeletonRegistry } from '@/lib/character/skeleton';
 import { buildIdleClip, stepMixer, toAdditiveClip } from '@/lib/character/animation';
 import {
-  buildXp32ClipFromGlb,
-  preloadGlbAnimations,
-  type GlbLocomotionId,
-} from '@/lib/animations/retargetGlbAnimation';
+  buildXp32Clip,
+  preloadXp32Animations,
+  type Xp32AnimationId,
+} from '@/lib/animations/xp32GlbAnimation';
+import { resolveArmCollisions } from '@/lib/character/armCollision';
 import { BlinkController, applyBlinkWeights } from '@/lib/morphs/blinkController';
 import { applyFacialExpressionWeights } from '@/lib/morphs/facialExpressionMorphs';
 
@@ -62,6 +63,7 @@ export function AnimationDirector({
   const animationId = useCharacter((s) => s.animationId);
   const animationPlaying = useCharacter((s) => s.animationPlaying);
   const animationSpeed = useCharacter((s) => s.animationSpeed);
+  const weight = useCharacter((s) => s.weight);
   const autoBlink = useCharacter((s) => s.autoBlink);
   const blinkPreview = useCharacter((s) => s.blinkPreview);
   const blinkPulseNonce = useCharacter((s) => s.blinkPulseNonce);
@@ -89,7 +91,7 @@ export function AnimationDirector({
 
   useEffect(() => {
     let cancelled = false;
-    void preloadGlbAnimations().then(() => {
+    void preloadXp32Animations().then(() => {
       if (!cancelled) setGlbReadyVersion((v) => v + 1);
     });
     return () => {
@@ -161,8 +163,10 @@ export function AnimationDirector({
 
     /* Apply the current idle/locomotion/rest choice before the next frame runs. */
     const curAnim = animationIdRef.current;
-    const isLocomotion = Boolean(locomotionActionRef.current) && (curAnim === 'idle-clip' || curAnim === 'walk' || curAnim === 'run');
-    if (isLocomotion) {
+    const isClip =
+      Boolean(locomotionActionRef.current) &&
+      (curAnim === 'idle-clip' || curAnim === 'selfie');
+    if (isClip) {
       next.setEffectiveWeight(0);
     }
     idle.setEffectiveWeight(curAnim === 'idle' ? 1 : 0);
@@ -179,9 +183,9 @@ export function AnimationDirector({
       locomotionClipRef.current = null;
     }
 
-    if (animationId === 'idle-clip' || animationId === 'walk' || animationId === 'run') {
-      const glbId: GlbLocomotionId = animationId === 'idle-clip' ? 'idle' : animationId;
-      const clip = buildXp32ClipFromGlb(glbId, registry);
+    if (animationId === 'idle-clip' || animationId === 'selfie') {
+      const xp32Id: Xp32AnimationId = animationId === 'idle-clip' ? 'idle' : 'selfie';
+      const clip = buildXp32Clip(xp32Id, registry);
       if (clip) {
         poseActionRef.current?.setEffectiveWeight(0);
         idleActionRef.current?.setEffectiveWeight(0);
@@ -225,6 +229,7 @@ export function AnimationDirector({
   useFrame((_, delta) => {
     if (!poseActionRef.current) return;
     stepMixer(mixer, delta, animationPlaying, animationSpeed);
+    resolveArmCollisions(registry, weight);
     const { left, right } =
       blinkPreview !== null
         ? { left: blinkPreview, right: blinkPreview }

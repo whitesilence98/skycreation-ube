@@ -8,6 +8,7 @@ import {
   type TimeScale,
 } from '@/lib/builder/lifeStore';
 import type { ActionTag, NeedKey } from '@/lib/builder/smartObjects';
+import { useGraphicsSettings } from '@/lib/graphicsSettings';
 import { cn } from '@/lib/cn';
 
 const SPEED_OPTIONS: ReadonlyArray<{ value: TimeScale; label: string }> = [
@@ -129,6 +130,7 @@ export function RoomLifeNeedsCard() {
   const activity = useRoomLifeStore((s) => s.activity);
   const needs = useRoomLifeStore((s) => s.needs);
   const thoughtLog = useRoomLifeStore((s) => s.thoughtLog);
+  const glassBlur = useGraphicsSettings((s) => s.glassBlur);
 
   if (mode === 'tour' || !aiEnabled) return null;
 
@@ -137,7 +139,10 @@ export function RoomLifeNeedsCard() {
   return (
     <aside
       aria-label="Character Room Life Status"
-      className="pointer-events-auto absolute right-3 bottom-12 z-20 hidden sm:flex w-[228px] flex-col rounded-[4px] border border-[#d4b483]/35 bg-[#15161c]/88 p-2.5 text-[#f2efe8] shadow-[0_10px_30px_rgba(0,0,0,0.55)] backdrop-blur-md select-none"
+      className={cn(
+        'pointer-events-auto absolute right-3 bottom-12 z-20 hidden sm:flex w-[228px] flex-col rounded-[4px] border border-[#d4b483]/35 bg-[#15161c]/94 p-2.5 text-[#f2efe8] shadow-[0_10px_30px_rgba(0,0,0,0.55)] select-none',
+        glassBlur && 'backdrop-blur-md',
+      )}
     >
       {/* Header / Activity Row */}
       <button

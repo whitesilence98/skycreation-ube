@@ -4,6 +4,48 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 import { KENNEY_UNIT_SCALE, useBuilderStore } from '@/lib/builderStore';
 
+function MinimapPlayerMarker({
+  size,
+  scale,
+  offsetX,
+  offsetZ,
+}: {
+  size: number;
+  scale: number;
+  offsetX: number;
+  offsetZ: number;
+}) {
+  const playerPos = useBuilderStore((s) => s.playerPos);
+  const playerYaw = useBuilderStore((s) => s.playerYaw);
+
+  const charX = size / 2 + (playerPos[0] - offsetX) * scale;
+  const charY = size / 2 + (playerPos[2] - offsetZ) * scale;
+  const lookX = charX + Math.sin(playerYaw) * 8;
+  const lookY = charY + Math.cos(playerYaw) * 8;
+
+  return (
+    <g>
+      <line
+        x1={charX}
+        y1={charY}
+        x2={lookX}
+        y2={lookY}
+        stroke="#eac87f"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <circle
+        cx={charX}
+        cy={charY}
+        r={3.5}
+        fill="#ffffff"
+        stroke="#dfba73"
+        strokeWidth="1.3"
+      />
+    </g>
+  );
+}
+
 /**
  * 2D top-down SVG architectural blueprint dynamically scaling to fit any expanded
  * room footprint, walls, furniture footprints, selected highlight, and character pose.
@@ -11,8 +53,6 @@ import { KENNEY_UNIT_SCALE, useBuilderStore } from '@/lib/builderStore';
 export function BlueprintMinimap() {
   const placedItems = useBuilderStore((s) => s.placedItems);
   const selectedItemId = useBuilderStore((s) => s.selectedItemId);
-  const playerPos = useBuilderStore((s) => s.playerPos);
-  const playerYaw = useBuilderStore((s) => s.playerYaw);
   const roomBounds = useBuilderStore((s) => s.roomBounds);
 
   const size = 160;
@@ -86,11 +126,6 @@ export function BlueprintMinimap() {
 
     return { scale: sc, offsetX: cx, offsetZ: cz, floors: f, walls: w, props: p };
   }, [placedItems, selectedItemId, roomBounds]);
-
-  const charX = size / 2 + (playerPos[0] - offsetX) * scale;
-  const charY = size / 2 + (playerPos[2] - offsetZ) * scale;
-  const lookX = charX + Math.sin(playerYaw) * 8;
-  const lookY = charY + Math.cos(playerYaw) * 8;
 
   void KENNEY_UNIT_SCALE;
 
@@ -166,23 +201,7 @@ export function BlueprintMinimap() {
             />
           ))}
 
-          <line
-            x1={charX}
-            y1={charY}
-            x2={lookX}
-            y2={lookY}
-            stroke="#eac87f"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-          <circle
-            cx={charX}
-            cy={charY}
-            r={3.5}
-            fill="#ffffff"
-            stroke="#dfba73"
-            strokeWidth="1.3"
-          />
+          <MinimapPlayerMarker size={size} scale={scale} offsetX={offsetX} offsetZ={offsetZ} />
         </svg>
       </div>
       <span className="mt-1 font-mono text-[10px] tracking-[0.14em] text-[#b4aea4] uppercase">

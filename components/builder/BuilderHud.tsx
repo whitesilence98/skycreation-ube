@@ -15,10 +15,11 @@ import { WuxiaImportButton } from '@/components/hud/common/WuxiaImportButton';
 import { HdrPanel } from '@/components/hud/HdrPanel';
 import { GraphicsPanel } from '@/components/hud/GraphicsPanel';
 import { CameraPanel } from '@/components/hud/CameraPanel';
+import { SettingsPanel } from '@/components/hud/SettingsPanel';
 import { useRenderStats } from '@/lib/perf';
 import { cn } from '@/lib/cn';
 
-type RoomVisualTool = 'hdr' | 'graphics' | 'camera';
+type RoomVisualTool = 'hdr' | 'graphics' | 'camera' | 'settings';
 
 function FpsBadge() {
   const fps = useRenderStats((s) => s.fps);
@@ -237,6 +238,21 @@ export function BuilderHud({ manifest }: { manifest: Mo2Manifest | null }) {
               <span aria-hidden>📷</span>
               <span className="hidden xl:inline ml-1">Cam</span>
             </button>
+            <button
+              type="button"
+              onClick={() => toggleTool('settings')}
+              aria-pressed={openTool === 'settings'}
+              title="Graphics, Performance & System Settings"
+              className={cn(
+                'min-h-[28px] rounded-[2px] border px-2 font-mono text-[10px] tracking-wider uppercase transition-colors focus-visible:outline focus-visible:outline-[#eac87f]',
+                openTool === 'settings'
+                  ? 'border-[#eac87f] bg-[#dfba73]/25 text-[#f7eedc]'
+                  : 'border-white/15 bg-[#1b1c23]/85 text-[#dcd6cb] hover:border-[#dfba73]/60 hover:text-white',
+              )}
+            >
+              <span aria-hidden>⚙</span>
+              <span className="hidden xl:inline ml-1">Settings</span>
+            </button>
           </div>
           <ClockControlsPill />
           <button
@@ -258,12 +274,13 @@ export function BuilderHud({ manifest }: { manifest: Mo2Manifest | null }) {
         </div>
       </header>
 
-      {/* Top-Right Visuals Popover (HDR / ENB / Camera) */}
+      {/* Top-Right Visuals Popover (HDR / ENB / Camera / Settings) */}
       {openTool && (
-        <div className="pointer-events-auto absolute top-[62px] right-2 sm:right-5 z-30 w-[296px] max-w-[calc(100vw-16px)] max-h-[calc(100dvh-82px)] overflow-y-auto scrollbar-none">
+        <div className="pointer-events-auto absolute top-[62px] right-2 sm:right-5 z-30 w-[308px] max-w-[calc(100vw-16px)] max-h-[calc(100dvh-82px)] overflow-y-auto scrollbar-none">
           {openTool === 'hdr' && <HdrPanel onClose={() => setOpenTool(null)} />}
           {openTool === 'graphics' && <GraphicsPanel onClose={() => setOpenTool(null)} />}
           {openTool === 'camera' && <CameraPanel onClose={() => setOpenTool(null)} />}
+          {openTool === 'settings' && <SettingsPanel onClose={() => setOpenTool(null)} />}
         </div>
       )}
 

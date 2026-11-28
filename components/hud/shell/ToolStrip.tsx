@@ -359,6 +359,43 @@ export function ToolStrip() {
           </span>
         )}
       </div>
+
+      {/* 9. ⚙ Graphics & Studio Settings */}
+      <div className="relative flex items-center">
+        <button
+          type="button"
+          aria-pressed={workspace === 'settings'}
+          aria-label="Settings and Performance"
+          title="Settings & Graphics Performance"
+          onClick={() => toggleWorkspace('settings')}
+          onMouseEnter={() => setHoveredTool('settings')}
+          onMouseLeave={() => setHoveredTool(null)}
+          className={cn(
+            'group flex h-10 w-10 items-center justify-center rounded-full border backdrop-blur-md transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#dfba73]',
+            workspace === 'settings'
+              ? 'border-[#dfba73] bg-[#dfba73]/25 text-[#dfba73] shadow-[0_0_14px_rgba(223,186,115,0.4)]'
+              : 'border-white/10 bg-[#1e1f26]/85 text-[#cfced4] hover:border-[#dfba73]/50 hover:bg-[#282a34] hover:text-white'
+          )}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="h-5 w-5 fill-none stroke-current stroke-[1.5]"
+            aria-hidden
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+        {hoveredTool === 'settings' && (
+          <span className="pointer-events-none absolute right-12 z-50 whitespace-nowrap rounded border border-white/10 bg-[#1e1f26]/95 px-2.5 py-1 text-[11px] text-[#e8dcc2] shadow-xl backdrop-blur-md">
+            Settings & Performance
+          </span>
+        )}
+      </div>
     </nav>
   );
 }
